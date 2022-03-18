@@ -1,7 +1,7 @@
 {
-    "name": "rollup-userscript-template",
-    "version": "1.2.2",
-    "description": "Bundle typescript, react and JSX/TSX script files into a single userscript file with rollup",
+    "name": "nai-context-userscript",
+    "version": "0.0.1",
+    "description": "Userscript to inject a custom context builder into NovelAI.",
     "keywords": [
         "userscript",
         "greasemonkey",
@@ -10,18 +10,16 @@
         "typescript",
         "react"
     ],
-    "homepage": "https://github.com/cvzi/rollup-userscript-template",
-    "funding": "https://github.com/cvzi/rollup-userscript-template/funding_links?fragment=1",
+    "homepage": "https://github.com/TaleirOfDeynai/nai-context-userscript",
     "repository": {
         "type": "git",
-        "url": "github:cvzi/rollup-userscript-template"
+        "url": "github:TaleirOfDeynai/nai-context-userscript"
     },
     "bugs": {
-        "url": "https://github.com/cvzi/rollup-userscript-template/issues",
-        "email": "cuzi@openmail.cc"
+        "url": "https://github.com/TaleirOfDeynai/nai-context-userscript/issues"
     },
-    "author": "cuzi",
-    "license": "MIT",
+    "author": "TaleirOfDeynai",
+    "license": "UNLICENSE",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
         "build": "npx rollup --config rollup.config.js",

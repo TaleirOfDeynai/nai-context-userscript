@@ -1,14 +1,9 @@
 {
-    "namespace": "github.com/cvzi",
-    "copyright": "2020, cuzi (https://openuserjs.org/users/cuzi)",
-    "require": [
-        "https://unpkg.com/react@17/umd/react.development.js",
-        "https://unpkg.com/react-dom@17/umd/react-dom.development.js"
-    ],
-    "include": [
-        "https://github.com/*"
-    ],
-    "grant": [
-        "GM.getValue"
-    ]
+  "namespace": "github.com/TaleirOfDeynai",
+  "include": [
+    "https://novelai.net",
+    "https://novelai.net/*"
+  ],
+  "run-at": "document-idle",
+  "grant": ["unsafeWindow"]
 }

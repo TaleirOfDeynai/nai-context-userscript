@@ -1,104 +1,66 @@
 // ==UserScript==
-// @name        rollup-userscript-template
-// @description Bundle typescript, react and JSX/TSX script files into a single userscript file with rollup
-// @namespace   github.com/cvzi
-// @require     https://unpkg.com/react@17/umd/react.development.js
-// @require     https://unpkg.com/react-dom@17/umd/react-dom.development.js
-// @include     https://github.com/*
-// @version     1.2.2
-// @homepage    https://github.com/cvzi/rollup-userscript-template
-// @author      cuzi
-// @license     MIT
-// @grant       GM.getValue
+// @name        nai-context-userscript
+// @description Userscript to inject a custom context builder into NovelAI.
+// @namespace   github.com/TaleirOfDeynai
+// @include     https://novelai.net
+// @include     https://novelai.net/*
+// @run-at      document-idle
+// @version     0.0.1
+// @homepage    https://github.com/TaleirOfDeynai/nai-context-userscript
+// @author      TaleirOfDeynai
+// @license     UNLICENSE
+// @grant       unsafeWindow
 // ==/UserScript==
 
 /*
-MIT License
+This is free and unencumbered software released into the public domain.
 
-Copyright (c) 2020 cvzi
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+For more information, please refer to <http://unlicense.org/>*/
 
-/* globals React, ReactDOM */
-(function (ReactDOM, React$1) {
-  'use strict';
 
-  function _interopNamespace(e) {
-    if (e && e.__esModule) return e;
-    var n = Object.create(null);
-    if (e) {
-      Object.keys(e).forEach(function (k) {
-        if (k !== 'default') {
-          var d = Object.getOwnPropertyDescriptor(e, k);
-          Object.defineProperty(n, k, d.get ? d : {
-            enumerable: true,
-            get: function () {
-              return e[k];
+(function () {
+    'use strict';
+
+    let _chunkStore = undefined;
+    let lastPushFn = undefined;
+    Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
+        get() {
+            return _chunkStore;
+        },
+        set(webpackChunk_N_E) {
+            if (webpackChunk_N_E.push !== lastPushFn) {
+                const origPush = webpackChunk_N_E.push;
+                function wrappedPush(...args) {
+                    console.dir(args);
+                    return origPush.apply(webpackChunk_N_E, args);
+                }
+                lastPushFn = wrappedPush;
+                webpackChunk_N_E.push = wrappedPush;
             }
-          });
+            _chunkStore = webpackChunk_N_E;
         }
-      });
-    }
-    n['default'] = e;
-    return Object.freeze(n);
-  }
+    });
 
-  var ReactDOM__namespace = /*#__PURE__*/_interopNamespace(ReactDOM);
-  var React__namespace = /*#__PURE__*/_interopNamespace(React$1);
-
-  var helloWorld = (function () {
-    window.setTimeout(function delayedError() {
-      throw 'I am a delayed error';
-    }, 3000);
-    return 'Plain javascript';
-  })();
-
-  var getSomeValueFromGM = (function () {
-      return () => GM.getValue('test', 'a default value');
-  })();
-
-  class SomeList extends React__namespace.Component {
-      constructor(props) {
-          super(props);
-      }
-      render() {
-          return (React__namespace.createElement("div", { className: "some-list" },
-              React__namespace.createElement("h1", null,
-                  "This is a list for ",
-                  this.props.name),
-              React__namespace.createElement("ul", null,
-                  React__namespace.createElement("li", null, "plain javascript"),
-                  React__namespace.createElement("li", null, "typescript"),
-                  React__namespace.createElement("li", null, "react"),
-                  React__namespace.createElement("li", null, "JSX/TSX"))));
-      }
-  }
-
-  ReactDOM__namespace.render( /*#__PURE__*/React.createElement(SomeList, {
-    name: helloWorld
-  }), document.body);
-  getSomeValueFromGM().then(function (s) {
-    ReactDOM__namespace.render( /*#__PURE__*/React.createElement(SomeList, {
-      name: s
-    }), document.body);
-  });
-
-}(ReactDOM, React));
+})();
 //# sourceMappingURL=bundle.user.js.map
