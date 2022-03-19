@@ -4,6 +4,6 @@
     "https://novelai.net",
     "https://novelai.net/*"
   ],
-  "run-at": "document-idle",
+  "run-at": "document-start",
   "grant": ["unsafeWindow"]
 }
