@@ -1,3 +1,4 @@
+import { makeWrappedRequire } from "./require";
 import injectors, { Injector } from "./injectors";
 
 const injectorMap: Map<string | number, Injector>
@@ -40,9 +41,10 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
           ) {
             // Call the original factory to populate the vanilla module.
             moduleFactory.call(this, module, exports, webpackRequire);
+            const wrappedRequire = makeWrappedRequire(webpackRequire);
             // This method should return the replacement, but it could also
             // alter it in place (not sure why you'd do that, though).
-            module.exports = injector.inject(module.exports, module, webpackRequire) ?? exports;
+            module.exports = injector.inject(module.exports, module, wrappedRequire) ?? exports;
           }
 
           // Insert the altered module factory in place of the original.

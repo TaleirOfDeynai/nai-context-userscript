@@ -1,3 +1,4 @@
+import type { WrappedRequireFn } from "../require";
 import * as ContextBuilder from "./contextBuilder";
 
 export interface Injector {
@@ -7,7 +8,7 @@ export interface Injector {
   inject(
     exports: any,
     module: Webpack.ModuleInstance,
-    wpRequire: Webpack.WebpackRequireFn
+    require: WrappedRequireFn
   ): any;
 }
 
