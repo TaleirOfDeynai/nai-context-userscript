@@ -1,5 +1,5 @@
 import type { WrappedRequireFn } from "../require";
-import * as ContextBuilder from "./contextBuilder";
+import * as ContextBuilder from "./ContextBuilder";
 
 export interface Injector {
   name: string;

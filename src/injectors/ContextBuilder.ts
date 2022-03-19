@@ -1,8 +1,9 @@
+import ContextBuilder from "../naiModules/ContextBuilder";
 import { replaceWrapper } from "./_helpers";
 
-export const name = "Context Builder";
+export const name = ContextBuilder.name;
 export const chunkId = 2888;
-export const moduleId = 91072;
+export const moduleId = ContextBuilder.moduleId;
 export const inject = replaceWrapper({
   "rJ": (original: Function) => {
     return function wrappedBuilderFn() {
