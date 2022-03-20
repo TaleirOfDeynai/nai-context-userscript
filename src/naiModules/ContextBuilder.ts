@@ -1,8 +1,9 @@
 import { ModuleDef } from "../require";
 import type * as Lorebook from "./Lorebook";
 import type * as MatchResults from "./MatchResults";
-import type * as TokenizerModule from "./TokenizerModule";
-import type { StoryContent, StoryState } from "./Story";
+import type * as EventModule from "./EventModule";
+import type { TokenizerTypes } from "./TokenizerHelpers";
+import type { TokenCodec } from "./TokenizerCodec";
 
 /** A generic interface for anything that can be provide content to the context. */
 export interface ContextField {
@@ -54,12 +55,12 @@ export namespace Virtual {
   ): Map<string, MatchResults.LorebookResult>;
 
   export declare function buildContext(
-    storyContent: StoryContent,
-    storyState: StoryState,
+    storyContent: EventModule.StoryContent,
+    storyState: EventModule.Virtual.StoryState,
     tokenLimit: number,
     removeHeaderLine?: boolean,
     storyLength?: number,
-    c?: unknown
+    tokenCodec?: TokenCodec
   ): Promise<ContextRecorder>;
 
   export declare class ContextRecorder {
@@ -79,7 +80,7 @@ export namespace Virtual {
       identifier: IContextStatus<any>["identifier"]
     }>;
     allStoryIncluded: boolean;
-    tokenizerType: TokenizerModule.Virtual.TokenizerTypes;
+    tokenizerType: TokenizerTypes;
   }
 }
 

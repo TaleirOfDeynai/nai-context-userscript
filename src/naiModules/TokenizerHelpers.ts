@@ -1,15 +1,17 @@
 import { ModuleDef } from "../require";
 
+export type TokenizerTypes = Virtual.TokenizerTypes;
+
 export namespace Virtual {
   export declare enum TokenizerTypes { GPT2, PileNAI, Genji }
   export declare function getTokenizerType(key: string): TokenizerTypes;
 }
 
-export interface ITokenizerModule {
+export interface ITokenizerHelpers {
   "ID": typeof Virtual.getTokenizerType;
 }
 
-class TokenizerModule extends ModuleDef<ITokenizerModule> {
+class TokenizerHelpers extends ModuleDef<ITokenizerHelpers> {
   moduleId = 68908;
   expectedExports = 3;
   mapping = {
@@ -17,4 +19,4 @@ class TokenizerModule extends ModuleDef<ITokenizerModule> {
   } as const;
 };
 
-export default new TokenizerModule();
+export default new TokenizerHelpers();
