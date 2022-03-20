@@ -1,4 +1,4 @@
-import { makeWrappedRequire } from "./require";
+import { makeWrappedRequire, notifyToConsole } from "./require";
 import injectors, { Injector } from "./injectors";
 
 const injectorMap: Map<string | number, Injector>
@@ -28,8 +28,14 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
           const injector = injectorMap.get(chunkId);
           if (!injector) continue;
 
+          // For debug, we'll include Webpack IDs right into the identifier.
+          const identity = `${injector.name}@${injector.chunkId}:${injector.moduleId}`;
+
           if (!(injector.moduleId in moreModules)) {
-            console.warn(`Failed to locate module ${injector.moduleId} in chunk ${injector.chunkId}.`);
+            notifyToConsole([
+              `Failed to locate the module in expected chunk for ${identity};`,
+              "the injection was aborted."
+            ].join(" "));
             break;
           }
 
@@ -42,11 +48,23 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
             // Call the original factory to populate the vanilla module.
             moduleFactory.call(this, module, exports, webpackRequire);
             const wrappedRequire = makeWrappedRequire(webpackRequire);
-            // @ts-ignore - It's assigned to a `const` and then checked to ensure
-            // it isn't `undefined`.  IT CAN NEVER BE NOT DEFINED, TYPESCRIPT!
-            // A CAPTURED CONSTANT VARIABLE IS NOT GOING TO CHANGE ITS VALUE
-            // WITHOUT MEMORY CORRUPTION BEING INVOLVED!
-            module.exports = injector.inject(module.exports, module, wrappedRequire) ?? exports;
+            try {
+              // @ts-ignore - It's assigned to a `const` and then checked to ensure
+              // it isn't `undefined`.  IT CAN NEVER BE NOT DEFINED, TYPESCRIPT!
+              // A CAPTURED CONSTANT VARIABLE IS NOT GOING TO CHANGE ITS VALUE
+              // WITHOUT MEMORY CORRUPTION BEING INVOLVED!
+              module.exports = injector.inject(module.exports, module, wrappedRequire) ?? exports;
+            }
+            catch(error) {
+              // In case of an error, abort injection so the app doesn't crash.
+              notifyToConsole(
+                [
+                  `An error was thrown while injecting ${identity};`,
+                  "the injection was aborted."
+                ].join(" "),
+                error
+              );
+            }
           }
 
           // Insert the altered module factory in place of the original.
@@ -54,7 +72,7 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
           // We really only want to inject once.
           injectorMap.delete(chunkId);
 
-          console.log(`Injector \`${injector.name}\` patched \`${injector.chunkId}:${injector.moduleId}\` successfully!`)
+          console.log(`Injector \`${identity}\` applied its patch.`);
           break;
         }
 
@@ -67,4 +85,12 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
 
     _chunkStore = webpackChunk_N_E;
   }
+});
+
+// NovelAI uses Sentry.  Set a value on `window` that can be detected
+// to disable Sentry or tag telemetry as coming from a modified client.
+Object.defineProperty(unsafeWindow, "__USERSCRIPT_ACTIVE", {
+  value: true,
+  writable: true,
+  configurable: true
 });

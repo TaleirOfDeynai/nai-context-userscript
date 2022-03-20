@@ -46,5 +46,8 @@ export const replaceWrapper: ReplaceWrapperFn =
       ].join("; "));
     }
 
+    if (replacedKeys.size > 0)
+      throw new Error(`Injection of module ${module.id} failed.`);
+
     return wrappedModule;
   };

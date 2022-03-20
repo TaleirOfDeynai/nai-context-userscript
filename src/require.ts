@@ -61,7 +61,7 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
     const theModule = webpackRequire(moduleId);
 
     if (typeof theModule !== "object") {
-      console.error([
+      notifyToConsole([
         `Module \`${identifier}\` was requested via a wrapped module definition,`,
         "but the module could not be resolved through Webpack."
       ].join(" "));
@@ -71,7 +71,7 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
     const passthruKeys = new Set(Object.keys(theModule));
 
     if (passthruKeys.size !== expectedExports) {
-      console.error([
+      notifyToConsole([
         `Expected module \`${identifier}\` to have ${expectedExports} exports,`,
         `but the actual count was ${passthruKeys.size}.`
       ].join(" "));
@@ -93,7 +93,7 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
 
       // Sanity check; the export exists, right?
       if (!(kSrc in theModule)) {
-        console.error([
+        notifyToConsole([
           `Expected export \`${kSrc}\` to be mappable to \`${kTrg}\``,
           `in module \`${identifier}\`, but the export was not found;`,
           "were the chunks updated?"
@@ -103,7 +103,7 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
 
       // If we have a safety checker, do the check.
       if (checkFn(theModule[kSrc], kSrc)) {
-        console.error([
+        notifyToConsole([
           `Expected export \`${kSrc}\` to be mappable to \`${kTrg}\``,
           `in module \`${identifier}\`, but the export failed`,
           "its safety check."
@@ -128,4 +128,61 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
   }
 
   return Object.assign(wrappedRequire, { raw: webpackRequire });
+}
+
+interface ProblemStruct {
+  /** The user-facing message to display in the notification. */
+  message?: string;
+  /** Optional user-facing title to display in the notification. */
+  title?: string;
+  /** Object(s) to log to console.  May be either a single object or an iterable. */
+  logToConsole?: unknown | Iterable<unknown>;
+}
+
+const problemDefaults: Required<ProblemStruct> = {
+  message: "An error occurred that may prevent the user-script from working.",
+  title: "Context User-Script Problem",
+  logToConsole: []
+};
+
+const asIterable = (value: any): Iterable<unknown> => {
+  if (!value) return [];
+  if (Symbol.iterator in value) return value;
+  return [value];
+};
+
+let didNotifyOfProblem = false;
+
+/**
+ * Call whenever there's an issue that likely means the user-script is in
+ * a bad state; lets the user know it is probably not working correctly.
+ * 
+ * In order to ensure spam does not occur, only one notification will ever
+ * be sent.  It will still log out anything given in
+ * {@link ProblemStruct.logToConsole}.
+ */
+export function notifyOfProblem(problem: ProblemStruct | string) {
+  // Normalize the problem struct.
+  const theProblem = (() => {
+    if (typeof problem !== "string") return problem;
+    return { message: problem };
+  })();
+
+  const { message, title, logToConsole } = Object.assign({}, problemDefaults, theProblem);
+
+  if (!didNotifyOfProblem) {
+    didNotifyOfProblem = true;
+    GM.notification([message, "Check the dev console for more information."].join("\n\n"), title);
+  }
+
+  console.warn(message);
+  for (const item of asIterable(logToConsole)) console.error(item);
+};
+
+/**
+ * A shorthand version of {@link notifyOfProblem} that logs technical details
+ * to console and notifies with a generic "it broke" message to the user.
+ */
+export function notifyToConsole(...logToConsole: unknown[]) {
+  notifyOfProblem({ logToConsole });
 }

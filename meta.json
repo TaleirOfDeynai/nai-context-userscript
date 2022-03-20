@@ -5,5 +5,8 @@
     "https://novelai.net/*"
   ],
   "run-at": "document-start",
-  "grant": ["unsafeWindow"]
+  "grant": [
+    "unsafeWindow",
+    "GM.notification"
+  ]
 }
