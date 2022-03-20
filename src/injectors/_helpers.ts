@@ -1,7 +1,17 @@
-type ReplacerFn = (original: any) => any;
+import type { InjectFn } from "./index";
 
-export const replaceWrapper =
-  (replaceMap: Record<string, ReplacerFn>) =>
+type ReplacerFn<T> = (original: T) => any;
+type ReplacerMap<T extends Webpack.ExportsObject> = { [K in keyof T]?: ReplacerFn<T[K]>; };
+
+interface ReplaceWrapperFn {
+  /** Type-safe overload of the wrapper. */
+  <T extends Webpack.ExportsObject>(replaceMap: ReplacerMap<T>): InjectFn;
+  /** Generic overload of the wrapper. */
+  (replaceMap: Record<string, any>): InjectFn;
+}
+
+export const replaceWrapper: ReplaceWrapperFn =
+  (replaceMap: Record<string, any>) =>
   (exports: any, module: Webpack.ModuleInstance): any => {
     const replacedKeys = new Set(Object.keys(replaceMap));
     const passthruKeys = new Set(Object.keys(exports));

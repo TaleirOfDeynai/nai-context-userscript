@@ -1,19 +1,21 @@
 declare namespace Webpack {
+  type ExportsObject = { [exportKey: string]: any };
+
   interface ModuleInstance {
     id: string | number;
     loaded: boolean;
-    exports: Object
+    exports: ExportsObject
   }
 
   interface WebpackRequireFn {
-    <T = unknown>(id: string | number): T;
+    <T extends ExportsObject = ExportsObject>(id: string | number): T;
     /** Obfuscated from `moduleFactories`. */
     m: Record<string | number, ModuleFactory>;
   }
   
   type ModuleFactory = (
     module: ModuleInstance,
-    exports: any,
+    exports: ExportsObject,
     webpackRequire: WebpackRequireFn
   ) => any;
 

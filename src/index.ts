@@ -36,14 +36,16 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
           const moduleFactory = moreModules[injector.moduleId];
           function injectedModule(
             module: Webpack.ModuleInstance,
-            exports: any,
+            exports: Webpack.ExportsObject,
             webpackRequire: Webpack.WebpackRequireFn
           ) {
             // Call the original factory to populate the vanilla module.
             moduleFactory.call(this, module, exports, webpackRequire);
             const wrappedRequire = makeWrappedRequire(webpackRequire);
-            // This method should return the replacement, but it could also
-            // alter it in place (not sure why you'd do that, though).
+            // @ts-ignore - It's assigned to a `const` and then checked to ensure
+            // it isn't `undefined`.  IT CAN NEVER BE NOT DEFINED, TYPESCRIPT!
+            // A CAPTURED CONSTANT VARIABLE IS NOT GOING TO CHANGE ITS VALUE
+            // WITHOUT MEMORY CORRUPTION BEING INVOLVED!
             module.exports = injector.inject(module.exports, module, wrappedRequire) ?? exports;
           }
 
