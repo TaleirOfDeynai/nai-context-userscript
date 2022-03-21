@@ -146,8 +146,9 @@ const problemDefaults: Required<ProblemStruct> = {
 };
 
 const asIterable = (value: any): Iterable<unknown> => {
-  if (!value) return [];
-  if (Symbol.iterator in value) return value;
+  if (value == null) return [];
+  if (typeof value === "string") return [value];
+  if (typeof value[Symbol.iterator] === "function") return value;
   return [value];
 };
 
