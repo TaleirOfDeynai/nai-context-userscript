@@ -22,7 +22,7 @@ export type MappedOf<TDef extends ModuleDef<Webpack.ExportsObject>> = {
 
 export interface WrappedRequireFn {
   /** Given a {@link ModuleDef}, attempts to get the mapped module instance. */
-  <TDef extends ModuleDef<Webpack.ExportsObject>>(moduleDef: TDef): TDef["TMapped"] | undefined;
+  <TDef extends ModuleDef<Webpack.ExportsObject>>(moduleDef: TDef): TDef["TMapped"];
   /** Access to the raw {@link Webpack.WebpackRequireFn}. */
   raw: Webpack.WebpackRequireFn;
 }
@@ -61,21 +61,19 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
     const theModule = webpackRequire(moduleId);
 
     if (typeof theModule !== "object") {
-      notifyToConsole([
+      throw new Error([
         `Module \`${identifier}\` was requested via a wrapped module definition,`,
         "but the module could not be resolved through Webpack."
       ].join(" "));
-      return undefined;
     }
 
     const passthruKeys = new Set(Object.keys(theModule));
 
     if (passthruKeys.size !== expectedExports) {
-      notifyToConsole([
+      throw new Error([
         `Expected module \`${identifier}\` to have ${expectedExports} exports,`,
         `but the actual count was ${passthruKeys.size}.`
       ].join(" "));
-      return undefined;
     }
 
     const wrappedModule = {};
@@ -93,22 +91,20 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
 
       // Sanity check; the export exists, right?
       if (!(kSrc in theModule)) {
-        notifyToConsole([
+        throw new Error([
           `Expected export \`${kSrc}\` to be mappable to \`${kTrg}\``,
           `in module \`${identifier}\`, but the export was not found;`,
           "were the chunks updated?"
         ].join(" "));
-        return undefined;
       }
 
       // If we have a safety checker, do the check.
-      if (checkFn(theModule[kSrc], kSrc)) {
-        notifyToConsole([
+      if (!checkFn(theModule[kSrc], kSrc)) {
+        throw new Error([
           `Expected export \`${kSrc}\` to be mappable to \`${kTrg}\``,
           `in module \`${identifier}\`, but the export failed`,
           "its safety check."
         ].join(" "));
-        return undefined;
       }
 
       Object.defineProperty(wrappedModule, kTrg, {

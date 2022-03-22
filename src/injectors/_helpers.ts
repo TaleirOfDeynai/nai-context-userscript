@@ -1,6 +1,7 @@
+import { WrappedRequireFn } from "../require";
 import type { InjectFn } from "./index";
 
-type ReplacerFn<T> = (original: T) => any;
+type ReplacerFn<T> = (original: T, require: WrappedRequireFn) => any;
 type ReplacerMap<T extends Webpack.ExportsObject> = { [K in keyof T]?: ReplacerFn<T[K]>; };
 
 interface ReplaceWrapperFn {
@@ -11,8 +12,8 @@ interface ReplaceWrapperFn {
 }
 
 export const replaceWrapper: ReplaceWrapperFn =
-  (replaceMap: Record<string, any>) =>
-  (exports: any, module: Webpack.ModuleInstance): any => {
+  (replaceMap: Record<string, ReplacerFn<any>>) =>
+  (exports: any, module: Webpack.ModuleInstance, require: WrappedRequireFn): any => {
     const replacedKeys = new Set(Object.keys(replaceMap));
     const passthruKeys = new Set(Object.keys(exports));
     const wrappedModule = {};
@@ -22,7 +23,7 @@ export const replaceWrapper: ReplaceWrapperFn =
 
       const original = exports[k];
       const replacer = replaceMap[k];
-      const replacement = replacer(original);
+      const replacement = replacer(original, require);
 
       Object.defineProperty(wrappedModule, k, {
         get() { return replacement; }

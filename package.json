@@ -31,6 +31,9 @@
         "version": "npm run build:release && git add dist/release-$npm_package_version.user.js",
         "prepublishOnly": "npm run build:release && git add dist/release-$npm_package_version.user.js"
     },
+    "dependencies": {
+        "rxjs": "7.5.5"
+    },
     "devDependencies": {
         "@babel/cli": "^7.15.7",
         "@babel/core": "^7.15.5",
