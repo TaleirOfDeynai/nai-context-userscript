@@ -1,0 +1,285 @@
+/**
+ * Provides keyword matching services with an expandable cache.
+ * Maintains its internal caches after every context constructed,
+ * resizing them so that they hold the memoized match results of
+ * around `n * 1.1` pieces of text that were previously searched.
+ * 
+ * Scaling down the size is done over time using the formula:
+ * `nextSize = (previousSize + (totalMatches * 1.1)) / 2`
+ * 
+ * It will discard match data for the oldest text that had not
+ * been provided for matching.
+ */
+
+import { dew } from "../utils/dew";
+import { usModule } from "../utils/usModule";
+import { isIterable } from "../utils/is";
+import { createLogger } from "../utils/logging";
+import MatcherService from "./MatcherService";
+import type { MatchResult } from "./MatcherService";
+import type { AnyResult as NaiMatchResult } from "../naiModules/MatchResults";
+import type { LoreEntry } from "../naiModules/Lorebook";
+
+interface TextFragment {
+  readonly content: string;
+  readonly offset: number;
+  readonly length: number;
+}
+
+export type Searchable = string | TextFragment;
+export type Matchable = Iterable<string> | { keys: string[] };
+export type MatcherResults = Map<string, readonly MatchResult[]>;
+export type EntryResults = Map<LoreEntry, MatcherResults>;
+
+const logger = createLogger("SearchService");
+
+export default usModule((require) => {
+  const matcherService = MatcherService(require);
+
+  /** The count of entries at the time of the last cycle. */
+  let previousSize = 0;
+  /** A set of texts search since the last maintenance cycle. */
+  let textsSearched = new Set<string>();
+  /** The internal results cache of the service. */
+  let resultsCache = new Map<string, MatcherResults>();
+
+  /** Handles rescaling of the cache. */
+  function rescaleCache() {
+    const totalUnique = textsSearched.size;
+    const prevSize = previousSize;
+    const curSize = resultsCache.size;
+
+    // Maintain a minimum of 20 extra search results.
+    const desiredOverflow = Math.max(20, (totalUnique * 1.1) - totalUnique) | 0;
+    const idealSize = totalUnique + desiredOverflow;
+
+    // If the cache is already within bounds of the ideal, do nothing.
+    if (curSize <= idealSize) return;
+
+    // When rescaling, we do it over several runs.  This better accommodates
+    // undo/redo and other kinds of story manipulation the user may do.
+    const nextSize = Math.floor((prevSize + idealSize) / 2);
+    // Sanity check; we only need to rescale if we're shrinking the cache.
+    if (nextSize >= curSize) return;
+
+    // The cache has been maintained with an order from least-recently-seen
+    // to most-recently-seen.  We should be able to just take the last entries
+    // to discard an amount of least-recently-seen entries.
+    const retainedEntries = [...resultsCache].slice(-nextSize);
+    resultsCache = new Map(retainedEntries);
+
+    logger.info({ prevSize, curSize, idealSize, nextSize });
+  }
+
+  /** Discards results for keys that were not seen since last cycle. */
+  function discardUnusedResults(keysUsed: Set<string>) {
+    // Just delete all results for keys that were not searched in the last run.
+    // In the case of long-living results, this keeps them from growing out of
+    // control and hogging a bunch of memory.
+    for (const results of resultsCache.values())
+      for (const key of results.keys())
+        if (!keysUsed.has(key)) results.delete(key);
+  }
+
+  /** Performs maintenance on the cache. */
+  matcherService.onMaintainMatchers.subscribe((keysUsed) => {
+    rescaleCache();
+    discardUnusedResults(keysUsed);
+    
+    // Setup for the next run-through.
+    previousSize = resultsCache.size;
+    textsSearched = new Set();
+  });
+
+  /** Internal function that does the searching. */
+  function findMatches(searchText: string, keys: Iterable<string>) {
+    const cachedResults: MatcherResults = resultsCache.get(searchText) ?? new Map();
+    const searchResults: MatcherResults = new Map();
+
+    for (const key of keys) {
+      const cached = cachedResults.get(key);
+      if (cached) {
+        // Explicitly mark the key as used.
+        matcherService.markKeyAsUsed(key);
+        searchResults.set(key, cached);
+        continue;
+      }
+
+      const matcher = matcherService.getMatcherFor(key);
+      // These results are shared; make sure the array is immutable.
+      const results = Object.freeze(matcher(searchText));
+      cachedResults.set(key, results);
+      searchResults.set(key, results);
+    }
+
+    if (!textsSearched.has(searchText)) {
+      textsSearched.add(searchText);
+      // Shift this text so it'll be reinserted at the end.  We only need
+      // to do this once as that's enough to preserve the data into the
+      // next run.
+      resultsCache.delete(searchText);
+    }
+
+    resultsCache.set(searchText, cachedResults);
+    return searchResults;
+  }
+
+  /** Makes sure we have an iterable of strings from something matchable. */
+  function getKeys(v: Matchable): Iterable<string> {
+    if (isIterable(v)) return v;
+    if ("keys" in v) return v.keys;
+    return [];
+  };
+
+  function search(searchText: Searchable, matchable: Matchable): MatcherResults {
+    const keys = getKeys(matchable);
+
+    // For fragments, we need to apply the offset to the results so
+    // they line up with the fragment's source string.
+    if (typeof searchText !== "string") {
+      const { content, offset } = searchText;
+      const theResults = findMatches(content, keys);
+
+      for (const [k, raw] of theResults) {
+        if (raw.length === 0) continue;
+        theResults.set(k, raw.map((m) => ({ ...m, index: offset + m.index })));
+      }
+
+      return theResults;
+    }
+
+    return findMatches(searchText, keys);
+  }
+
+  function searchForLore(searchText: Searchable, entries: LoreEntry[]): EntryResults {
+    // We just need to grab all the keys from the entries and pull their
+    // collective matches.  We'll only run each key once.
+    const keySet = new Set(entries.flatMap((e) => e.keys));
+    const keyResults = search(searchText, keySet);
+    
+    // Now, we can just grab the results for each entry's keys and assemble
+    // the results into a final map.
+    const entryResults: EntryResults = new Map();
+    for (const entry of entries) {
+      const entryResult: MatcherResults = new Map();
+      for (const key of entry.keys) {
+        const result = keyResults.get(key) as readonly MatchResult[];
+        entryResult.set(key, result);
+      }
+
+      entryResults.set(entry, entryResult);
+    }
+
+    return entryResults;
+  }
+
+  /**
+   * A replacement for {@link LoreEntryHelpers.checkActivation} that allows it
+   * to make use of this service instead.
+   * 
+   * Good for testing and benefits from the same caching layer.
+   */
+  function naiCheckActivation(
+    /** The lorebook entry to check. */
+    entry: LoreEntry,
+    /** The text available to search for keyword matches. */
+    searchText: string,
+    /**
+     * Whether to do a quick test only.  When `true` and a match is found,
+     * this will return a result where `index` and `length` are both `0`.
+     * Only the `key` property is really of use.  Defaults to `false`.
+     */
+    quickCheck?: boolean,
+    /** An object providing an alternative `searchRange` to use. */
+    searchRangeDonor?: { searchRange: number },
+    /**
+     * Forces an entry that would force-activate to instead check its keys.
+     * The entry must still be enabled.  Defaults to `false`.
+     */
+    forceKeyChecks?: boolean
+  ): NaiMatchResult {
+    if (!entry.enabled) return {
+      key: "",
+      index: -1,
+      length: 0
+    };
+  
+    if (entry.forceActivation && !forceKeyChecks) return {
+      key: "",
+      index: Number.POSITIVE_INFINITY,
+      length: 0
+    };
+
+    const searchRange = searchRangeDonor?.searchRange ?? entry.searchRange;
+    const textFragment = dew(() => {
+      if (searchRange >= searchText.length) return searchText;
+
+      const content = searchText.slice(-1 * searchRange);
+      const offset = searchText.length - content.length;
+      return { content, offset, length: content.length };
+    });
+    
+    const results = search(textFragment, entry);
+
+    if (quickCheck) {
+      const [key = ""] = results.keys();
+      const index = results.size === 0 ? -1 : 0;
+      return { key, index, length: 0 };
+    }
+
+    // Locate the the result with the highest index.
+    let bestMatch: MatchResult | null = null;
+    let bestKey: string = "";
+    for (const [key, matches] of results) {
+      for (const match of matches) {
+        checks: {
+          if (!bestMatch) break checks;
+          if (match.index > bestMatch.index) break checks;
+          continue;
+        }
+        bestMatch = match;
+        bestKey = key;
+      }
+    }
+
+    if (!bestMatch) return {
+      key: bestKey,
+      index: -1,
+      length: 0
+    };
+  
+    let index = bestMatch.index;
+    let length = bestMatch.length;
+  
+    // A special case for non-regex keys where they have 0 to 2 capture groups.
+    // I'm not sure what the purpose here is.  There is the special code-point
+    // checks in `toRegex`; there's some non-capturing groups used in those.
+    // Perhaps this was once used by that but has since been disabled by
+    // making those groups non-capturing?
+    if (matcherService.getMatcherFor(bestKey).type !== "regex") return {
+      key: bestKey,
+      index: (bestMatch.groups[0]?.length ?? 0) + index,
+      length: bestMatch.groups[1]?.length ?? length
+    };
+  
+    // We have another special case here using a named capture group called `hl`.
+    // A feature not really detailed outside the Discord group, this "highlight"
+    // feature allows you to narrow the portion of text that is used for the match.
+    // I believe this was intended for story-text highlighting, but it can clearly
+    // also affect key-relative insertion positions as well.
+    if (bestMatch.namedGroups.has("hl")) {
+      const highlight = bestMatch.namedGroups.get("hl") as string;
+      index += bestMatch.match.indexOf(highlight);
+      length = highlight.length;
+    }
+  
+    return { key: bestKey, index, length };
+  }
+
+  return {
+    getKeys,
+    search,
+    searchForLore,
+    naiCheckActivation
+  };
+});

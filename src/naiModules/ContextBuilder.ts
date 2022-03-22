@@ -49,9 +49,17 @@ export interface ReportReasons {
 
 export namespace Virtual {
   export declare function checkLorebook(
+    /** The text available to search for keyword matches. */
     searchText: string,
+    /** The entries to check. */
     entries: Lorebook.LoreEntry[],
-    orderByKeyLocations: boolean
+    /** Whether to favor the last keyword match.  Defaults to `false`. */
+    orderByKeyLocations: boolean,
+    /**
+     * Forces entries that would force-activate to instead check their keys.
+     * The entry must still be enabled.  Defaults to `false`.
+     */
+    forceKeyChecks?: boolean
   ): Map<string, MatchResults.LorebookResult>;
 
   export declare function buildContext(
@@ -84,6 +92,8 @@ export namespace Virtual {
   }
 }
 
+export type ContextRecorder = Virtual.ContextRecorder;
+
 export interface IContextBuilder {
   "AB": ReportReasons;
   "Ie": typeof Virtual.ContextRecorder;
@@ -93,7 +103,7 @@ export interface IContextBuilder {
 }
 
 class ContextBuilder extends ModuleDef<IContextBuilder> {
-  moduleId = 91072;
+  moduleId = 40204;
   expectedExports = 5;
   mapping = {
     "AB": ["REASONS", "object"],

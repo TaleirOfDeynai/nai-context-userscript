@@ -24,7 +24,7 @@ export interface IContextModule {
 };
 
 class ContextModule extends ModuleDef<IContextModule> {
-  moduleId = 84409;
+  moduleId = 76652;
   expectedExports = 9;
   mapping = {
     "SI": ["ContextContent", "function"],

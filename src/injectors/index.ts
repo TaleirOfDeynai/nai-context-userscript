@@ -1,5 +1,6 @@
 import type { WrappedRequireFn } from "../require";
 import * as ContextBuilder from "./ContextBuilder";
+import * as LoreEntryHelpers from "./LoreEntryHelpers";
 
 export interface InjectFn {
   (
@@ -25,7 +26,8 @@ export interface Injector {
 
 /** Add additional injectors here. */
 const injectors: Injector[] = [
-  ContextBuilder
+  ContextBuilder,
+  LoreEntryHelpers
 ];
 
 export default injectors;
