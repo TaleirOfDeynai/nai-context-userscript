@@ -1,5 +1,14 @@
 import { dew } from "./dew";
 
+declare global {
+  // Makes the standard `isArray` slightly more intelligent when it's
+  // starting from some kind of iterable.
+  interface ArrayConstructor {
+    isArray<T>(value: Iterable<T>): value is T[];
+    isArray(value: any): value is any[];
+  }
+}
+
 export type TypePredicate<T> = (value: any) => value is T;
 
 export const isUndefined = (value: any): value is undefined =>

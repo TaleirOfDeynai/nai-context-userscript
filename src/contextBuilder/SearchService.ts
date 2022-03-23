@@ -5,7 +5,7 @@
  * around `n * 1.1` pieces of text that were previously searched.
  * 
  * Scaling down the size is done over time using the formula:
- * `nextSize = (previousSize + (totalMatches * 1.1)) / 2`
+ * `nextSize = (currentSize + (totalSearches * 1.1)) / 2`
  * 
  * It will discard match data for the oldest text that had not
  * been provided for matching.
@@ -14,6 +14,7 @@
 import { dew } from "../utils/dew";
 import { usModule } from "../utils/usModule";
 import { isIterable } from "../utils/is";
+import * as Iterables from "../utils/iterables";
 import { createLogger } from "../utils/logging";
 import MatcherService from "./MatcherService";
 import type { MatchResult } from "./MatcherService";
@@ -36,8 +37,6 @@ const logger = createLogger("SearchService");
 export default usModule((require) => {
   const matcherService = MatcherService(require);
 
-  /** The count of entries at the time of the last cycle. */
-  let previousSize = 0;
   /** A set of texts search since the last maintenance cycle. */
   let textsSearched = new Set<string>();
   /** The internal results cache of the service. */
@@ -46,7 +45,6 @@ export default usModule((require) => {
   /** Handles rescaling of the cache. */
   function rescaleCache() {
     const totalUnique = textsSearched.size;
-    const prevSize = previousSize;
     const curSize = resultsCache.size;
 
     // Maintain a minimum of 20 extra search results.
@@ -58,7 +56,7 @@ export default usModule((require) => {
 
     // When rescaling, we do it over several runs.  This better accommodates
     // undo/redo and other kinds of story manipulation the user may do.
-    const nextSize = Math.floor((prevSize + idealSize) / 2);
+    const nextSize = Math.floor((curSize + idealSize) / 2);
     // Sanity check; we only need to rescale if we're shrinking the cache.
     if (nextSize >= curSize) return;
 
@@ -68,7 +66,7 @@ export default usModule((require) => {
     const retainedEntries = [...resultsCache].slice(-nextSize);
     resultsCache = new Map(retainedEntries);
 
-    logger.info({ prevSize, curSize, idealSize, nextSize });
+    logger.info({ curSize, idealSize, nextSize });
   }
 
   /** Discards results for keys that were not seen since last cycle. */
@@ -87,7 +85,6 @@ export default usModule((require) => {
     discardUnusedResults(keysUsed);
     
     // Setup for the next run-through.
-    previousSize = resultsCache.size;
     textsSearched = new Set();
   });
 
@@ -173,6 +170,64 @@ export default usModule((require) => {
     return entryResults;
   }
 
+  /** Finds the result with the lowest index of all keys searched. */
+  const findLowestIndex = (results: MatcherResults): [string, MatchResult] | undefined => {
+    return Iterables.chain(results)
+      .collect(([k, v]) => {
+        const first = Iterables.first(v);
+        return first ? [k, first] : undefined;
+      })
+      .value((kvps) => {
+        let best: [string, MatchResult] | undefined = undefined;
+        for (const kvp of kvps) {
+          checks: {
+            if (!best) break checks;
+            if (kvp[1].index < best[1].index) break checks;
+            continue;
+          }
+          best = kvp;
+        }
+        return best;
+      });
+  };
+
+  /** Finds the result with the highest index of all keys searched. */
+  const findHighestIndex = (results: MatcherResults): [string, MatchResult] | undefined => {
+    return Iterables.chain(results)
+      .collect(([k, v]) => {
+        const last = Iterables.last(v);
+        return last ? [k, last] : undefined;
+      })
+      .value((kvps) => {
+        let best: [string, MatchResult] | undefined = undefined;
+        for (const kvp of kvps) {
+          checks: {
+            if (!best) break checks;
+            if (kvp[1].index > best[1].index) break checks;
+            continue;
+          }
+          best = kvp;
+        }
+        return best;
+      });
+  };
+
+  /**
+   * Finds the first key in `entryKeys` with a valid match.
+   * This emulates NovelAI's "fail fast" search order that it uses in quick-checks.
+   */
+  const findLowestInOrder = (results: MatcherResults, entryKeys: string[]): string | undefined => {
+    if (!results.size) return undefined;
+    if (!entryKeys.length) return undefined;
+    for (const key of entryKeys)
+      if (results.get(key)?.length) return key;
+    return undefined;
+  };
+
+  /** Build a result for NAI that represents a failure or quick-check result. */
+  const makeQuickResult = (index: number, key: string = ""): NaiMatchResult =>
+    ({ key, length: 0, index });
+
   /**
    * A replacement for {@link LoreEntryHelpers.checkActivation} that allows it
    * to make use of this service instead.
@@ -198,23 +253,21 @@ export default usModule((require) => {
      */
     forceKeyChecks?: boolean
   ): NaiMatchResult {
-    if (!entry.enabled) return {
-      key: "",
-      index: -1,
-      length: 0
-    };
+    if (!entry.enabled)
+      return makeQuickResult(-1);
   
-    if (entry.forceActivation && !forceKeyChecks) return {
-      key: "",
-      index: Number.POSITIVE_INFINITY,
-      length: 0
-    };
+    if (entry.forceActivation && !forceKeyChecks)
+      return makeQuickResult(Number.POSITIVE_INFINITY);
 
     const searchRange = searchRangeDonor?.searchRange ?? entry.searchRange;
     const textFragment = dew(() => {
+      // No offset correction for whole string searches.
       if (searchRange >= searchText.length) return searchText;
 
       const content = searchText.slice(-1 * searchRange);
+      // No offset correction for quick checks.
+      if (quickCheck) return content;
+
       const offset = searchText.length - content.length;
       return { content, offset, length: content.length };
     });
@@ -222,34 +275,17 @@ export default usModule((require) => {
     const results = search(textFragment, entry);
 
     if (quickCheck) {
-      const [key = ""] = results.keys();
-      const index = results.size === 0 ? -1 : 0;
-      return { key, index, length: 0 };
+      const bestKey = findLowestInOrder(results, entry.keys);
+      const offset = Math.max(0, searchText.length - searchRange);
+      return makeQuickResult(bestKey ? offset : -1, bestKey);
     }
 
     // Locate the the result with the highest index.
-    let bestMatch: MatchResult | null = null;
-    let bestKey: string = "";
-    for (const [key, matches] of results) {
-      for (const match of matches) {
-        checks: {
-          if (!bestMatch) break checks;
-          if (match.index > bestMatch.index) break checks;
-          continue;
-        }
-        bestMatch = match;
-        bestKey = key;
-      }
-    }
-
-    if (!bestMatch) return {
-      key: bestKey,
-      index: -1,
-      length: 0
-    };
+    const kvpHi = findHighestIndex(results);
+    if (!kvpHi) return makeQuickResult(-1);
   
-    let index = bestMatch.index;
-    let length = bestMatch.length;
+    const [bestKey, bestMatch] = kvpHi;
+    let { index, length } = bestMatch;
   
     // A special case for non-regex keys where they have 0 to 2 capture groups.
     // I'm not sure what the purpose here is.  There is the special code-point
