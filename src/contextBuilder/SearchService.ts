@@ -34,7 +34,7 @@ export type EntryResults = Map<LoreEntry, MatcherResults>;
 
 const logger = createLogger("SearchService");
 
-export default usModule((require) => {
+export default usModule((require, exports) => {
   const matcherService = MatcherService(require);
 
   /** A set of texts search since the last maintenance cycle. */
@@ -312,10 +312,10 @@ export default usModule((require) => {
     return { key: bestKey, index, length };
   }
 
-  return {
+  return Object.assign(exports, {
     getKeys,
     search,
     searchForLore,
     naiCheckActivation
-  };
+  });
 });

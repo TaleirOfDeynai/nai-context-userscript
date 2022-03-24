@@ -28,7 +28,7 @@ export interface MatchResult {
 
 const logger = createLogger("MatcherService");
 
-export default usModule((require) => {
+export default usModule((require, exports) => {
   const loreEntryHelpers = require(LoreEntryHelpers);
 
   /** A set of keys used for matching since the last maintenance cycle. */
@@ -145,9 +145,9 @@ export default usModule((require) => {
     return matcher;
   };
 
-  return {
+  return Object.assign(exports, {
     onMaintainMatchers,
     markKeyAsUsed,
     getMatcherFor
-  };
+  });
 });
