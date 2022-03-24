@@ -1,5 +1,4 @@
 import { usModule } from "../utils/usModule";
-import * as Iterables from "../utils/iterables";
 import { assert, assertExists } from "../utils/assert";
 
 /** Represents a fragment of some larger body of text. */
@@ -39,7 +38,7 @@ const reByWord = /\b\S+\b|.+?(?:\b|$|(?=\n))|\n/g;
  * This will fail to handle certain syntactical complexities; for
  * instance, a quote within a quote.  It's just not worth dealing with.
  */
-const reBySentence = /(\s+)|([.?!~]+['"]*(?=$|\s))|(.+?(?=$|[.?!~]+['"]*(?:\s+\b|$)))/g;
+const reBySentence = /(\s+)|([.?!~]+['"]*(?=$|\s))|(.+?(?=$|[.?!~]+['"]*(?:\s+|$)))/g;
 
 /**
  * Each match will be one of:
