@@ -17,15 +17,10 @@ import { isIterable } from "../utils/is";
 import * as Iterables from "../utils/iterables";
 import { createLogger } from "../utils/logging";
 import MatcherService from "./MatcherService";
-import type { MatchResult } from "./MatcherService";
 import type { AnyResult as NaiMatchResult } from "../naiModules/MatchResults";
 import type { LoreEntry } from "../naiModules/Lorebook";
-
-interface TextFragment {
-  readonly content: string;
-  readonly offset: number;
-  readonly length: number;
-}
+import type { MatchResult } from "./MatcherService";
+import type { TextFragment } from "./TextSplitterService";
 
 export type Searchable = string | TextFragment;
 export type Matchable = Iterable<string> | { keys: string[] };
