@@ -101,3 +101,6 @@ typings/
 
 # TernJS port file
 .tern-port
+
+# Own little testing scripts.
+scripts/
