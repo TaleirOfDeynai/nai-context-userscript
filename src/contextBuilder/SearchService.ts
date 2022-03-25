@@ -13,16 +13,15 @@
 
 import { dew } from "../utils/dew";
 import { usModule } from "../utils/usModule";
-import { isIterable } from "../utils/is";
+import { isIterable, isString } from "../utils/is";
 import * as Iterables from "../utils/iterables";
 import { createLogger } from "../utils/logging";
 import MatcherService from "./MatcherService";
 import type { AnyResult as NaiMatchResult } from "../naiModules/MatchResults";
 import type { LoreEntry } from "../naiModules/Lorebook";
 import type { MatchResult } from "./MatcherService";
-import type { TextFragment } from "./TextSplitterService";
+import type { TextOrFragment } from "./TextSplitterService";
 
-export type Searchable = string | TextFragment;
 export type Matchable = Iterable<string> | { keys: string[] };
 export type MatcherResults = Map<string, readonly MatchResult[]>;
 export type EntryResults = Map<LoreEntry, MatcherResults>;
@@ -123,12 +122,12 @@ export default usModule((require, exports) => {
     return [];
   };
 
-  function search(searchText: Searchable, matchable: Matchable): MatcherResults {
+  function search(searchText: TextOrFragment, matchable: Matchable): MatcherResults {
     const keys = getKeys(matchable);
 
     // For fragments, we need to apply the offset to the results so
     // they line up with the fragment's source string.
-    if (typeof searchText !== "string") {
+    if (!isString(searchText)) {
       const { content, offset } = searchText;
       const theResults = findMatches(content, keys);
 
@@ -143,7 +142,7 @@ export default usModule((require, exports) => {
     return findMatches(searchText, keys);
   }
 
-  function searchForLore(searchText: Searchable, entries: LoreEntry[]): EntryResults {
+  function searchForLore(searchText: TextOrFragment, entries: LoreEntry[]): EntryResults {
     // We just need to grab all the keys from the entries and pull their
     // collective matches.  We'll only run each key once.
     const keySet = new Set(entries.flatMap((e) => e.keys));

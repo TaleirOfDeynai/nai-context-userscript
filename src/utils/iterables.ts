@@ -93,6 +93,16 @@ export const last = <T>(iter: Iterable<T>): T | undefined => {
 };
 
 /**
+ * Counts the number of elements that pass a predicate.
+ */
+export const countBy = <T>(iter: Iterable<T>, predicateFn: PredicateFn<T>): number => {
+  let count = 0;
+  for (const item of iter)
+    if (predicateFn(item)) count += 1;
+  return count;
+};
+
+/**
  * Creates an object from key-value-pairs.
  */
 export const fromPairs = <KVP extends [string | number, any]>(

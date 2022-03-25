@@ -1,15 +1,16 @@
 import { usModule } from "../utils/usModule";
-import { assert, assertAs, assertExists } from "../utils/assert";
-import { iterReverse } from "../utils/iterables";
-import { isNumber } from "../utils/is";
+import { assert, assertExists } from "../utils/assert";
+import { iterReverse, countBy } from "../utils/iterables";
+import { isNumber, isString } from "../utils/is";
 import AppConstants from "../naiModules/AppConstants";
 
 /** Represents a fragment of some larger body of text. */
 export interface TextFragment {
   readonly content: string;
   readonly offset: number;
-  readonly length: number;
 }
+
+export type TextOrFragment = string | TextFragment;
 
 /** Matches smart single quotes. */
 const reSmartSQ = /[\u2018\u2019\u201A\u201B\u2032\u2035]/g;
@@ -59,8 +60,15 @@ export default usModule((require, exports) => {
   const chunkSize = require(AppConstants).contextSize;
   assert("Expected chunk size greater than 0.", !!chunkSize && chunkSize > 0);
 
-  const resultFrom = (content: string, offset: number): TextFragment =>
-    ({ content, offset, length: content.length });
+  /** Builds a {@link TextFragment} given some inputs. */
+  const resultFrom = (content: string, offset: number, source?: TextOrFragment): TextFragment => {
+    if (!source || isString(source)) return { content, offset };
+    return { content, offset: source.offset + offset };
+  };
+
+  /** Standardizes on text fragments for processing. */
+  const asFragment = (inputText: TextOrFragment): TextFragment =>
+    isString(inputText) ? resultFrom(inputText, 0) : inputText;
   
   /**
    * Breaks text up into fragments containing one of:
@@ -69,39 +77,41 @@ export default usModule((require, exports) => {
    * 
    * Will yield no elements for an empty string.
    */
-  function* byLine(inputText: string): Iterable<TextFragment> {
-    for(const match of inputText.matchAll(reByLine)) {
+  function* byLine(inputText: TextOrFragment): Iterable<TextFragment> {
+    const inputFrag = asFragment(inputText);
+
+    for(const match of inputFrag.content.matchAll(reByLine)) {
       const [content] = match;
-      const length = content.length;
       const offset = assertExists("Expected match index to exist.", match.index);
-      assert("Expected match contents to be non-empty.", length > 0);
-      yield { content, offset, length };
+      assert("Expected match contents to be non-empty.", content.length > 0);
+      yield resultFrom(content, offset, inputFrag);
     }
   }
 
   /**
-   * Gets a chunk of text towards the end of `inputText` but before
-   * `endIndex`.  This chunk will always contain a `\n` character or
-   * will be the final line of iteration.
+   * Gets a chunk of text towards the end of `inputFrag.content` but
+   * before `endIndex`.  This chunk will always contain a `\n` character
+   * or will be the final line of iteration.
    */
   function getChunkAtEnd(
-    inputText: string,
-    endIndex: number = inputText.length
+    inputFrag: TextFragment,
+    endIndex: number = inputFrag.content.length
   ): TextFragment {
-    if (!inputText.length) return resultFrom("", 0);
+    if (!inputFrag.content.length) return resultFrom("", 0, inputFrag);
     // The caller should have aborted instead of calling this.
     assert("End index must be non-zero.", endIndex > 0);
 
+    const { content } = inputFrag;
     let startIndex = Math.max(0, endIndex - chunkSize);
-    let chunk = inputText.slice(startIndex, endIndex);
+    let chunk = content.slice(startIndex, endIndex);
 
     while (startIndex > 0) {
       if (reHasNewLine.test(chunk)) break;
       startIndex = Math.max(0, startIndex - chunkSize);
-      chunk = inputText.slice(startIndex, endIndex);
+      chunk = content.slice(startIndex, endIndex);
     }
 
-    return resultFrom(chunk, startIndex);
+    return resultFrom(chunk, startIndex, inputFrag);
   }
 
   /**
@@ -112,8 +122,9 @@ export default usModule((require, exports) => {
    * Just to be doubly-clear, **REVERSE ORDER**!  If you want the fragments
    * in normal order, pass the returned iterable through {@link iterReverse}.
    */
-  function* byLineFromEnd(inputText: string): Iterable<TextFragment> {
-    let curChunk = getChunkAtEnd(inputText);
+  function* byLineFromEnd(inputText: TextOrFragment): Iterable<TextFragment> {
+    const inputFrag = asFragment(inputText);
+    let curChunk = getChunkAtEnd(inputFrag);
 
     // The idea here is to yield lines from the chunk in reverse until
     // the last, presumably partial, line is encountered.  At this point,
@@ -121,25 +132,29 @@ export default usModule((require, exports) => {
     // chunk from there.
     while(curChunk.offset > 0) {
       let lastOffset: number | null = null;
+
+      // We're going to use `curChunk.content` directly so that when we
+      // see `line.offset === 0`, we know we're at the first line of
+      // the chunk.  This means we'll need to correct the offset.
       for (const line of iterReverse(byLine(curChunk.content))) {
         // Don't yield the first line; it may be a partial line.
         if (line.offset === 0) break;
         lastOffset = line.offset;
-        yield resultFrom(line.content, curChunk.offset + line.offset);
+        yield resultFrom(line.content, curChunk.offset + line.offset, inputFrag);
       }
 
       // Grab the next chunk ending at the last known good line.
-      const nextEndIndex = curChunk.offset + assertAs(
+      const nextEndIndex = curChunk.offset + assertExists(
         "Expected to encounter one line not from the start of the chunk.",
-        isNumber, lastOffset
+        lastOffset
       );
-      curChunk = getChunkAtEnd(inputText, nextEndIndex);
+      curChunk = getChunkAtEnd(inputFrag, nextEndIndex);
     }
 
     // If we've reached the start of the string, just yield the remaining
     // chunk's lines and we're done.  There's no need to adjust the
     // offset in this case.
-    yield* iterReverse(byLine(curChunk.content));
+    yield* iterReverse(byLine(curChunk));
   }
 
   /**
@@ -162,27 +177,27 @@ export default usModule((require, exports) => {
    * - ` `
    * - `She pouts unhappily.`
    */
-  function* bySentence(inputText: string): Iterable<TextFragment> {
+  function* bySentence(inputText: TextOrFragment): Iterable<TextFragment> {
+    const inputFrag = asFragment(inputText);
+
     // To simplify destructuring, we'll start by breaking the content up by
     // lines.  This way, the `\n` character won't complicate things.
-    for (const fragment of byLine(inputText)) {
+    for (const fragment of byLine(inputFrag)) {
       // If the fragment is a `\n` character, carry on.
       if (fragment.content === "\n") {
         yield fragment;
         continue;
       }
 
-      const { offset, content } = fragment;
-
       // We're going to need to fuse the body and punctuation parts together.
       // It's gonna be a bit weird...
       let lastBody: TextFragment | null = null;
 
-      for (const match of content.matchAll(reBySentence)) {
+      for (const match of fragment.content.matchAll(reBySentence)) {
         const [, whitespace, punctuation, body] = match;
         assert(
           "Expected exactly one capture group to be populated.",
-          [whitespace, punctuation, body].filter(Boolean).length === 1
+          countBy([whitespace, punctuation, body], Boolean) === 1
         );
         const index = assertExists("Expected match index to exist.", match.index);
 
@@ -194,18 +209,18 @@ export default usModule((require, exports) => {
         }
 
         if (punctuation) {
-          if (!lastBody) yield resultFrom(punctuation, offset + index);
+          if (!lastBody) yield resultFrom(punctuation, index, fragment);
           else {
             yield resultFrom(`${lastBody.content}${punctuation}`, lastBody.offset);
             lastBody = null;
           }
         }
         else if (whitespace) {
-          yield resultFrom(whitespace, offset + index);
+          yield resultFrom(whitespace, index, fragment);
         }
         else if (body) {
           // Hold on to this body until we've seen the next match.
-          lastBody = resultFrom(body, offset + index);
+          lastBody = resultFrom(body, index, fragment);
         }
       }
 
@@ -220,18 +235,21 @@ export default usModule((require, exports) => {
    * - A word's contents.
    * - Stuff between words (punctuation and other whitespace).
    */
-  function* byWord(inputText: string): Iterable<TextFragment> {
-    for(const match of inputText.matchAll(reByWord)) {
+  function* byWord(inputText: TextOrFragment): Iterable<TextFragment> {
+    const inputFrag = asFragment(inputText);
+
+    for(const match of inputFrag.content.matchAll(reByWord)) {
       const [content] = match;
       const length = content.length;
-      const offset = assertExists("Expected match index to exist.", match.index);
+      const index = assertExists("Expected match index to exist.", match.index);
       assert("Expected match contents to be non-empty.", length > 0);
-      yield resultFrom(content, offset);
+      yield resultFrom(content, index, inputFrag);
     }
   }
 
   /**
-   * Determines if a fragment has any contents that looks like a word.
+   * Determines if some text (or a fragment of text) has any contents that
+   * looks like a word.
    * 
    * This basically looks for any character that is not:
    * - Whitespace.
@@ -239,8 +257,8 @@ export default usModule((require, exports) => {
    * - A common sentence terminator `.?!~`.
    * - A hyphen (since it is used as a word joiner).
    */
-  function hasWords(fragment: TextFragment): boolean {
-    return reWordy.test(fragment.content);
+  function hasWords(inputText: TextOrFragment): boolean {
+    return reWordy.test(isString(inputText) ? inputText : inputText.content);
   }
 
   return Object.assign(exports, {
@@ -248,6 +266,7 @@ export default usModule((require, exports) => {
     byLineFromEnd,
     bySentence,
     byWord,
-    hasWords
+    hasWords,
+    createFragment: resultFrom
   });
 });
