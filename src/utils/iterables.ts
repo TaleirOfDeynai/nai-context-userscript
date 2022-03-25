@@ -63,6 +63,16 @@ export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   exec(): void;
 }
 
+declare global {
+  interface Array<T> {
+    // Fixes `filter` so it recognizes when the `Boolean` constructor is being used
+    // as a predicate.  Supposedly, it was their intention it work like this, but it don't.
+    // I know, TypeScript maintainers.  Types are hard, especially when you've built a
+    // house-of-cards type-system.
+    filter(predicate: BooleanConstructor): Exclude<T, null | undefined>[];
+  }
+}
+
 /**
  * Gets the first element of an iterable or `undefined` if it has none.
  */
@@ -179,7 +189,7 @@ export const iterReverse = function*<T>(
     for (let i = iter.length - 1; i >= lim; i--) yield iter[i];
   }
   else {
-    // Either way we gotta cache the values so we can reverse them.
+    // We gotta materialize the values so we can reverse them.
     yield* iterReverse([...iter], count);
   }
 };
@@ -315,6 +325,38 @@ export const interweave = function*<T>(
     yield value;
   }
 };
+
+/**
+ * Yields values from an `iterable` that pass the predicate `waypointFn`
+ * as well as all values in-between these waypoints.
+ * 
+ * This just trims the beginning and end of the iterable of values that
+ * are not considered "useful", according to the predicate.
+ */
+export const journey = function*<T>(
+  iter: Iterable<T>,
+  waypointFn: PredicateFn<T>
+): Iterable<T> {
+  let journeyBegun = false;
+  const buffer: T[] = [];
+
+  // Any items still in the buffer after iteration completes will be
+  // intentionally discarded, as they are not between two waypoints.
+  for (const item of iter) {
+    if (!waypointFn(item)) {
+      if (!journeyBegun) continue;
+      buffer.push(item);
+    }
+    else {
+      journeyBegun = true;
+      if (buffer.length) {
+        yield* buffer;
+        buffer.length = 0;
+      }
+      yield item;
+    }
+  }
+}
 
 /**
  * Calls the given function on each element of `iterable` and yields the

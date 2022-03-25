@@ -1,9 +1,9 @@
 import { dew } from "./dew";
 
 declare global {
-  // Makes the standard `isArray` slightly more intelligent when it's
-  // starting from some kind of iterable.
   interface ArrayConstructor {
+    // Makes the standard `isArray` slightly more intelligent when it's
+    // starting from some kind of iterable.
     isArray<T>(value: Iterable<T>): value is T[];
     isArray(value: any): value is any[];
   }
