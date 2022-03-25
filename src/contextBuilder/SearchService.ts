@@ -297,8 +297,8 @@ export default usModule((require, exports) => {
     // feature allows you to narrow the portion of text that is used for the match.
     // I believe this was intended for story-text highlighting, but it can clearly
     // also affect key-relative insertion positions as well.
-    if (bestMatch.namedGroups.has("hl")) {
-      const highlight = bestMatch.namedGroups.get("hl") as string;
+    if ("hl" in bestMatch.namedGroups) {
+      const highlight = bestMatch.namedGroups["hl"];
       index += bestMatch.match.indexOf(highlight);
       length = highlight.length;
     }

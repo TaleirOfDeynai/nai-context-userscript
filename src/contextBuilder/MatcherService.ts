@@ -19,7 +19,7 @@ export interface MatchResult {
   /** If there were capture groups, the matches for those. */
   readonly groups: string[];
   /** If there were named capture groups, the matches for those. */
-  readonly namedGroups: Map<string, string>;
+  readonly namedGroups: Readonly<Record<string, string>>;
   /** The index of the match from the searched string. */
   readonly index: number;
   /** The length of the matched text. */
@@ -88,12 +88,12 @@ export default usModule((require, exports) => {
   function toMatchResult(regexExec: RegExpExecArray): MatchResult {
     const [match, ...groups] = regexExec;
 
-    return {
+    return Object.freeze({
       match, groups,
       index: assertExists("Expected an index.", regexExec.index),
       length: match.length,
-      namedGroups: new Map(Object.entries(regexExec.groups ?? {}))
-    };
+      namedGroups: Object.freeze({ ...regexExec?.groups })
+    });
   }
 
   /** Adds a key to the list of used keys. */

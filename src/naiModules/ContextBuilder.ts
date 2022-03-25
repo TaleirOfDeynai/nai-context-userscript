@@ -64,9 +64,9 @@ export namespace Virtual {
 
   export declare function buildContext(
     storyContent: EventModule.StoryContent,
-    storyState: EventModule.Virtual.StoryState,
+    storyState: EventModule.StoryState,
     tokenLimit: number,
-    removeHeaderLine?: boolean,
+    removeComments?: boolean,
     storyLength?: number,
     tokenCodec?: TokenCodec
   ): Promise<ContextRecorder>;

@@ -62,7 +62,7 @@ export interface StoryContent {
   settings: StorySettings;
   settingsDirty: boolean;
   story: StoryController;
-  storyContextConfig: unknown;
+  storyContextConfig: Lorebook.ContextConfig;
 }
 
 export interface StoryMetadata {
@@ -119,7 +119,7 @@ export namespace Virtual {
     newStateLine: Function;
     pushState: Function;
 
-    handleEvent<T extends AnyEvent>(event: AnyEvent): HandledEvent<T>;
+    handleEvent<T extends AnyEvent>(event: T): HandledEvent<T>;
   }
 
   export declare class StoryInputEvent {
@@ -137,6 +137,8 @@ export namespace Virtual {
     contextText: string;
   }
 }
+
+export type StoryState = Virtual.StoryState;
 
 export interface IEventModule {
   "bi": typeof Virtual.StoryState;
