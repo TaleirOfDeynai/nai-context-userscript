@@ -205,7 +205,7 @@ export const iterReverse = function*<T>(
 };
 
 /**
- * Takes up to `count` elements from the beginning of the iterable.
+ * Yields up to `count` elements from the beginning of the given iterable.
  */
 export const take = function*<T>(
   iterable: Iterable<T>,
@@ -227,11 +227,43 @@ export const take = function*<T>(
 };
 
 /**
- * Takes up to `count` elements from the end of the iterable.  The original order
- * will be preserved, unlike in `iterReverse`.
+ * Yields items from the beginning of the iterable until the given predicate
+ * function returns `true`.
+ */
+export const takeUntil = function*<T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>
+): Iterable<ElementOf<T>> {
+  for (const item of iter) {
+    if (predicateFn(item)) return;
+    yield item;
+  }
+};
+
+/**
+ * Yields up to `count` elements from the end of the iterable.  The original
+ * order will be preserved, unlike in `iterReverse`.
  */
 export const takeRight = <T>(iterable: Iterable<T>, count: number): Array<T> =>
   [...iterReverse(iterable, count)].reverse();
+
+/**
+ * Yields items from the end of the iterable until the given predicate
+ * function returns `true`.  Although the predicate will work from the end
+ * toward the beginning, the items will be yielded in their original order.
+ */
+export const takeRightUntil = <T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>
+): Array<ElementOf<T>> => {
+  const buffer: ElementOf<T>[] = [];
+  for (const item of iterReverse(iter)) {
+    if (predicateFn(item)) break;
+    buffer.push(item);
+  }
+
+  return buffer.reverse();
+};
 
 /**
  * Creates an iterable that transforms values.
@@ -261,10 +293,10 @@ export const collectIter = function*<TIn, TOut>(
 /**
  * Filters the given iterable to those values that pass a predicate.
  */
-export const filterIter = function*<T>(
-   iterable: Iterable<T>,
-   predicateFn: PredicateFn<T>
-): Iterable<T> {
+export const filterIter = function*<T extends Iterable<any>>(
+   iterable: T,
+   predicateFn: PredicateFn<ElementOf<T>>
+): Iterable<ElementOf<T>> {
   for (const value of iterable)
     if (predicateFn(value))
       yield value;
@@ -343,12 +375,12 @@ export const interweave = function*<T>(
  * This just trims the beginning and end of the iterable of values that
  * are not considered "useful", according to the predicate.
  */
-export const journey = function*<T>(
-  iter: Iterable<T>,
-  waypointFn: PredicateFn<T>
-): Iterable<T> {
+export const journey = function*<T extends Iterable<any>>(
+  iter: T,
+  waypointFn: PredicateFn<ElementOf<T>>
+): Iterable<ElementOf<T>> {
   let journeyBegun = false;
-  const buffer: T[] = [];
+  const buffer: ElementOf<T>[] = [];
 
   // Any items still in the buffer after iteration completes will be
   // intentionally discarded, as they are not between two waypoints.

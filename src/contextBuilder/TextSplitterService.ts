@@ -1,7 +1,7 @@
 import { usModule } from "../utils/usModule";
 import { assert, assertExists } from "../utils/assert";
 import { iterReverse, countBy } from "../utils/iterables";
-import { isNumber, isString } from "../utils/is";
+import { isString } from "../utils/is";
 import AppConstants from "../naiModules/AppConstants";
 
 /** Represents a fragment of some larger body of text. */
@@ -267,6 +267,7 @@ export default usModule((require, exports) => {
     bySentence,
     byWord,
     hasWords,
-    createFragment: resultFrom
+    createFragment: resultFrom,
+    asFragment
   });
 });
