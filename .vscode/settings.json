@@ -1,5 +1,7 @@
 {
   "cSpell.words": [
+    "ingestor",
     "lorebook"
-  ]
+  ],
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

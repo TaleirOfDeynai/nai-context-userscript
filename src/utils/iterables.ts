@@ -1,4 +1,5 @@
-import { isString, isIterable, TypePredicate } from "./is";
+import { isString, isIterable, isArray, TypePredicate } from "./is";
+import { invertPredicate, PredicateFn } from "./functions";
 
 /** The primitive data-types. */
 type Primitives = number | string | boolean | Function | {} | null | undefined;
@@ -25,7 +26,6 @@ export type TransformFn<TIn, TOut> = (value: TIn) => TOut;
 export type TupleTransformFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => [...TOut];
 export type CollectFn<TIn, TOut> = TransformFn<TIn, TOut | undefined>;
 export type TupleCollectFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => [...TOut] | undefined;
-export type PredicateFn<T> = (value: T) => boolean;
 export type TapFn<TValue> = (value: TValue) => unknown;
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
@@ -82,7 +82,7 @@ export const first = <T>([v]: Iterable<T>): T | undefined => v;
  * Gets the last element of an iterable or `undefined` if it has none.
  */
 export const last = <T>(iter: Iterable<T>): T | undefined => {
-  if (Array.isArray(iter)) {
+  if (isArray(iter)) {
     if (iter.length === 0) return undefined;
     return iter[iter.length - 1];
   }
@@ -175,7 +175,7 @@ export const flatten = function*<T extends Flattenable<any>>(
 export const iterPosition = function*<T>(
   iter: Iterable<T>
 ): Iterable<[number, T]> {
-  if (Array.isArray(iter)) {
+  if (isArray(iter)) {
     yield* iter.entries();
   }
   else {
@@ -192,7 +192,7 @@ export const iterReverse = function*<T>(
   iter: Iterable<T>,
   count?: number
 ): Iterable<T> {
-  if (Array.isArray(iter)) {
+  if (isArray(iter)) {
     // Ensure `count` is between 0 and the number of items in the array.
     count = Math.max(0, Math.min(iter.length, count ?? iter.length));
     const lim = iter.length - count;
@@ -208,16 +208,16 @@ export const iterReverse = function*<T>(
  * Yields up to `count` elements from the beginning of the given iterable.
  */
 export const take = function*<T>(
-  iterable: Iterable<T>,
+  iter: Iterable<T>,
   count: number
 ): Iterable<T> {
-  if (Array.isArray(iterable)) {
+  if (isArray(iter)) {
     // Ensure `count` is between 0 and the number of items in the array.
-    count = Math.max(0, Math.min(iterable.length, count ?? iterable.length));
-    for (let i = 0; i < count; i++) yield iterable[i];
+    count = Math.max(0, Math.min(iter.length, count ?? iter.length));
+    for (let i = 0; i < count; i++) yield iter[i];
   }
   else {
-    const iterator = iterable[Symbol.iterator]();
+    const iterator = iter[Symbol.iterator]();
     let v = iterator.next();
     for (let i = 0; i < count && !v.done; i++) {
       yield v.value;
@@ -263,6 +263,82 @@ export const takeRightUntil = <T extends Iterable<any>>(
   }
 
   return buffer.reverse();
+};
+
+/** Yields items after skipping the first `count` items. */
+export const skip = function*<T>(
+  iter: Iterable<T>,
+  count: number
+): Iterable<T> {
+  if (count <= 0) return iter;
+
+  if (isArray(iter)) {
+    // Ensure `count` is between 0 and the number of items in the array.
+    count = Math.max(0, Math.min(iter.length, count ?? iter.length));
+    for (let i = count; i < iter.length; i++) yield iter[i];
+  }
+  else {
+    let skipped = 0;
+    for (const item of iter) {
+      if (skipped >= count) yield item;
+      else skipped += 1;
+    }
+  }
+};
+
+/** Yields items starting from the first to pass `predicateFn`. */
+export const skipUntil = function*<T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>
+): Iterable<ElementOf<T>> {
+  let skipDone = false;
+  for (const item of iter) {
+    checks: {
+      if (skipDone) break checks;
+      if (!predicateFn(item)) continue;
+      skipDone = true;
+    }
+    yield item;
+  }
+};
+
+/** Yields all items except the last `count` items. */
+export const skipRight = function*<T>(
+  iter: Iterable<T>,
+  count: number
+): Iterable<T> {
+  if (count <= 0) return iter;
+
+  if (isArray(iter)) {
+    // Ensure `count` is between 0 and the number of items in the array.
+    count = Math.max(0, Math.min(iter.length, count ?? iter.length));
+    for (let i = 0; i < iter.length - count; i++) yield iter[i];
+  }
+  else {
+    const buffer: T[] = [];
+    for (const item of iter) {
+      buffer.push(item);
+      if (buffer.length > count) yield buffer.shift() as T;
+    }
+  }
+};
+
+/** Yields all items except the very last bunch that all fail the `predicateFn`. */
+export const skipRightUntil = function*<T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>
+): Iterable<ElementOf<T>> {
+  if (isArray(iter)) {
+    // Figure out where we're gonna stop.
+    let cutOff = iter.length;
+    for (; cutOff >= 0; cutOff--)
+      if (predicateFn(iter[cutOff])) break;
+    // Iterate until we reach the cutoff.
+    for (let i = 0; i <= cutOff; i++) yield iter[i];
+  }
+  else {
+    yield* skipRightUntil([...iter] as Iterable<ElementOf<T>>, predicateFn);
+  }
 };
 
 /**
@@ -409,7 +485,7 @@ export const tapEach = function*<T>(
   tapFn: TapFn<T>
 ): Iterable<T> {
   // Clone an array in case the reference may be mutated by the `tapFn`.
-  const safedIterable: Iterable<T> = Array.isArray(iterable) ? [...iterable] : iterable;
+  const safedIterable: Iterable<T> = isArray(iterable) ? [...iterable] : iterable;
   for (const value of safedIterable) {
     tapFn(value);
     yield value;

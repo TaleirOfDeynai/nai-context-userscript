@@ -1,7 +1,7 @@
 import { usModule } from "../utils/usModule";
 import { assert, assertExists } from "../utils/assert";
 import { iterReverse, countBy } from "../utils/iterables";
-import { isString } from "../utils/is";
+import { isArray, isString } from "../utils/is";
 import AppConstants from "../naiModules/AppConstants";
 
 /** Represents a fragment of some larger body of text. */
@@ -69,6 +69,20 @@ export default usModule((require, exports) => {
   /** Standardizes on text fragments for processing. */
   const asFragment = (inputText: TextOrFragment): TextFragment =>
     isString(inputText) ? resultFrom(inputText, 0) : inputText;
+  
+  /** Pulls the content text from a string or fragment. */
+  const asContent = (inputText: TextOrFragment): string =>
+    isString(inputText) ? inputText : inputText.content;
+  
+  /** Combines many sequential fragments into a single fragment. */
+  const mergeFragments = (fragments: Iterable<TextFragment>): TextFragment => {
+    const parts = isArray(fragments) ? fragments : [...fragments];
+    assert("Expected at least one text fragment.", parts.length > 0);
+    const content = parts.map(asContent).join("");
+    const [{ offset }] = parts;
+    return { content, offset };
+  };
+
   
   /**
    * Breaks text up into fragments containing one of:
@@ -268,6 +282,8 @@ export default usModule((require, exports) => {
     byWord,
     hasWords,
     createFragment: resultFrom,
-    asFragment
+    mergeFragments,
+    asFragment,
+    asContent
   });
 });
