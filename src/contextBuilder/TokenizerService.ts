@@ -1,6 +1,7 @@
 import { dew } from "../utils/dew";
 import { usModule } from "../utils/usModule";
 import { isFunction, isObject } from "../utils/is";
+import { chain, buffer } from "../utils/iterables";
 import TokenizerCodec from "../naiModules/TokenizerCodec";
 import TextSplitterService from "./TextSplitterService";
 import type { TokenCodec as AsyncTokenCodec } from "../naiModules/TokenizerCodec";
@@ -25,7 +26,7 @@ export interface StreamEncodeOptions {
   /** A string to be appended to each intermediate result. */
   suffix?: string;
   /** A previous result to continue from. */
-  seedResult?: EncodeResult;
+  seedResult?: Readonly<EncodeResult>;
   /** How many tokens to set aside as unverified between encodings. */
   bufferSize?: number;
 }
@@ -117,7 +118,6 @@ export default usModule((require, exports) => {
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
     // Internal state holding intermediate information.
-    let bufferedFrags: TextFragment[] = [];
     let wilderness = await dew(async () => {
       if (seedResult) return seedResult.tokens.slice(0, bufferSize);
       if (!suffix) return [];
@@ -129,13 +129,12 @@ export default usModule((require, exports) => {
     let safeHouse = seedResult?.tokens.slice(bufferSize) ?? [];
     let encoded: readonly TextFragment[] = seedResult?.fragments.slice() ?? [];
 
-    const encodeBuffer = async (): Promise<EncodeResult> => {
-      if (bufferedFrags.length === 0)
-        throw new Error("Nothing in buffer!  Why did you call this?");
+    const fragmentBuffers = chain(toEncode)
+      .thru((frags) => buffer(frags, textSplitter.hasWords))
+      .map((bufParts) => bufParts.reverse())
+      .value();
 
-      // Swap the buffer out.
-      const theBuffer = bufferedFrags.reverse();
-      bufferedFrags = [];
+    for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
       const boundary = await codec.decode([...wilderness]);
       const fullText = [...theBuffer.map(textSplitter.asContent), boundary].join("");
@@ -159,20 +158,8 @@ export default usModule((require, exports) => {
       // And anything afterwards is now considered verified.
       safeHouse = [...theTokens.slice(bufferSize), ...safeHouse];
       encoded = fragments;
-      return result;
-    };
-
-    for (const fragment of toEncode) {
-      bufferedFrags.push(fragment);
-      // Only proceed if the fragment contained meaningful data.
-      if (!textSplitter.hasWords(fragment)) continue;
-
-      yield await encodeBuffer();
+      yield result;
     }
-
-    // If there's anything still in the buffer, we'll finish it off.
-    if (!bufferedFrags.length) return;
-    yield await encodeBuffer();
   }
 
   /**
@@ -201,7 +188,6 @@ export default usModule((require, exports) => {
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
     // Internal state holding intermediate information.
-    let bufferedFrags: TextFragment[] = [];
     let wilderness = await dew(async () => {
       if (seedResult) return seedResult.tokens.slice(-bufferSize);
       if (!prefix) return [];
@@ -213,13 +199,11 @@ export default usModule((require, exports) => {
     let safeHouse = seedResult?.tokens.slice(0, -bufferSize) ?? [];
     let encoded: readonly TextFragment[] = seedResult?.fragments.slice() ?? [];
 
-    const encodeBuffer = async (): Promise<EncodeResult> => {
-      if (bufferedFrags.length === 0)
-        throw new Error("Nothing in buffer!  Why did you call this?");
+    const fragmentBuffers = chain(toEncode)
+      .thru((frags) => buffer(frags, textSplitter.hasWords))
+      .value();
 
-      // Swap the buffer out.
-      const theBuffer = bufferedFrags;
-      bufferedFrags = [];
+    for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
       const boundary = wilderness.length ? await codec.decode([...wilderness]) : "";
       const fullText = [boundary, ...theBuffer.map(textSplitter.asContent)].join("");
@@ -243,20 +227,8 @@ export default usModule((require, exports) => {
       // And anything before that is now considered verified.
       safeHouse = [...safeHouse, ...theTokens.slice(0, -bufferSize)];
       encoded = fragments;
-      return result;
-    };
-
-    for (const fragment of toEncode) {
-      bufferedFrags.push(fragment);
-      // Only proceed if the fragment contained meaningful data.
-      if (!textSplitter.hasWords(fragment)) continue;
-
-      yield await encodeBuffer();
+      yield result;
     }
-
-    // If there's anything still in the buffer, we'll finish it off.
-    if (!bufferedFrags.length) return;
-    yield await encodeBuffer();
   }
 
   const isCodec = (value: any): value is TokenCodec => {

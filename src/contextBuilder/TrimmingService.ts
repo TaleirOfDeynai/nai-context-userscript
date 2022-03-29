@@ -1,16 +1,14 @@
 import { dew } from "../utils/dew";
 import { usModule } from "../utils/usModule";
 import { assert, assertExists } from "../utils/assert";
-import { iterReverse, journey } from "../utils/iterables";
+import { iterReverse, journey, buffer, flatten } from "../utils/iterables";
 import TextSplitterService from "./TextSplitterService";
 import TokenizerService from "./TokenizerService";
 import type { ContextConfig } from "../naiModules/Lorebook";
 import type { TokenCodec, StreamEncodeFn, EncodeResult } from "./TokenizerService";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 
-export interface TrimOptions {
-  prefix: ContextConfig["prefix"];
-  suffix: ContextConfig["suffix"];
+export interface CommonTrimOptions {
   trimDirection: ContextConfig["trimDirection"];
   maximumTrimType: ContextConfig["maximumTrimType"];
   /**
@@ -19,6 +17,11 @@ export interface TrimOptions {
    * Setting this to `true` will ensure these fragments are not lost.
    */
   preserveEnds: boolean;
+}
+
+export interface TokenTrimOptions extends CommonTrimOptions {
+  prefix: ContextConfig["prefix"];
+  suffix: ContextConfig["suffix"];
 }
 
 export interface TrimResult {
@@ -42,7 +45,7 @@ interface TextSequencer {
   /** Encoder to use with this sequencer. */
   encode: StreamEncodeFn;
   /** Gets the text fragment to use with the next sequencer. */
-  prepareInnerChunk: (current: EncodeResult, last?: EncodeResult) => TextFragment;
+  prepareInnerChunk: (current: EncodeResult, last?: Readonly<EncodeResult>) => TextFragment;
   /** The trim direction this sequencer is intended for. */
   trimDirection: "trimTop" | "trimBottom";
 }
@@ -55,12 +58,16 @@ export default usModule((require, exports) => {
 
   const { hasWords, asContent, asFragment, mergeFragments } = splitterService;
 
-  const defaultOptions: TrimOptions = {
-    prefix: "",
-    suffix: "",
+  const commonDefaults: CommonTrimOptions = {
     trimDirection: "trimBottom",
     maximumTrimType: "token",
     preserveEnds: false
+  };
+
+  const tokenDefaults: TokenTrimOptions = {
+    ...commonDefaults,
+    prefix: "",
+    suffix: ""
   };
 
   // I'm not going to beat around the bush.  This will be quite ugly and
@@ -84,35 +91,37 @@ export default usModule((require, exports) => {
     /** The direction this sequencer is for. */
     trimDirection: "trimTop" | "trimBottom"
   ): TextSequencer => {
-    const encode = assertExists("Expected an affirmative trim direction.", dew(() => {
-      switch (trimDirection) {
-        case "trimTop": return (codec, toEncode, options) => {
-          options = Object.assign({}, { bufferSize }, options);
-          return tokenizerService.prependEncoder(codec, toEncode, options);
-        };
-        case "trimBottom": return (codec, toEncode, options) => {
-          options = Object.assign({}, { bufferSize }, options);
-          return tokenizerService.appendEncoder(codec, toEncode, options);
-        };
-        default: return undefined;
-      }
-    }));
+    const encode: TextSequencer["encode"]
+      = assertExists("Expected an affirmative trim direction.", dew(() => {
+        switch (trimDirection) {
+          case "trimTop": return (codec, toEncode, options) => {
+            options = Object.assign({}, { bufferSize }, options);
+            return tokenizerService.prependEncoder(codec, toEncode, options);
+          };
+          case "trimBottom": return (codec, toEncode, options) => {
+            options = Object.assign({}, { bufferSize }, options);
+            return tokenizerService.appendEncoder(codec, toEncode, options);
+          };
+          default: return undefined;
+        }
+      }));
 
-    const prepare = assertExists("Expected an affirmative trim direction.", dew(() => {
-      switch (trimDirection) {
-        case "trimTop": return (current, last) => {
-          if (!last) return mergeFragments(current.fragments);
-          const diff = current.fragments.length - last.fragments.length;
-          return mergeFragments(current.fragments.slice(0, diff));
-        };
-        case "trimBottom": return (current, last) => {
-          if (!last) return mergeFragments(current.fragments);
-          const diff = current.fragments.length - last.fragments.length;
-          return mergeFragments(current.fragments.slice(diff));
-        };
-        default: return undefined;
-      }
-    }));
+    const prepare: TextSequencer["prepareInnerChunk"]
+      = assertExists("Expected an affirmative trim direction.", dew(() => {
+        switch (trimDirection) {
+          case "trimTop": return (current, last) => {
+            if (!last) return mergeFragments(current.fragments);
+            const diff = current.fragments.length - last.fragments.length;
+            return mergeFragments(current.fragments.slice(0, diff));
+          };
+          case "trimBottom": return (current, last) => {
+            if (!last) return mergeFragments(current.fragments);
+            const diff = current.fragments.length - last.fragments.length;
+            return mergeFragments(current.fragments.slice(-diff));
+          };
+          default: return undefined;
+        }
+      }));
 
     return {
       splitUp: splitterFn,
@@ -175,7 +184,7 @@ export default usModule((require, exports) => {
    * Given a sequence of text fragments and a token count, builds a complete
    * text fragment.
    */
-  const resultFrom = (
+  const tokenResultFrom = (
     fragParts: readonly TextFragment[],
     tokenCount: number
   ): TrimExecResult => {
@@ -186,10 +195,10 @@ export default usModule((require, exports) => {
   };
 
   /** A special execution function just for `noTrim`. */
-  async function execNoTrim(
+  async function execNoTrimTokens(
     prefix: string, content: TextFragment, suffix: string,
     tokenBudget: number, preserveInitial: boolean,
-    maximumTrimType: TrimOptions["maximumTrimType"],
+    maximumTrimType: TokenTrimOptions["maximumTrimType"],
     codec: TokenCodec
   ): Promise<TrimExecResult | undefined> {
     const fragments: TextFragment[] = dew(() => {
@@ -205,29 +214,36 @@ export default usModule((require, exports) => {
     const fullText = [prefix, ...fragments.map(asContent), suffix].join("");
     const tokenCount = (await codec.encode(fullText)).length;
     if (tokenCount > tokenBudget) return undefined;
-    return resultFrom(fragments, tokenCount);
+    return tokenResultFrom(fragments, tokenCount);
   };
 
-  async function execTrim(
+  async function execTrimTokens(
     sequencers: TextSequencer[],
     prefix: string, content: TextFragment, suffix: string,
-    tokenBudget: number, preserveInitial: boolean, codec: TokenCodec,
-    seedResult?: EncodeResult
+    tokenBudget: number,
+    preserveMode: "initial" | "ends" | "none",
+    codec: TokenCodec,
+    seedResult?: Readonly<EncodeResult>
   ): Promise<TrimExecResult | undefined> {
     // If we have no sequencers left, end recursion.
     if (!sequencers.length) return undefined;
     // Split the current sequencer from the rest.
     const [sequencer, ...restSequencers] = sequencers;
 
-    const fragments
-      = preserveInitial ? sequencer.splitUp(content)
-      : journey(sequencer.splitUp(content), hasWords);
+    const fragments = dew(() => {
+      const splitUp = sequencer.splitUp(content);
+      switch (preserveMode) {
+        case "ends": return splitUp;
+        case "initial": return flatten(buffer(splitUp, hasWords, false));
+        default: return journey(splitUp, hasWords);
+      }
+    });
     
     const encoding = sequencer.encode(codec, fragments, {
       prefix, suffix, seedResult
     });
     
-    let lastResult: EncodeResult | undefined = undefined;
+    let lastResult = seedResult;
     for await (const curResult of encoding) {
       if (curResult.tokens.length <= tokenBudget) {
         lastResult = curResult;
@@ -237,10 +253,13 @@ export default usModule((require, exports) => {
       // from the difference in the `fragments` of our last and current
       // results.  However, we do need to account for trim direction.
       const nextChunk = sequencer.prepareInnerChunk(curResult, lastResult);
-      const innerResult = await execTrim(
+      const innerResult = await execTrimTokens(
         restSequencers,
         prefix, nextChunk, suffix,
-        tokenBudget, preserveInitial, codec,
+        tokenBudget,
+        // Use "initial" mode for recursive calls instead of "none".
+        preserveMode === "ends" ? "ends" : "initial",
+        codec,
         lastResult
       );
 
@@ -251,26 +270,38 @@ export default usModule((require, exports) => {
     }
 
     if (!lastResult) return undefined;
-    return resultFrom(lastResult.fragments, lastResult.tokens.length);
+    return tokenResultFrom(lastResult.fragments, lastResult.tokens.length);
   }
 
-  async function trim(
+  /**
+   * Trims the given `content` so it fits within a certain `tokenBudget`.
+   * Provide options to tailor the trimming to your needs.
+   * 
+   * Returns `undefined` if the content could not be trimmed to fit the
+   * desired budget with the given constraints.
+   */
+  async function trimByTokens(
+    /** The content to trim. */
     content: TextOrFragment,
+    /** The token budget. */
     tokenBudget: number,
+    /** The {@link TokenCodec} to use for token counting. */
     codec: TokenCodec,
-    options?: Partial<TrimOptions>
+    /** Trimming options. */
+    options?: Partial<TokenTrimOptions>
   ): Promise<TrimResult | undefined> {
     const { prefix, suffix, preserveEnds, trimDirection, maximumTrimType }
-      = { ...defaultOptions, ...options };
+      = { ...tokenDefaults, ...options };
     const fragment = asFragment(content);
+    tokenBudget = Math.max(0, tokenBudget);
 
     // It's pretty common to hear "one token is around 4 characters" tossed
     // around.  We'll use this to guesstimate how likely we are to bust the
     // budget.  If we're below this threshold, we'll hail-mary on doing a
-    // single, bulk encode as a sanity check.  Otherwise, we'll go the
-    // longer and more thorough route.
+    // single, bulk encode as a sanity check.  Otherwise, we'll immediately
+    // take the longer and more thorough route.
     if (trimDirection === "doNotTrim" || fragment.content.length <= (tokenBudget * 4)) {
-      const noTrimResult = await execNoTrim(
+      const noTrimResult = await execNoTrimTokens(
         prefix, fragment, suffix,
         tokenBudget, preserveEnds, maximumTrimType,
         codec
@@ -290,10 +321,11 @@ export default usModule((require, exports) => {
 
     // Now we get complicated!
     const sequencers = getSequencersFor(trimDirection, maximumTrimType);
-    const complexResult = await execTrim(
+    const complexResult = await execTrimTokens(
       sequencers,
       prefix, fragment, suffix, 
-      tokenBudget, preserveEnds,
+      tokenBudget,
+      preserveEnds ? "ends" : "none",
       codec
     );
 
@@ -307,7 +339,102 @@ export default usModule((require, exports) => {
     return undefined;
   }
 
+  function* execTrimLength(
+    sequencers: TextSequencer[],
+    content: TextFragment,
+    maximumLength: number,
+    preserveMode: "initial" | "ends" | "none",
+    currentLength: number = 0
+  ): Iterable<TextFragment> {
+    // If we have no sequencers left, end recursion.
+    if (!sequencers.length) return;
+    // Split the current sequencer from the rest.
+    const [sequencer, ...restSequencers] = sequencers;
+
+    const fragments = dew(() => {
+      const splitUp = sequencer.splitUp(content);
+      switch (preserveMode) {
+        case "ends": return splitUp;
+        case "initial": return flatten(buffer(splitUp, hasWords, false));
+        default: return journey(splitUp, hasWords);
+      }
+    });
+
+    for (const buffered of buffer(fragments, hasWords)) {
+      const contentLength = buffered.reduce((p, c) => p + c.content.length, 0);
+      const nextLength = currentLength + contentLength;
+
+      if (nextLength <= maximumLength) {
+        currentLength = nextLength;
+        yield* buffered;
+      }
+      else {
+        // `trimTop` always runs in reverse, so flip the buffer.
+        if (sequencer.trimDirection === "trimTop") buffered.reverse();
+
+        yield* execTrimLength(
+          restSequencers,
+          mergeFragments(buffered),
+          maximumLength,
+          // Use "initial" mode for recursive calls instead of "none".
+          preserveMode === "ends" ? "ends" : "initial",
+          currentLength
+        );
+        return;
+      }
+    }
+  }
+
+  /**
+   * Trims the given `content` so it is below a certain `maximumLength`.
+   * Provide options to tailor the trimming to your needs.
+   * 
+   * Returns `undefined` if the content could not be trimmed to the desired
+   * length with the given constraints.
+   * 
+   * Unlike {@link trimByTokens}, this function does not support the
+   * {@link TokenTrimOptions.prefix prefix} or {@link TokenTrimOptions.suffix suffix}
+   * options.  Just subtract the lengths of your prefix and suffix from
+   * the `maximumLength` instead.
+   */
+  function trimByLength(
+    content: TextOrFragment,
+    maximumLength: number,
+    options?: Partial<CommonTrimOptions>
+  ): TextFragment | undefined {
+    const { preserveEnds, trimDirection, maximumTrimType }
+      = { ...commonDefaults, ...options };
+    const fragment = asFragment(content);
+    maximumLength = Math.max(0, maximumLength);
+
+    // Do the easy things.
+    if (fragment.content.length <= maximumLength) {
+      if (preserveEnds) return fragment;
+
+      // Otherwise, make sure it trims consistently.
+      const splitterFn
+        = maximumTrimType === "newline" ? splitterService.byLine
+        : splitterService.bySentence;
+      const splitUp = journey(splitterFn(fragment), hasWords);
+      return mergeFragments([...splitUp]);
+    }
+
+    if (trimDirection === "doNotTrim") return undefined;
+
+    // Now we can trim.
+    const sequencers = getSequencersFor(trimDirection, maximumTrimType);
+    const trimmedFrags = [...execTrimLength(
+      sequencers, fragment, maximumLength,
+      preserveEnds ? "ends" : "none"
+    )];
+    if (trimmedFrags.length === 0) return undefined;
+    // Comes out in reverse order if we trimmed the top.
+    if (trimDirection === "trimTop") trimmedFrags.reverse();
+    return mergeFragments(trimmedFrags);
+  }
+
   return Object.assign(exports, {
-    trim
+    trimByTokens,
+    trimByLength
   });
 });

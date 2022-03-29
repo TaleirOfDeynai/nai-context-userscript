@@ -330,7 +330,7 @@ export const skipRightUntil = function*<T extends Iterable<any>>(
 ): Iterable<ElementOf<T>> {
   if (isArray(iter)) {
     // Figure out where we're gonna stop.
-    let cutOff = iter.length;
+    let cutOff = iter.length - 1;
     for (; cutOff >= 0; cutOff--)
       if (predicateFn(iter[cutOff])) break;
     // Iterate until we reach the cutoff.
@@ -475,6 +475,29 @@ export const journey = function*<T extends Iterable<any>>(
     }
   }
 }
+
+/**
+ * Buffers items until an item passes the given `predicateFn`, then yields
+ * those items as an array.
+ * 
+ * If `finalize` is set to `false`, the final buffer will not be yielded if
+ * the last item failed to pass the predicate.
+ */
+export const buffer = function*<T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>,
+  finalize = true
+): Iterable<ElementOf<T>[]> {
+  let buffer: ElementOf<T>[] = [];
+  for (const item of iter) {
+    buffer.push(item);
+    if (!predicateFn(item)) continue;
+    yield buffer;
+    buffer = [];
+  }
+  if (!finalize || !buffer.length) return;
+  yield buffer;
+};
 
 /**
  * Calls the given function on each element of `iterable` and yields the
