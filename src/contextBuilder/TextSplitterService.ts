@@ -74,7 +74,16 @@ export default usModule((require, exports) => {
   const asContent = (inputText: TextOrFragment): string =>
     isString(inputText) ? inputText : inputText.content;
   
-  /** Combines many sequential fragments into a single fragment. */
+  /**
+   * Combines many sequential fragments into a single fragment.
+   * 
+   * This function performs no checks to validate the fragments are
+   * actually sequential; it will join the fragments in the order given.
+   * 
+   * If they are not sequential, only the offset of the initial fragment
+   * is preserved and any information about gaps that existed in `fragments`
+   * will be lost.
+   */
   const mergeFragments = (fragments: Iterable<TextFragment>): TextFragment => {
     const parts = isArray(fragments) ? fragments : [...fragments];
     assert("Expected at least one text fragment.", parts.length > 0);
@@ -82,7 +91,6 @@ export default usModule((require, exports) => {
     const [{ offset }] = parts;
     return { content, offset };
   };
-
   
   /**
    * Breaks text up into fragments containing one of:
