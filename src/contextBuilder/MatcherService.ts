@@ -1,9 +1,9 @@
 import { map, share } from "rxjs/operators";
-import { dew } from "../utils/dew";
-import { usModule } from "../utils/usModule";
-import { assertExists } from "../utils/assert";
-import { createLogger } from "../utils/logging";
-import LoreEntryHelpers from "../naiModules/LoreEntryHelpers";
+import { dew } from "@utils/dew";
+import { usModule } from "@utils/usModule";
+import { assertExists } from "@utils/assert";
+import { createLogger } from "@utils/logging";
+import LoreEntryHelpers from "@nai/LoreEntryHelpers";
 import { onEndContext } from "./rx/events";
 
 export interface MatcherFn {

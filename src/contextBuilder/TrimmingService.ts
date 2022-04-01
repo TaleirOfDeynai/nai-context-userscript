@@ -1,10 +1,10 @@
-import { dew } from "../utils/dew";
-import { usModule } from "../utils/usModule";
-import { assert } from "../utils/assert";
-import { chain, journey, buffer, flatten, flatMap } from "../utils/iterables";
+import { dew } from "@utils/dew";
+import { usModule } from "@utils/usModule";
+import { assert } from "@utils/assert";
+import { chain, journey, buffer, flatten, flatMap } from "@utils/iterables";
 import TextSplitterService from "./TextSplitterService";
 import TrimmingProviders from "./TrimmingProviders";
-import type { ContextConfig } from "../naiModules/Lorebook";
+import type { ContextConfig } from "@nai/Lorebook";
 import type { TokenCodec, EncodeResult } from "./TokenizerService";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";

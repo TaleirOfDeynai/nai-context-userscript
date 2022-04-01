@@ -1,11 +1,11 @@
-import { dew } from "../utils/dew";
-import { usModule } from "../utils/usModule";
-import { isFunction, isObject } from "../utils/is";
-import { chain, buffer } from "../utils/iterables";
-import TokenizerCodec from "../naiModules/TokenizerCodec";
+import { dew } from "@utils/dew";
+import { usModule } from "@utils/usModule";
+import { isFunction, isObject } from "@utils/is";
+import { chain, buffer } from "@utils/iterables";
+import TokenizerCodec from "@nai/TokenizerCodec";
 import TextSplitterService from "./TextSplitterService";
-import type { TokenCodec as AsyncTokenCodec } from "../naiModules/TokenizerCodec";
-import type { TokenizerTypes } from "../naiModules/TokenizerHelpers";
+import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
+import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextFragment } from "./TextSplitterService";
 
 export interface SyncTokenCodec {
@@ -247,8 +247,8 @@ export default usModule((require, exports) => {
     };
 
     return {
-      encode: (text) => tokenizerCodec.GlobalEncoder.encode(text, tokenizerType),
-      decode: (tokens) => tokenizerCodec.GlobalEncoder.decode(tokens, tokenizerType)
+      encode: (text) => new tokenizerCodec.GlobalEncoder().encode(text, tokenizerType),
+      decode: (tokens) => new tokenizerCodec.GlobalEncoder().decode(tokens, tokenizerType)
     };
   }
 

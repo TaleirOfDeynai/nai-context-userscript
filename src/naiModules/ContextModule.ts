@@ -18,13 +18,15 @@ export namespace Virtual {
   }
 }
 
+export type ContextContent = Virtual.ContextContent;
+
 export interface IContextModule {
   "SI": typeof Virtual.ContextContent;
   "vU": TrimTypes
 };
 
 class ContextModule extends ModuleDef<IContextModule> {
-  moduleId = 76652;
+  moduleId = 72969;
   expectedExports = 9;
   mapping = {
     "SI": ["ContextContent", "function"],

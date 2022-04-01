@@ -1,30 +1,38 @@
+To easily locate the context builder, search the source for:
+  `orderByKeyLocations`
+
+That will drop you right in there.
+
 ```
 a: unknown;
-c: unknown;
+c: typeof UUID;
 u: typeof AppConstants;
 f: typeof EventModule;
 l: unknown;
-A: unknown;
-h: typeof TokenizerHelpers;
+h: unknown;
+A: typeof TokenizerHelpers;
 d: typeof TokenizerCodec;
-p: typeof ContextModule;
-g: typeof EphemeralHelpers;
-y: typeof LoreEntryHelpers;
+p: unknown;
+g: typeof ContextModule;
+y: typeof EphemeralHelpers;
+m: typeof LoreEntryHelpers;
 ```
 
 ```
-40204
+// typeof ContextBuilder
+66642
 
-a = n(86050),
+a = n(85746),
 s = n.n(a),
 c = n(5185),
-u = n(63139),
-f = n(69500),
-l = n(31393),
-A = n(90260),
-h = n(49306),
-d = n(73286),
-p = n(76652),
-g = n(11602),
-y = n(25684)
+u = n(93039),
+f = n(21595),
+l = n(34913),
+h = n(93916),
+A = n(31259),
+d = n(38808),
+p = n(41309),
+g = n(72969),
+y = n(14869),
+m = n(17914)
 ```

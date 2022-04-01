@@ -13,7 +13,11 @@
             "./types",
             "./node_modules/@types",
             "./typings.d.ts"
-        ]
+        ],
+        "paths": {
+            "@utils/*": ["./src/utils/*"],
+            "@nai/*": ["./src/naiModules/*"]
+        }
     },
     "exclude": [
         "node_modules"

@@ -1,5 +1,5 @@
 import { Subject } from "rxjs";
-import type { ContextRecorder } from "../../naiModules/ContextBuilder";
+import type { ContextRecorder } from "@nai/ContextBuilder";
 
 /** A {@link Subject} that signals the start of context construction. */
 export const onStartContext = new Subject<ContextRecorder>();

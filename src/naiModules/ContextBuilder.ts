@@ -4,6 +4,7 @@ import type * as MatchResults from "./MatchResults";
 import type * as EventModule from "./EventModule";
 import type { TokenizerTypes } from "./TokenizerHelpers";
 import type { TokenCodec } from "./TokenizerCodec";
+import type { AnyValueOf } from "@utils/utility-types";
 
 /** A generic interface for anything that can be provide content to the context. */
 export interface ContextField {
@@ -11,26 +12,17 @@ export interface ContextField {
   contextConfig: Lorebook.ContextConfig;
 }
 
-/** Interface for a private class of this module. */
-export interface IContextStatus<T extends ContextField = ContextField> {
-  included: boolean;
-  identifier: string;
-  uniqueId: unknown;
-  state: unknown;
-  reason: ReportReasons[keyof ReportReasons];
-  triggeringKey: string;
-  keyIndex: number;
-  includedText: string;
-  calculatedTokens: string;
-  actualReservedTokens: string;
-  keyRelative: boolean;
-  trimMethod: unknown;
-  type: string;
-  contextField: T;
-  settings: T;
+export interface TrimStates {
+  Included: "included";
+  NotIncluded: "not included";
+  PartiallyIncluded: "partially included";
+}
 
-  /** Assigned by external mutation as an own-property. */
-  subContext?: Virtual.ContextRecorder;
+export interface TrimMethods {
+  NoTrim: "no trim";
+  Newline: "newline";
+  Sentence: "sentence";
+  Token: "token";
 }
 
 export interface ReportReasons {
@@ -71,21 +63,42 @@ export namespace Virtual {
     tokenCodec?: TokenCodec
   ): Promise<ContextRecorder>;
 
+  export declare class ContextStatus<T extends ContextField = ContextField> {
+    included: boolean;
+    identifier: string;
+    uniqueId: string;
+    state: AnyValueOf<TrimStates>;
+    reason: AnyValueOf<ReportReasons>;
+    triggeringKey: string;
+    keyIndex: number;
+    includedText: string;
+    calculatedTokens: number;
+    actualReservedTokens: number;
+    keyRelative: boolean;
+    trimMethod: AnyValueOf<TrimMethods>;
+    type: string;
+    contextField: T;
+    settings: T;
+  
+    /** Assigned by external mutation as an own-property. */
+    subContext?: ContextRecorder;
+  }
+
   export declare class ContextRecorder {
     maxTokens: number;
     preContextText: string;
     output: string;
     tokens: unknown[];
-    contextStatuses: IContextStatus<ContextField>[];
+    contextStatuses: ContextStatus<ContextField>[];
     spacesTrimed: number;
     structuredOutput: unknown[];
     stageReports: unknown[];
-    keyRejections: IContextStatus<ContextField>[];
-    disabled: IContextStatus<ContextField>[];
+    keyRejections: ContextStatus<ContextField>[];
+    disabled: ContextStatus<ContextField>[];
     orderZeroPoint: number;
     biases: Array<{
       groups: Lorebook.PhraseBiasConfig[],
-      identifier: IContextStatus<any>["identifier"]
+      identifier: ContextStatus<any>["identifier"]
     }>;
     allStoryIncluded: boolean;
     tokenizerType: TokenizerTypes;
@@ -98,16 +111,18 @@ export interface IContextBuilder {
   "AB": ReportReasons;
   "Ie": typeof Virtual.ContextRecorder;
   "v$": unknown;
+  "NV": typeof Virtual.ContextStatus;
   "rJ": typeof Virtual.buildContext;
   "eA": typeof Virtual.checkLorebook;
 }
 
 class ContextBuilder extends ModuleDef<IContextBuilder> {
-  moduleId = 40204;
-  expectedExports = 5;
+  moduleId = 66642;
+  expectedExports = 6;
   mapping = {
     "AB": ["REASONS", "object"],
     "Ie": ["ContextRecorder", "function"],
+    "NV": ["ContextStatus", "function"],
     "rJ": ["buildContext", "function"],
     "eA": ["checkLorebook", "function"]
   } as const;

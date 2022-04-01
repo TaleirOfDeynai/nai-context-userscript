@@ -1,5 +1,6 @@
 import { isString, isIterable, isArray, TypePredicate } from "./is";
-import { invertPredicate, PredicateFn } from "./functions";
+import type { PredicateFn } from "./functions";
+import type { AnyValueOf } from "./utility-types";
 
 /** The primitive data-types. */
 type Primitives = number | string | boolean | Function | {} | null | undefined;
@@ -118,7 +119,7 @@ export const fromPairs = <KVP extends [string | number, any]>(
  */
 export const toPairs = function*<TObj extends Record<string, any>>(
   obj: TObj | null | undefined
-): Iterable<[keyof TObj, TObj[keyof TObj]]> {
+): Iterable<[keyof TObj, AnyValueOf<TObj>]> {
   if (obj == null) return;
   for(const key of Object.keys(obj)) {
     // @ts-ignore - `Object.keys` is too dumb.

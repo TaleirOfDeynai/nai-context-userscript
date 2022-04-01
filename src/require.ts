@@ -67,7 +67,7 @@ export function makeWrappedRequire(webpackRequire: Webpack.WebpackRequireFn): Wr
       ].join(" "));
     }
 
-    const passthruKeys = new Set(Object.keys(theModule));
+    const passthruKeys = new Set(Object.getOwnPropertyNames(theModule));
 
     if (passthruKeys.size !== expectedExports) {
       throw new Error([

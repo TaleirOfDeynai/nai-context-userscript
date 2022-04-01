@@ -14,8 +14,8 @@ interface ReplaceWrapperFn {
 export const replaceWrapper: ReplaceWrapperFn =
   (replaceMap: Record<string, ReplacerFn<any>>) =>
   (exports: any, module: Webpack.ModuleInstance, require: WrappedRequireFn): any => {
-    const replacedKeys = new Set(Object.keys(replaceMap));
-    const passthruKeys = new Set(Object.keys(exports));
+    const replacedKeys = new Set(Object.getOwnPropertyNames(replaceMap));
+    const passthruKeys = new Set(Object.getOwnPropertyNames(exports));
     const wrappedModule = {};
 
     for (const k of replacedKeys) {

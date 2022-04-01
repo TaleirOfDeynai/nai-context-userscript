@@ -3,6 +3,7 @@ import type * as Lorebook from "./Lorebook";
 import type * as ContextModule from "./ContextModule";
 import type * as EphemeralHelpers from "./EphemeralHelpers";
 import type { StoryController } from "./Story";
+import type { AnyValueOf } from "@utils/utility-types";
 
 export interface EventTypes {
   unknown: "unknown";
@@ -87,7 +88,7 @@ export interface StoryMetadata {
 type AnyEvent
     = Virtual.StoryInputEvent
     | Virtual.PreContextEvent
-    | { eventType: EventTypes[keyof EventTypes] };
+    | { eventType: AnyValueOf<EventTypes> };
 
 export interface HandledEvent<T extends AnyEvent> {
   currentContext: string;
@@ -147,7 +148,7 @@ export interface IEventModule {
 }
 
 class EventModule extends ModuleDef<IEventModule> {
-  moduleId = 69500;
+  moduleId = 21595;
   expectedExports = 4;
   mapping = {
     "bi": ["StoryState", "function"],

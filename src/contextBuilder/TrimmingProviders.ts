@@ -1,13 +1,13 @@
-import { dew } from "../utils/dew";
-import { usModule } from "../utils/usModule";
-import { isString } from "../utils/is";
-import { iterReverse } from "../utils/iterables";
+import { dew } from "@utils/dew";
+import { usModule } from "@utils/usModule";
+import { isString } from "@utils/is";
+import { iterReverse } from "@utils/iterables";
 import TextSplitterService from "./TextSplitterService";
 import TokenizerService from "./TokenizerService";
-import type { ContextConfig } from "../naiModules/Lorebook";
+import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { StreamEncodeFn, EncodeResult } from "./TokenizerService";
-import { assert, assertExists } from "../utils/assert";
+import { assert, assertExists } from "@utils/assert";
 
 export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];

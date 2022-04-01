@@ -1,8 +1,8 @@
-import { usModule } from "../utils/usModule";
-import { assert, assertExists } from "../utils/assert";
-import { iterReverse, countBy } from "../utils/iterables";
-import { isArray, isString } from "../utils/is";
-import AppConstants from "../naiModules/AppConstants";
+import { usModule } from "@utils/usModule";
+import { assert, assertExists } from "@utils/assert";
+import { iterReverse, countBy } from "@utils/iterables";
+import { isArray, isString } from "@utils/is";
+import AppConstants from "@nai/AppConstants";
 
 /** Represents a fragment of some larger body of text. */
 export interface TextFragment {

@@ -1,5 +1,5 @@
-import { dew } from "./utils/dew";
-import { enableLogging } from "./utils/logging";
+import { dew } from "@utils/dew";
+import { enableLogging } from "@utils/logging";
 import { makeWrappedRequire, notifyToConsole } from "./require";
 import injectors, { Injector } from "./injectors";
 

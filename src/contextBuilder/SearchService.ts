@@ -11,20 +11,21 @@
  * been provided for matching.
  */
 
-import { dew } from "../utils/dew";
-import { usModule } from "../utils/usModule";
-import { isIterable, isString } from "../utils/is";
-import * as Iterables from "../utils/iterables";
-import { createLogger } from "../utils/logging";
+import { dew } from "@utils/dew";
+import { usModule } from "@utils/usModule";
+import { isIterable, isString } from "@utils/is";
+import * as Iterables from "@utils/iterables";
+import { createLogger } from "@utils/logging";
 import MatcherService from "./MatcherService";
-import type { AnyResult as NaiMatchResult } from "../naiModules/MatchResults";
-import type { LoreEntry } from "../naiModules/Lorebook";
+import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
+import type { LoreEntry } from "@nai/Lorebook";
 import type { MatchResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
 
-export type Matchable = Iterable<string> | { keys: string[] };
+export type WithKeys = { keys: string[] };
+export type Matchable = Iterable<string> | WithKeys;
 export type MatcherResults = Map<string, readonly MatchResult[]>;
-export type EntryResults = Map<LoreEntry, MatcherResults>;
+export type EntryResults<T extends WithKeys> = Map<T, MatcherResults>;
 
 const logger = createLogger("SearchService");
 
@@ -92,15 +93,19 @@ export default usModule((require, exports) => {
       if (cached) {
         // Explicitly mark the key as used.
         matcherService.markKeyAsUsed(key);
-        searchResults.set(key, cached);
+        // Only add the result if it has at least one match.
+        if (cached.length) searchResults.set(key, cached);
         continue;
       }
 
       const matcher = matcherService.getMatcherFor(key);
       // These results are shared; make sure the array is immutable.
       const results = Object.freeze(matcher(searchText));
+
+      // We do want to store empty results in the cache, but we will omit
+      // them from the search result.
+      if (results.length) searchResults.set(key, results);
       cachedResults.set(key, results);
-      searchResults.set(key, results);
     }
 
     if (!textsSearched.has(searchText)) {
@@ -142,19 +147,23 @@ export default usModule((require, exports) => {
     return findMatches(searchText, keys);
   }
 
-  function searchForLore(searchText: TextOrFragment, entries: LoreEntry[]): EntryResults {
+  function searchForLore<T extends WithKeys>(
+    searchText: TextOrFragment,
+    entries: T[]
+  ): EntryResults<T> {
     // We just need to grab all the keys from the entries and pull their
     // collective matches.  We'll only run each key once.
-    const keySet = new Set(entries.flatMap((e) => e.keys));
+    const keySet = new Set(Iterables.flatMap(entries, getKeys));
     const keyResults = search(searchText, keySet);
     
     // Now, we can just grab the results for each entry's keys and assemble
     // the results into a final map.
-    const entryResults: EntryResults = new Map();
+    const entryResults: EntryResults<T> = new Map();
     for (const entry of entries) {
       const entryResult: MatcherResults = new Map();
       for (const key of entry.keys) {
-        const result = keyResults.get(key) as readonly MatchResult[];
+        const result = keyResults.get(key);
+        if (!result?.length) continue;
         entryResult.set(key, result);
       }
 
