@@ -92,7 +92,10 @@ export default usModule((require, exports) => {
           }
         }
 
-        return directActivations.pipe(rxop.expand(doCascade));
+        // Set the concurrency to 1, so that each cascade clears out
+        // completely and before the next begins; this way we get an
+        // accurate `order` value.
+        return directActivations.pipe(rxop.expand(doCascade, 1));
       }),
       // The expansion will re-emit `directActivations`, so make sure
       // we limit to only entries that have an actual cascade activation.
