@@ -84,7 +84,7 @@ export default usModule((require, exports) => {
       // Meanwhile, we can still process these.
       process.source.lore(storyContent),
       process.source.ephemeral(storyContent)
-    );
+    ).pipe(logger.measureStream("allSources"));
 
     // Figure out which are enabled or disabled.
     // We'll deal with the disabled ones later.
@@ -123,6 +123,7 @@ export default usModule((require, exports) => {
       ),
       // And again, Only emit one activation per source.
       rxop.distinct(),
+      logger.measureStream("inFlightActivations").markItems((i) => i.identifier),
       rxop.shareReplay()
     );
 
@@ -133,6 +134,7 @@ export default usModule((require, exports) => {
     const inFlightRejections = enabledSources.pipe(
       rxop.delayWhen(() => whenActivated),
       rxop.filter((source) => source.activations.size === 0),
+      logger.measureStream("inFlightRejections"),
       rxop.shareReplay()
     );
 

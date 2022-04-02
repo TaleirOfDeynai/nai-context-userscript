@@ -1,3 +1,5 @@
+export { noop } from "rxjs";
+
 export type PredicateFn<T> = (value: T) => boolean;
 
 /** The identity function. */
