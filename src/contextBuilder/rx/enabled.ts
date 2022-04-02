@@ -4,17 +4,11 @@ import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 
 import type { ContextField } from "@nai/ContextBuilder";
-import type { IContextSource } from "../ContextSource";
+import type { ContextSource } from "../ContextSource";
 import type { Observable as Obs } from "rxjs";
 
-interface InputField extends ContextField {
-  enabled?: boolean;
-}
-
-type InputSource = IContextSource<InputField>;
-
-export default usModule((require, exports) => {
-  const isEnabled = (source: IContextSource<InputField>): boolean => {
+export default usModule((_require, exports) => {
+  const isEnabled = <T extends ContextSource<any>>(source: T): boolean => {
     const { entry } = source;
     // If it isn't an object, it's default disabled.
     if (!isObject(entry)) return false;
@@ -25,7 +19,7 @@ export default usModule((require, exports) => {
     return entry.enabled;
   };
 
-  const separate = (sources: Obs<InputSource>) => {
+  const separate = <T extends ContextSource>(sources: Obs<T>) => {
     const [enabled, disabled] = partition(sources, isEnabled);
     return {
       enabledSources: enabled.pipe(share()),

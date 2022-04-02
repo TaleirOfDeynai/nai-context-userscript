@@ -7,11 +7,7 @@ import ContextBuilder from "@nai/ContextBuilder";
 import type { Observable } from "rxjs";
 import type { AnyValueOf } from "@utils/utility-types";
 import type { ReportReasons, ContextField } from "@nai/ContextBuilder";
-import type { IContextSource, SourceType } from "../../ContextSource";
-import type { LoreEntry } from "@nai/Lorebook";
-
-type MaybeForce = Partial<Pick<LoreEntry, "forceActivation">>;
-type InputSource = IContextSource<ContextField & MaybeForce>;
+import type { ContextSource, SourceType } from "../../ContextSource";
 
 export type ForcedActivation = AnyValueOf<ReportReasons>;
 
@@ -30,13 +26,13 @@ export default usModule((require, exports) => {
     return entry.forceActivation;
   };
 
-  const checkSource = (source: InputSource) => {
+  const checkSource = (source: ContextSource<any>) => {
     if (forcedTypes.has(source.type)) return REASONS.Default;
     if (isForceActivated(source.entry)) return REASONS.ActivationForced;
     return undefined;
   };
 
-  async function* impl_checkActivation(sources: Observable<InputSource>) {
+  async function* impl_checkActivation(sources: Observable<ContextSource>) {
     for await (const source of eachValueFrom(sources)) {
       const reason = checkSource(source);
       if (!reason) continue;
@@ -46,7 +42,7 @@ export default usModule((require, exports) => {
     }
   };
 
-  const checkActivation = (sources: Observable<InputSource>) =>
+  const checkActivation = (sources: Observable<ContextSource>) =>
     rx.from(impl_checkActivation(sources));
 
   return Object.assign(exports, { checkActivation });

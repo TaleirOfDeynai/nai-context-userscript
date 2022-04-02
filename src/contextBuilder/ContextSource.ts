@@ -26,11 +26,14 @@ export type SourceType
   | "lore" | "ephemeral"
   | "unknown";
 
-export interface IContextSource<T extends CB.ContextField = CB.ContextField> {
+export interface ContextSource<
+  TField extends CB.ContextField = CB.ContextField,
+  TType extends SourceType = SourceType
+> {
   uniqueId: string;
   identifier: string;
-  type: SourceType;
-  entry: T;
+  type: TType;
+  entry: TField;
   activations: ActivationMap;
 }
 
@@ -62,11 +65,11 @@ export default usModule((require, exports) => {
     }    
   };
 
-  const create = <T extends CB.ContextField>(
-    entry: T,
-    type: SourceType,
+  const create = <TField extends CB.ContextField, TType extends SourceType>(
+    entry: TField,
+    type: TType,
     identifier = toIdentifier(entry, type)
-  ): IContextSource<T> => {
+  ): ContextSource<TField, TType> => {
     return {
       uniqueId: uuid.v4(),
       identifier, type, entry,

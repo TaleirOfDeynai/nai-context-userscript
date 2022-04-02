@@ -6,16 +6,15 @@ import SearchService from "../../SearchService";
 
 import type { Observable as Obs } from "rxjs";
 import type { ContextField } from "@nai/ContextBuilder";
-import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherResults } from "../../SearchService";
-import type { IContextSource } from "../../ContextSource";
+import type { ContextSource } from "../../ContextSource";
 import type { TextOrFragment } from "../../TextSplitterService";
 
-type WithKeys = Pick<LoreEntry, "keys">;
-type MaybeKeyed = ContextField & Partial<WithKeys>;
-type DefinitelyKeyed = ContextField & WithKeys;
+interface SearchableField extends ContextField {
+  keys: string[];
+}
 
-type InputSource = IContextSource<MaybeKeyed>;
+type SearchableSource = ContextSource<SearchableField>;
 
 export type KeyedActivation = MatcherResults;
 
@@ -26,7 +25,8 @@ export type KeyedActivation = MatcherResults;
 export default usModule((require, exports) => {
   const { searchForLore } = SearchService(require);
 
-  const isKeyed = (entry: MaybeKeyed): entry is DefinitelyKeyed => {
+  const isKeyed = (source: ContextSource<any>): source is SearchableSource => {
+    const { entry } = source;
     if (!isObject(entry)) return false;
     if (!("keys" in entry)) return false;
     if (!isArray(entry.keys)) return false;
@@ -35,12 +35,12 @@ export default usModule((require, exports) => {
 
   async function* impl_checkActivation(
     storyText: TextOrFragment,
-    sources: Obs<InputSource>)
-  {
+    sources: Obs<ContextSource>
+  ): AsyncIterable<ContextSource> {
     // First, grab all sources with entries that can do keyword searching.
-    const keyedSources = new Map<WithKeys, InputSource>();
+    const keyedSources = new Map<SearchableSource["entry"], SearchableSource>();
     for await (const source of eachValueFrom(sources)) {
-      if (!isKeyed(source.entry)) continue;
+      if (!isKeyed(source)) continue;
       keyedSources.set(source.entry, source);
     }
 
@@ -48,7 +48,7 @@ export default usModule((require, exports) => {
     // yield any that have activated.
     const searchResults = searchForLore(storyText, [...keyedSources.keys()]);
     for (const [entry, results] of searchResults) {
-      const source = keyedSources.get(entry) as InputSource;
+      const source = keyedSources.get(entry) as SearchableSource;
       if (!results.size) continue;
 
       source.activations.set("keyed", results);
@@ -56,7 +56,7 @@ export default usModule((require, exports) => {
     }
   };
 
-  const checkActivation = (storyText: TextOrFragment) => (sources: Obs<InputSource>) =>
+  const checkActivation = (storyText: TextOrFragment) => (sources: Obs<ContextSource>) =>
     rx.from(impl_checkActivation(storyText, sources));
 
   return Object.assign(exports, { checkActivation });

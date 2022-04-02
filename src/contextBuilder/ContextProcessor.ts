@@ -111,7 +111,7 @@ export default usModule((require, exports) => {
         const directActivated = rx.merge(
           sharedSrc.pipe(process.activation.forced),
           sharedSrc.pipe(process.activation.keyed(storyText)),
-          sharedSrc.pipe(process.activation.ephemeral)
+          sharedSrc.pipe(process.activation.ephemeral(storyContent))
         );
 
         return directActivated.pipe(
@@ -121,7 +121,7 @@ export default usModule((require, exports) => {
           // Join in the cascade.
           rxop.connect((sharedAct) => rx.merge(
             sharedAct,
-            sharedSrc.pipe(process.activation.cascade(sharedAct))
+            sharedAct.pipe(process.activation.cascade(sharedSrc))
           )),
           // And again, the cascade can emit activations more than once too.
           rxop.distinct()

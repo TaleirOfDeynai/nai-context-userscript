@@ -6,15 +6,14 @@ import SearchService, { MatcherResults } from "../../SearchService";
 
 import type { Observable as Obs } from "rxjs";
 import type { ContextField } from "@nai/ContextBuilder";
-import type { IContextSource } from "../../ContextSource";
+import type { ContextSource } from "../../ContextSource";
 
-interface InputField extends ContextField {
-  keys?: string[];
-  nonStoryActivatable?: boolean;
+interface CascadingField extends ContextField {
+  keys: string[];
+  nonStoryActivatable: boolean;
 }
 
-type InputSource = IContextSource<InputField>;
-type ActivationSource = IContextSource<Required<InputField>>;
+type CascadingSource = ContextSource<CascadingField>;
 
 export interface CascadeActivation {
   /**
@@ -42,7 +41,7 @@ export default usModule((require, exports) => {
   const { REASONS } = require(ContextBuilder);
   const { searchForLore } = SearchService(require);
 
-  const isCascading = (source: InputSource): source is ActivationSource => {
+  const isCascading = (source: ContextSource<any>): source is CascadingSource => {
     const { entry } = source;
     if (!isObject(entry)) return false;
     if (!("nonStoryActivatable" in entry)) return false;
@@ -52,8 +51,8 @@ export default usModule((require, exports) => {
     return entry.keys.length > 0;
   };
 
-  const checkActivation = (directActivations: Obs<IContextSource>) =>
-    (sources: Obs<InputSource>): Obs<IContextSource> => sources.pipe(
+  const checkActivation = (sources: Obs<ContextSource>) =>
+    (directActivations: Obs<ContextSource>): Obs<ContextSource> => sources.pipe(
       rxop.filter(isCascading),
       rxop.toArray(),
       // Starting from `directActivations`, we check for cascading activations.
@@ -63,7 +62,7 @@ export default usModule((require, exports) => {
       rxop.mergeMap((cascadingSources) => {
         const entryKvps = new Map(cascadingSources.map((s) => [s.entry, s]));
 
-        function* doCascade(activated: InputSource) {
+        function* doCascade(activated: ContextSource) {
           // Do not match on the story again.
           if (activated.type === "story") return;
 
@@ -79,7 +78,7 @@ export default usModule((require, exports) => {
           for (const [entry, results] of searchResults) {
             if (!results.size) continue;
 
-            const source = entryToSource.get(entry) as ActivationSource;
+            const source = entryToSource.get(entry) as CascadingSource;
             const firstActivation = source.activations.size === 0;
 
             // Pull the activation data for an upsert.
@@ -102,7 +101,5 @@ export default usModule((require, exports) => {
       rxop.filter((s) => s.activations.has("cascade"))
     );
 
-  return Object.assign(exports, {
-    checkActivation
-  });
+  return Object.assign(exports, { checkActivation });
 });
