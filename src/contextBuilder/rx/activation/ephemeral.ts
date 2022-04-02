@@ -22,7 +22,8 @@ export default usModule((require, exports) => {
   const checkActivation = (storyContent: StoryContent) =>
     (sources: Obs<ContextSource>): Obs<ContextSource> => sources.pipe(
       rxop.filter(isEphemeral),
-      rxop.filter(({ entry }) => helpers.checkActivation(entry, storyContent.story.step))
+      rxop.filter(({ entry }) => helpers.checkActivation(entry, storyContent.story.step)),
+      rxop.tap((source) => source.activations.set("ephemeral", true))
     );
 
   return Object.assign(exports, { checkActivation });
