@@ -1,8 +1,8 @@
 import * as rx from "rxjs";
-import * as rxop from "rxjs/operators";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
+import * as rxop from "@utils/rxop";
 import ContextBuilder from "@nai/ContextBuilder";
 import EventModule, { StoryContent, StoryState} from "@nai/EventModule";
 import AppConstants from "@nai/AppConstants";

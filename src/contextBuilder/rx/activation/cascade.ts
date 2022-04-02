@@ -1,6 +1,6 @@
-import * as rxop from "rxjs/operators";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
+import * as rxop from "@utils/rxop";
 import ContextBuilder from "@nai/ContextBuilder";
 import SearchService, { MatcherResults } from "../../SearchService";
 

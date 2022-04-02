@@ -1,5 +1,5 @@
-import * as rxop from "rxjs/operators";
 import { usModule } from "@utils/usModule";
+import * as rxop from "@utils/rxop";
 import EphemeralHelpers from "@nai/EphemeralHelpers";
 
 import type { Observable as Obs } from "rxjs";

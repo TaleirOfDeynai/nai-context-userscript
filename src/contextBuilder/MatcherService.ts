@@ -1,8 +1,8 @@
-import { map, share } from "rxjs/operators";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assertExists } from "@utils/assert";
 import { createLogger } from "@utils/logging";
+import * as rxop from "@utils/rxop";
 import LoreEntryHelpers from "@nai/LoreEntryHelpers";
 import { onEndContext } from "./rx/events";
 
@@ -38,12 +38,12 @@ export default usModule((require, exports) => {
 
   /** Event for when the used keys are being cleared. */
   const onMaintainMatchers = onEndContext.pipe(
-    map(() => {
+    rxop.map(() => {
       const keysUsed = usedKeysCache;
       usedKeysCache = new Set();
       return keysUsed;
     }),
-    share()
+    rxop.share()
   );
 
   /** Discards any matcher functions that were not used since last cycle. */
