@@ -97,7 +97,7 @@ export default usModule((require, exports) => {
       // Still cheating to get as much done while waiting on the story.
       inFlightStory.pipe(
         rxop.map(process.activation.keyed),
-        rxop.mergeMap((keyedProcessor) => keyedProcessor(enabledSources))
+        rxop.mergeMap((keyedActivator) => keyedActivator(enabledSources))
       )
     );
 
@@ -106,16 +106,33 @@ export default usModule((require, exports) => {
     // `activations` should be assumed to be incomplete until this entire
     // observable completes.
     const inFlightActivations = directActivated.pipe(
-      // They may directly activate more than once.  We're gathering as
-      // much data on activation as possible.
-      rxop.distinct(),
       // Join in the cascade.
-      rxop.connect((sharedAct) => rx.merge(
-        sharedAct,
-        sharedAct.pipe(process.activation.cascade(enabledSources))
-      )),
-      // And again, the cascade can emit activations more than once too.
+      rxop.connect(
+        (sharedAct) => rx.merge(
+          sharedAct,
+          sharedAct.pipe(
+            // Sources may directly activate more than once.  We're gathering as
+            // much data on activation as possible, but the cascade wants
+            // only one direct activation each.
+            rxop.distinct(),
+            process.activation.cascade(enabledSources)
+          )
+        ),
+        // Use the replay subject, as the cascade can end up a bit delayed.
+        { connector: () => new rx.ReplaySubject() }
+      ),
+      // And again, Only emit one activation per source.
       rxop.distinct(),
+      rxop.shareReplay()
+    );
+
+    // We can only get rejections after all activations have completed,
+    // so we'll have to wait and then check the final activation data
+    // to see who has no activations at all.
+    const whenActivated = inFlightActivations.pipe(rxop.whenCompleted, rxop.share());
+    const inFlightRejections = enabledSources.pipe(
+      rxop.delayWhen(() => whenActivated),
+      rxop.filter((source) => source.activations.size === 0),
       rxop.shareReplay()
     );
 
@@ -129,13 +146,9 @@ export default usModule((require, exports) => {
       },
       /** Resolves to a complete {@link Set} of rejected {@link ContextSource}. */
       get rejected(): Promise<Set<ContextSource>> {
-        return rx.firstValueFrom(enabledSources.pipe(
+        return rx.firstValueFrom(inFlightRejections.pipe(
           rxop.toArray(),
-          rxop.map((sources) => new Set(sources)),
-          rxop.mergeMap((rejectedSet) => inFlightActivations.pipe(
-            // Delete the activated entries from the set until only the rejected remain.
-            rxop.reduce((rs, a) => (rs.delete(a as any), rs), rejectedSet)
-          ))
+          rxop.map((sources) => new Set(sources))
         ));
       },
       /**
@@ -149,6 +162,16 @@ export default usModule((require, exports) => {
           rxop.map((sources) => new Set(sources))
         ));
       },
+      /**
+       * An eager {@link rx.Observable Observable} of entries that were disabled
+       * and cannot activate.
+       */
+      disabling: disabledSources as rx.Observable<ContextSource>,
+      /**
+       * An eager {@link rx.Observable Observable} of entries that have failed to
+       * activate.
+       */
+      rejecting: inFlightRejections as rx.Observable<ContextSource>,
       /**
        * An eager {@link rx.Observable Observable} of entries that have activated.
        * Elements of this observable are definitely activated, but may not have
@@ -191,9 +214,9 @@ export default usModule((require, exports) => {
       activations.activated
     ]);
 
-    // for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
-    // for (const s of rejected) logger.info(`Rejected: ${s.identifier}`, s);
-    // for (const s of activated) logger.info(`Activated: ${s.identifier}`, s);
+    for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
+    for (const s of rejected) logger.info(`Rejected: ${s.identifier}`, s);
+    for (const s of activated) logger.info(`Activated: ${s.identifier}`, s);
   }
 
   return Object.assign(exports, {

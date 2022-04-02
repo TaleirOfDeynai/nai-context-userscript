@@ -6,12 +6,13 @@ import SearchService from "../../SearchService";
 
 import type { Observable as Obs } from "rxjs";
 import type { ContextField } from "@nai/ContextBuilder";
+import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherResults } from "../../SearchService";
 import type { ContextSource } from "../../ContextSource";
 import type { TextOrFragment } from "../../TextSplitterService";
 
 interface SearchableField extends ContextField {
-  keys: string[];
+  keys: LoreEntry["keys"];
 }
 
 type SearchableSource = ContextSource<SearchableField>;

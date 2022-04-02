@@ -3,7 +3,6 @@ import { partition, shareReplay } from "rxjs";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 
-import type { ContextField } from "@nai/ContextBuilder";
 import type { ContextSource } from "../ContextSource";
 import type { Observable as Obs } from "rxjs";
 

@@ -1,19 +1,22 @@
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
 import * as rxop from "@utils/rxop";
-import ContextBuilder from "@nai/ContextBuilder";
 import SearchService, { MatcherResults } from "../../SearchService";
 
 import type { Observable as Obs } from "rxjs";
 import type { ContextField } from "@nai/ContextBuilder";
+import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";
+import { createLogger } from "@utils/logging";
 
 interface CascadingField extends ContextField {
-  keys: string[];
-  nonStoryActivatable: boolean;
+  keys: LoreEntry["keys"];
+  nonStoryActivatable: LoreEntry["nonStoryActivatable"];
 }
 
 type CascadingSource = ContextSource<CascadingField>;
+
+const logger = createLogger("activation/cascade");
 
 export interface CascadeActivation {
   /**
@@ -38,7 +41,6 @@ export interface CascadeActivation {
  * Checks each {@link IContextSource} for forced activation conditions.
  */
 export default usModule((require, exports) => {
-  const { REASONS } = require(ContextBuilder);
   const { searchForLore } = SearchService(require);
 
   const isCascading = (source: ContextSource<any>): source is CascadingSource => {
@@ -60,11 +62,14 @@ export default usModule((require, exports) => {
       // operator themselves, which may activate additional entries and so on
       // until we get through an expansion without activating any new entries.
       rxop.mergeMap((cascadingSources) => {
+        logger.info("Sources:", cascadingSources);
         const entryKvps = new Map(cascadingSources.map((s) => [s.entry, s]));
 
         function* doCascade(activated: ContextSource) {
           // Do not match on the story again.
           if (activated.type === "story") return;
+
+          logger.info("Searching activated:", activated);
 
           const entryToSource = new Map(entryKvps);
           // Do not cascade off yourself.
