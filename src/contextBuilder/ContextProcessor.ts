@@ -68,6 +68,77 @@ export default usModule((require, exports) => {
     }
   }
 
+  async function activationPhase(
+    storyContent: StoryContent,
+    storyText: string
+  ) {
+    // Gather our content sources.
+    const allSources = rx.merge(
+      process.source.content(storyContent, storyText),
+      process.source.lore(storyContent),
+      process.source.ephemeral(storyContent)
+    );
+
+    // Figure out which are enabled or disabled.
+    // We'll deal with the disabled ones later.
+    const { enabledSources, disabledSources } = process.separateEnabled(allSources);
+
+    // Stream through the activations.  Be aware that when a source comes
+    // down the pipeline, we only know it activated.  The information in its
+    // `activations` map can only be treated as incomplete until this entire
+    // observable completes.
+    const inFlightActivations = enabledSources.pipe(
+      // Perform direct activations.
+      rxop.connect((sharedSrc) => {
+        const directActivated = rx.merge(
+          sharedSrc.pipe(process.activation.forced),
+          sharedSrc.pipe(process.activation.keyed(storyText)),
+          sharedSrc.pipe(process.activation.ephemeral(storyContent))
+        );
+
+        return directActivated.pipe(
+          // They may directly activate more than once.  We're gathering as
+          // much data on activation as possible.
+          rxop.distinct(),
+          // Join in the cascade.
+          rxop.connect((sharedAct) => rx.merge(
+            sharedAct,
+            sharedAct.pipe(process.activation.cascade(sharedSrc))
+          )),
+          // And again, the cascade can emit activations more than once too.
+          rxop.distinct()
+        );
+      }),
+      rxop.share()
+    );
+
+    // Aggregate everything together.  After this, all activation data is available.
+    const finalDisabled = disabledSources.pipe(
+      rxop.toArray(),
+      rxop.map((sources) => new Set(sources))
+    );
+    const finalActivations = inFlightActivations.pipe(
+      rxop.toArray(),
+      rxop.map((sources) => new Set(sources))
+    );
+    const finalRejections = enabledSources.pipe(
+      rxop.toArray(),
+      rxop.map((sources) => new Set(sources)),
+      rxop.mergeMap((rejectedSet) => inFlightActivations.pipe(
+        // Delete the activated entries from the set until only the rejected remain.
+        rxop.reduce((rs, a) => (rs.delete(a as any), rs), rejectedSet)
+      ))
+    );
+    
+    const [disabled, rejected, activated] = await Promise.all([
+      rx.firstValueFrom(finalDisabled),
+      rx.firstValueFrom(finalRejections),
+      rx.firstValueFrom(finalActivations)
+    ]);
+
+    return { disabled, rejected, activated };
+  }
+
   async function processContext(
     storyContent: StoryContent,
     storyState: StoryState,
@@ -90,51 +161,11 @@ export default usModule((require, exports) => {
       preContextText: storyText
     });
 
-    // Gather our content sources.
-    const allSources = rx.merge(
-      process.source.content(storyContent, storyText),
-      process.source.lore(storyContent),
-      process.source.ephemeral(storyContent)
-    );
+    const activations = await activationPhase(storyContent, storyText);
 
-    // Figure out which are enabled or disabled.
-    // We'll deal with the disabled ones later.
-    const { enabledSources, disabledSources } = process.separateEnabled(allSources);
-
-    // Stream through the activations.  Be aware that when a source comes
-    // down the pipeline, we only know it activated.  The information in its
-    // `activations` map can only be treated as incomplete until this entire
-    // observable completes.
-    const allActivations = enabledSources.pipe(
-      // Perform direct activations.
-      rxop.connect((sharedSrc) => {
-        const directActivated = rx.merge(
-          sharedSrc.pipe(process.activation.forced),
-          sharedSrc.pipe(process.activation.keyed(storyText)),
-          sharedSrc.pipe(process.activation.ephemeral(storyContent))
-        );
-
-        return directActivated.pipe(
-          // They may directly activate more than once.  We're gathering as
-          // much data on activation as possible.
-          rxop.distinct(),
-          // Join in the cascade.
-          rxop.connect((sharedAct) => rx.merge(
-            sharedAct,
-            sharedAct.pipe(process.activation.cascade(sharedSrc))
-          )),
-          // And again, the cascade can emit activations more than once too.
-          rxop.distinct()
-        );
-      }),
-      rxop.shareReplay()
-    );
-
-    const dis = await rx.firstValueFrom(disabledSources.pipe(rxop.toArray()));
-    const act = await rx.firstValueFrom(allActivations.pipe(rxop.toArray()));
-
-    // for (const s of dis) logger.info(`Disabled: ${s.identifier}`, s);
-    // for (const s of act) logger.info(`Activated: ${s.identifier}`, s);
+    for (const s of activations.disabled) logger.info(`Disabled: ${s.identifier}`, s);
+    for (const s of activations.rejected) logger.info(`Rejected: ${s.identifier}`, s);
+    for (const s of activations.activated) logger.info(`Activated: ${s.identifier}`, s);
   }
 
   return Object.assign(exports, {
