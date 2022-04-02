@@ -1,5 +1,5 @@
 
-import { partition, share } from "rxjs";
+import { partition, shareReplay } from "rxjs";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 
@@ -22,8 +22,8 @@ export default usModule((_require, exports) => {
   const separate = <T extends ContextSource>(sources: Obs<T>) => {
     const [enabled, disabled] = partition(sources, isEnabled);
     return {
-      enabledSources: enabled.pipe(share()),
-      disabledSources: disabled.pipe(share())
+      enabledSources: enabled.pipe(shareReplay()),
+      disabledSources: disabled.pipe(shareReplay())
     };
   };
 

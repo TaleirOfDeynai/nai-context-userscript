@@ -22,7 +22,7 @@ export default usModule((require, exports) => {
     }
   };
 
-  const createStream = (storyContent: StoryContent, storyText: string) => {
+  const createStream = (storyText: string) => (storyContent: StoryContent) => {
     const contextChunks = [
       new ContextContent(storyContent.storyContextConfig, storyText),
       ...storyContent.context

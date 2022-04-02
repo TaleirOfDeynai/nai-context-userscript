@@ -16,6 +16,7 @@ import SearchService from "./SearchService";
 import ReactiveProcessing from "./rx";
 import type { TokenCodec } from "@nai/TokenizerCodec";
 import type { TextOrFragment } from "./TextSplitterService";
+import type { ContextSource } from "./ContextSource";
 
 const logger = createLogger("ContextProcessor");
 
@@ -68,13 +69,19 @@ export default usModule((require, exports) => {
     }
   }
 
-  async function activationPhase(
+  function activationPhase(
     storyContent: StoryContent,
-    storyText: string
+    promisedStoryText: Promise<string>
   ) {
+    const inFlightStory = rx.from(promisedStoryText);
     // Gather our content sources.
     const allSources = rx.merge(
-      process.source.content(storyContent, storyText),
+      // Stalling on getting the story text as much as possible.
+      inFlightStory.pipe(
+        rxop.map(process.source.content),
+        rxop.mergeMap((contentSourcer) => contentSourcer(storyContent))
+      ),
+      // Meanwhile, we can still process these.
       process.source.lore(storyContent),
       process.source.ephemeral(storyContent)
     );
@@ -83,60 +90,75 @@ export default usModule((require, exports) => {
     // We'll deal with the disabled ones later.
     const { enabledSources, disabledSources } = process.separateEnabled(allSources);
 
-    // Stream through the activations.  Be aware that when a source comes
+    // Stream through the direct activations.
+    const directActivated = rx.merge(
+      enabledSources.pipe(process.activation.forced),
+      enabledSources.pipe(process.activation.ephemeral(storyContent)),
+      // Still cheating to get as much done while waiting on the story.
+      inFlightStory.pipe(
+        rxop.map(process.activation.keyed),
+        rxop.mergeMap((keyedProcessor) => keyedProcessor(enabledSources))
+      )
+    );
+
+    // The stream of in-flight activations.  Be aware that when a source comes
     // down the pipeline, we only know it activated.  The information in its
-    // `activations` map can only be treated as incomplete until this entire
+    // `activations` should be assumed to be incomplete until this entire
     // observable completes.
-    const inFlightActivations = enabledSources.pipe(
-      // Perform direct activations.
-      rxop.connect((sharedSrc) => {
-        const directActivated = rx.merge(
-          sharedSrc.pipe(process.activation.forced),
-          sharedSrc.pipe(process.activation.keyed(storyText)),
-          sharedSrc.pipe(process.activation.ephemeral(storyContent))
-        );
-
-        return directActivated.pipe(
-          // They may directly activate more than once.  We're gathering as
-          // much data on activation as possible.
-          rxop.distinct(),
-          // Join in the cascade.
-          rxop.connect((sharedAct) => rx.merge(
-            sharedAct,
-            sharedAct.pipe(process.activation.cascade(sharedSrc))
-          )),
-          // And again, the cascade can emit activations more than once too.
-          rxop.distinct()
-        );
-      }),
-      rxop.share()
+    const inFlightActivations = directActivated.pipe(
+      // They may directly activate more than once.  We're gathering as
+      // much data on activation as possible.
+      rxop.distinct(),
+      // Join in the cascade.
+      rxop.connect((sharedAct) => rx.merge(
+        sharedAct,
+        sharedAct.pipe(process.activation.cascade(enabledSources))
+      )),
+      // And again, the cascade can emit activations more than once too.
+      rxop.distinct(),
+      rxop.shareReplay()
     );
 
-    // Aggregate everything together.  After this, all activation data is available.
-    const finalDisabled = disabledSources.pipe(
-      rxop.toArray(),
-      rxop.map((sources) => new Set(sources))
-    );
-    const finalActivations = inFlightActivations.pipe(
-      rxop.toArray(),
-      rxop.map((sources) => new Set(sources))
-    );
-    const finalRejections = enabledSources.pipe(
-      rxop.toArray(),
-      rxop.map((sources) => new Set(sources)),
-      rxop.mergeMap((rejectedSet) => inFlightActivations.pipe(
-        // Delete the activated entries from the set until only the rejected remain.
-        rxop.reduce((rs, a) => (rs.delete(a as any), rs), rejectedSet)
-      ))
-    );
-    
-    const [disabled, rejected, activated] = await Promise.all([
-      rx.firstValueFrom(finalDisabled),
-      rx.firstValueFrom(finalRejections),
-      rx.firstValueFrom(finalActivations)
-    ]);
-
-    return { disabled, rejected, activated };
+    return {
+      /** Resolves to a complete {@link Set} of disabled {@link ContextSource}. */
+      get disabled(): Promise<Set<ContextSource>> {
+        return rx.firstValueFrom(disabledSources.pipe(
+          rxop.toArray(),
+          rxop.map((sources) => new Set(sources))
+        ));
+      },
+      /** Resolves to a complete {@link Set} of rejected {@link ContextSource}. */
+      get rejected(): Promise<Set<ContextSource>> {
+        return rx.firstValueFrom(enabledSources.pipe(
+          rxop.toArray(),
+          rxop.map((sources) => new Set(sources)),
+          rxop.mergeMap((rejectedSet) => inFlightActivations.pipe(
+            // Delete the activated entries from the set until only the rejected remain.
+            rxop.reduce((rs, a) => (rs.delete(a as any), rs), rejectedSet)
+          ))
+        ));
+      },
+      /**
+       * Resolves to a complete {@link Set} of activated {@link ContextSource}.
+       * All data in their {@link ContextSource.activations} property will be
+       * available when the value is pulled.
+       */
+      get activated(): Promise<Set<ContextSource>> {
+        return rx.firstValueFrom(inFlightActivations.pipe(
+          rxop.toArray(),
+          rxop.map((sources) => new Set(sources))
+        ));
+      },
+      /**
+       * An eager {@link rx.Observable Observable} of entries that have activated.
+       * Elements of this observable are definitely activated, but may not have
+       * all data in their {@link ContextSource.activations} property set.
+       * 
+       * Use this observable to do things with an entry that has activated, but
+       * the exact method of activation isn't important.
+       */
+      activating: inFlightActivations as rx.Observable<Omit<ContextSource, "activations">>
+    };
   }
 
   async function processContext(
@@ -150,22 +172,28 @@ export default usModule((require, exports) => {
     const maxTokens = givenTokenLimit - (storyContent.settings.prefix === "vanilla" ? 0 : 20);
     const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
     const resolvedCodec = tokenizer.codecFor(tokenizerType, tokenCodec);
-    const storyText = await getStoryText(
+    const promisedStoryText = getStoryText(
       storyState, resolvedCodec,
       maxTokens, givenLength,
       removeComments
     );
 
-    const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
-      tokenizerType, maxTokens,
-      preContextText: storyText
-    });
+    const activations = activationPhase(storyContent, promisedStoryText);
 
-    const activations = await activationPhase(storyContent, storyText);
+    // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
+    //   tokenizerType, maxTokens,
+    //   preContextText: await inFlightStoryText
+    // });
 
-    for (const s of activations.disabled) logger.info(`Disabled: ${s.identifier}`, s);
-    for (const s of activations.rejected) logger.info(`Rejected: ${s.identifier}`, s);
-    for (const s of activations.activated) logger.info(`Activated: ${s.identifier}`, s);
+    const [disabled, rejected, activated] = await Promise.all([
+      activations.disabled,
+      activations.rejected,
+      activations.activated
+    ]);
+
+    // for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
+    // for (const s of rejected) logger.info(`Rejected: ${s.identifier}`, s);
+    // for (const s of activated) logger.info(`Activated: ${s.identifier}`, s);
   }
 
   return Object.assign(exports, {
