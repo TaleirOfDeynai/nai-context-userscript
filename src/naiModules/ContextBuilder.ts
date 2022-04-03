@@ -66,7 +66,8 @@ export namespace Virtual {
   export declare class ContextStatus<T extends ContextField = ContextField> {
     included: boolean;
     identifier: string;
-    uniqueId: string;
+    /** Misspelled in NAI source. */
+    unqiueId: string;
     state: AnyValueOf<TrimStates>;
     reason: AnyValueOf<ReportReasons>;
     triggeringKey: string;
