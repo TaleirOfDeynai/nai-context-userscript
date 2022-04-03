@@ -17,7 +17,8 @@
         "paths": {
             "@utils/*": ["./src/utils/*"],
             "@nai/*": ["./src/naiModules/*"]
-        }
+        },
+        "baseUrl": "."
     },
     "exclude": [
         "node_modules"
@@ -27,6 +28,7 @@
         "./src/**/*.js"
     ],
     "ts-node": {
+        "require": ["tsconfig-paths/register"],
         "esm": true,
         "files": true,
         "transpileOnly": true,
