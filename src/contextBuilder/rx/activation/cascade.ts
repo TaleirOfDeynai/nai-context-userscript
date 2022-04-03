@@ -38,7 +38,7 @@ export interface CascadeActivation {
 }
 
 /**
- * Checks each {@link IContextSource} for forced activation conditions.
+ * Checks each {@link ContextSource} for cascade activation.
  */
 export default usModule((require, exports) => {
   const { searchForLore } = SearchService(require);

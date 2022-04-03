@@ -20,7 +20,7 @@ type SearchableSource = ContextSource<SearchableField>;
 export type KeyedActivation = MatcherResults;
 
 /**
- * Checks each {@link IContextSource} for keyword activations against
+ * Checks each {@link ContextSource} for keyword activations against
  * the story text.
  */
 export default usModule((require, exports) => {

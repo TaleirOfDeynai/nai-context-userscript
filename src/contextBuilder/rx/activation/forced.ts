@@ -12,7 +12,7 @@ import type { ContextSource, SourceType } from "../../ContextSource";
 export type ForcedActivation = AnyValueOf<ReportReasons>;
 
 /**
- * Checks each {@link IContextSource} for forced activation conditions.
+ * Checks each {@link ContextSource} for forced activation conditions.
  */
 export default usModule((require, exports) => {
   const { REASONS } = require(ContextBuilder);

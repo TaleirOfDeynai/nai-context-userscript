@@ -3,7 +3,7 @@ import { partition, shareReplay } from "rxjs";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 
-import type { ContextSource } from "../ContextSource";
+import type { ContextSource } from "../../ContextSource";
 import type { Observable as Obs } from "rxjs";
 
 export default usModule((_require, exports) => {
