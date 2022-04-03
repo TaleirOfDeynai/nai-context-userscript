@@ -1,3 +1,4 @@
+import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert, assertExists } from "@utils/assert";
 import { iterReverse, countBy } from "@utils/iterables";
@@ -12,12 +13,20 @@ export interface TextFragment {
 
 export type TextOrFragment = string | TextFragment;
 
-/** Matches smart single quotes. */
-const reSmartSQ = /[\u2018\u2019\u201A\u201B\u2032\u2035]/g;
-/** Matches smart double quotes. */
-const reSmartDQ = /[\u201C\u201D\u201E\u201F\u2033\u2036]/g;
+const { raw } = String;
+
+/** A raw string with all the punctuation characters we care about. */
+const PUNCT = raw`.?!~\xbf\xa1\u061f\u3002\uff1f\uff01`;
+/** The quote characters we care about. */
+const QUOTE = `'"`;
+/**
+ * An exception case in sentence separation: english honorific abbreviations.
+ * Seems a bit much, but NovelAI apparently found this necessary.
+ */
+const HONORIFIC = raw`(?:dr|mr?s?|esq|jr|sn?r)\.`;
+
 /** Matches something that isn't English syntax. */
-const reWordy = /[^\s'".?!~-]/;
+const reWordy = new RegExp(`[^${PUNCT}${QUOTE}\\s-]`);
 /** Matches any string with at least one newline character. */
 const reHasNewLine = /\n/;
 
@@ -27,7 +36,22 @@ const reHasNewLine = /\n/;
  * - A word's contents.
  * - Stuff between words (punctuation and other whitespace).
  */
-const reByWord = /\b\S+\b|.+?(?:\b|$|(?=\n))|\n/g;
+const reByWord = dew(() => {
+  /** Anything that is not whitespace and within a word-boundary is a word. */
+  const singleWord = raw`\b\S+\b`;
+  /**
+   * Otherwise, if we have at least one character, grab characters until:
+   * - We hit a word boundary (start of next word).
+   * - End of the string.
+   * - The position immediately before a `\n` character.  We don't want to
+   *   consume the `\n`, only stop before it.
+   */
+  const elseUntilNextWordOrEnd = raw`.+?(?:\b|$|(?=\n))`;
+  /** A `\n` is the only thing left of the possibilities. */
+  const endOfLine = raw`\n`;
+
+  return new RegExp(`${singleWord}|${elseUntilNextWordOrEnd}|${endOfLine}`, "gi");
+});
 
 /**
  * This regular expression is designed to work against isolated lines.
@@ -44,7 +68,28 @@ const reByWord = /\b\S+\b|.+?(?:\b|$|(?=\n))|\n/g;
  * This will fail to handle certain syntactical complexities; for
  * instance, a quote within a quote.  It's just not worth dealing with.
  */
-const reBySentence = /(\s+)|([.?!~]+['"]*(?=$|\s))|(.+?(?=$|[.?!~]+['"]*(?:\s+|$)))/g;
+const reBySentence = dew(() => {
+  /** A group for whitespace. */
+  const wsGroup = raw`\s+`;
+  /**
+   * A group for things that define a sentence ending, which is defined as:
+   * - One or more punctuation characters.
+   * - Then zero-or-more closing-quote characters.
+   * - Terminated by the end of the string or some whitespace.
+   */
+  const punctGroup = raw`[${PUNCT}]+[${QUOTE}]*(?=$|\s)`;
+  /**
+   * A group for the sentence contents, which is terminated either when
+   * we hit the end of the string or we find something the punctuation
+   * group would match.
+   * 
+   * We have a special exception to allow a period to be a part of the
+   * sentence when it comes before an english honorific.
+   */
+  const contentGroup = raw`(?:${HONORIFIC}|.)+?(?=$|${punctGroup})`;
+
+  return new RegExp(`(${wsGroup})|(${punctGroup})|(${contentGroup})`, "gi")
+});
 
 /**
  * Each match will be one of:
