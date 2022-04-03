@@ -40,7 +40,7 @@ export default usModule((require, exports) => {
       // Meanwhile, we can still process these.
       source.lore(storyContent),
       source.ephemeral(storyContent)
-    ).pipe(logger.measureStream("allSources"));
+    ).pipe(logger.measureStream("All Sources"));
 
     // Figure out which are enabled or disabled and return the partitioned streams.
     return source.separateEnabled(allSources);

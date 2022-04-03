@@ -12,11 +12,8 @@ import TextSplitterService from "./TextSplitterService";
 import TokenizerService from "./TokenizerService";
 import TrimmingProviders from "./TrimmingProviders";
 import TrimmingService from "./TrimmingService";
-import SearchService from "./SearchService";
 import ReactiveProcessing from "./rx";
 import type { TokenCodec } from "@nai/TokenizerCodec";
-import type { TextOrFragment } from "./TextSplitterService";
-import type { ContextSource } from "./ContextSource";
 
 const logger = createLogger("ContextProcessor");
 
@@ -99,20 +96,27 @@ export default usModule((require, exports) => {
       storyContent, promisedStoryText, sourceResults
     );
 
+    // Grab the triggered bias groups as content activates.
+    const biasGroupResults = processing.biasGroups.phaseRunner(
+      storyContent, activationResults
+    );
+
     // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
     //   tokenizerType, maxTokens,
     //   preContextText: await inFlightStoryText
     // });
 
-    const [disabled, rejected, activated] = await Promise.all([
+    const [disabled, rejected, activated, biasGroups] = await Promise.all([
       activationResults.disabled,
       activationResults.rejected,
-      activationResults.activated
+      activationResults.activated,
+      biasGroupResults.biasGroups
     ]);
 
     for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
     for (const s of rejected) logger.info(`Rejected: ${s.identifier}`, s);
     for (const s of activated) logger.info(`Activated: ${s.identifier}`, s);
+    for (const bg of biasGroups) logger.info(`Bias Group: ${bg.identifier}`, bg);
   }
 
   return Object.assign(exports, {

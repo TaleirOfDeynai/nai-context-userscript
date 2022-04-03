@@ -19,6 +19,8 @@ export type SafeSource<T extends ContextField = ContextField>
 
 export type InFlightResult = [ActivationState, SafeSource];
 
+export type InFlightObservable = rx.Observable<InFlightResult>;
+
 export interface ActivationPhaseResult {
   /** Resolves to a complete {@link Set} of disabled {@link ContextSource}. */
   readonly disabled: Promise<Set<ContextSource>>;
@@ -43,7 +45,7 @@ export interface ActivationPhaseResult {
    * at the type-level.  It is still there, but you should not be accessing
    * it within this observable.
    */
-  readonly inFlight: rx.Observable<InFlightResult>;
+  readonly inFlight: InFlightObservable;
 }
 
 const logger = createLogger("Activation Phase");
@@ -96,26 +98,32 @@ export default usModule((require, exports) => {
       ),
       // And again, Only emit one activation per source.
       rxop.distinct(),
-      logger.measureStream("inFlightActivations").markItems((i) => i.identifier),
+      logger.measureStream("In-flight Activations"),
       rxop.shareReplay()
     );
 
     // We can only get rejections after all activations have completed,
     // so we'll have to wait and then check the final activation data
     // to see who has no activations at all.
-    const whenActivated = inFlightActivations.pipe(rxop.whenCompleted, rxop.share());
+    const whenActivated = inFlightActivations.pipe(rxop.whenCompleted(), rxop.share());
     const inFlightRejections = enabledSources.pipe(
       rxop.delayWhen(() => whenActivated),
       rxop.filter((source) => source.activations.size === 0),
-      logger.measureStream("inFlightRejections"),
+      logger.measureStream("In-flight Rejections"),
       rxop.shareReplay()
     );
 
-    const inFlight = rx.merge(
-      disabledSources.pipe(rxop.map((s) => ["disabled", s] as InFlightResult)),
-      inFlightRejections.pipe(rxop.map((s) => ["rejected", s] as InFlightResult)),
-      inFlightActivations.pipe(rxop.map((s) => ["activated", s] as InFlightResult))
-    ).pipe(rxop.shareReplay());
+    const inFlight = rx
+      .merge(
+        disabledSources.pipe(rxop.map((s) => ["disabled", s] as InFlightResult)),
+        inFlightRejections.pipe(rxop.map((s) => ["rejected", s] as InFlightResult)),
+        inFlightActivations.pipe(rxop.map((s) => ["activated", s] as InFlightResult))
+      )
+      .pipe(
+        logger.measureStream("In-flight Results")
+          .markItems(([status, source]) => `${source.identifier} (${status})`),
+        rxop.shareReplay()
+      );
 
     return {
       get disabled(): Promise<Set<ContextSource>> {
@@ -136,7 +144,9 @@ export default usModule((require, exports) => {
           rxop.map((sources) => new Set(sources))
         ));
       },
-      inFlight
+      get inFlight() {
+        return inFlight;
+      }
     };
   }
 
