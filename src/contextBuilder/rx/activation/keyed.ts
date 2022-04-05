@@ -1,4 +1,5 @@
 import * as rx from "@utils/rx";
+import * as rxop from "@utils/rxop";
 import { eachValueFrom } from "rxjs-for-await";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
@@ -24,7 +25,7 @@ export type KeyedActivation = MatcherResults;
  * the story text.
  */
 export default usModule((require, exports) => {
-  const { searchForLore } = SearchService(require);
+  const { search, searchForLore } = SearchService(require);
 
   const isKeyed = (source: ContextSource<any>): source is SearchableSource => {
     const { entry } = source;
@@ -34,7 +35,11 @@ export default usModule((require, exports) => {
     return entry.keys.length > 0;
   };
 
-  async function* impl_checkActivation(
+  /**
+   * Version that waits for all entries to come through, then searches through
+   * all their keys in one big batch.
+   */
+  async function* impl_checkActivation_batched(
     storyText: TextOrFragment,
     sources: Obs<ContextSource>
   ): AsyncIterable<ContextSource> {
@@ -55,10 +60,23 @@ export default usModule((require, exports) => {
       source.activations.set("keyed", results);
       yield source;
     }
-  };
+  }
+
+  /** Version that checks the keys on individual entries, one at a time. */
+  function impl_checkActivation_individual(
+    storyText: TextOrFragment,
+    sources: Obs<ContextSource>
+  ) {
+    return sources.pipe(rxop.collect((source) => {
+      if (!isKeyed(source)) return undefined;
+      const result = search(storyText, source.entry);
+      if (!result.size) return undefined;
+      return source;
+    }));
+  }
 
   const checkActivation = (storyText: TextOrFragment) => (sources: Obs<ContextSource>) =>
-    rx.from(impl_checkActivation(storyText, sources));
+    rx.from(impl_checkActivation_batched(storyText, sources));
 
   return Object.assign(exports, { checkActivation });
 });
