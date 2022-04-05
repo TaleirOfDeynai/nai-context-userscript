@@ -1,6 +1,6 @@
 import { isString, isIterable, isArray, TypePredicate } from "./is";
 import type { PredicateFn } from "./functions";
-import type { AnyValueOf } from "./utility-types";
+import type { AnyValueOf, Maybe, UndefOr } from "./utility-types";
 
 /** The primitive data-types. */
 type Primitives = number | string | boolean | Function | {} | null | undefined;
@@ -25,8 +25,8 @@ export type ElementOf<T> = T extends Iterable<infer TEl> ? TEl : never;
 
 export type TransformFn<TIn, TOut> = (value: TIn) => TOut;
 export type TupleTransformFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => [...TOut];
-export type CollectFn<TIn, TOut> = TransformFn<TIn, TOut | undefined>;
-export type TupleCollectFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => [...TOut] | undefined;
+export type CollectFn<TIn, TOut> = TransformFn<TIn, UndefOr<TOut>>;
+export type TupleCollectFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => UndefOr<[...TOut]>;
 export type TapFn<TValue> = (value: TValue) => unknown;
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
@@ -77,18 +77,18 @@ declare global {
 /**
  * Gets the first element of an iterable or `undefined` if it has none.
  */
-export const first = <T>([v]: Iterable<T>): T | undefined => v;
+export const first = <T>([v]: Iterable<T>): UndefOr<T> => v;
 
 /**
  * Gets the last element of an iterable or `undefined` if it has none.
  */
-export const last = <T>(iter: Iterable<T>): T | undefined => {
+export const last = <T>(iter: Iterable<T>): UndefOr<T> => {
   if (isArray(iter)) {
     if (iter.length === 0) return undefined;
     return iter[iter.length - 1];
   }
 
-  let result: T | undefined = undefined;
+  let result: UndefOr<T> = undefined;
   for (const v of iter) result = v;
   return result;
 };
@@ -118,7 +118,7 @@ export const fromPairs = <KVP extends [string | number, any]>(
  * Creates an iterable that yields the key-value pairs of an object.
  */
 export const toPairs = function*<TObj extends Record<string, any>>(
-  obj: TObj | null | undefined
+  obj: Maybe<TObj>
 ): Iterable<[keyof TObj, AnyValueOf<TObj>]> {
   if (obj == null) return;
   for(const key of Object.keys(obj)) {
@@ -131,7 +131,7 @@ export const toPairs = function*<TObj extends Record<string, any>>(
  * Applies a transformation function to the values of an object.
  */
 export const mapValues = function<TObj extends Record<string, any>, TOut>(
-  obj: TObj | null | undefined,
+  obj: Maybe<TObj>,
   xformFn: (value: TObj[keyof TObj], key: keyof TObj) => TOut
 ): { [K in keyof TObj]: TOut } {
   const newObj: any = {};

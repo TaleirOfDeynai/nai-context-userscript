@@ -4,6 +4,8 @@ import { assert } from "@utils/assert";
 import { chain, journey, buffer, flatten, flatMap } from "@utils/iterables";
 import TextSplitterService from "./TextSplitterService";
 import TrimmingProviders from "./TrimmingProviders";
+
+import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TokenCodec, EncodeResult } from "./TokenizerService";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
@@ -113,7 +115,7 @@ export default usModule((require, exports) => {
   async function execNoTrimTokens(
     prefix: string, fragments: TextFragment[], suffix: string,
     tokenBudget: number, codec: TokenCodec
-  ): Promise<TrimExecResult | undefined> {
+  ): Promise<UndefOr<TrimExecResult>> {
     const fullText = [prefix, ...fragments.map(asContent), suffix].join("");
     const tokenCount = (await codec.encode(fullText)).length;
     if (tokenCount > tokenBudget) return undefined;
@@ -127,7 +129,7 @@ export default usModule((require, exports) => {
     preserveMode: "initial" | "ends" | "none",
     codec: TokenCodec,
     seedResult?: Readonly<EncodeResult>
-  ): Promise<TrimExecResult | undefined> {
+  ): Promise<UndefOr<TrimExecResult>> {
     // If we have no sequencers left, end recursion.
     if (!sequencers.length) return undefined;
     // Split the current sequencer from the rest.
@@ -192,7 +194,7 @@ export default usModule((require, exports) => {
     codec: TokenCodec,
     /** Trimming options. */
     options?: Partial<TokenTrimOptions>
-  ): Promise<TrimResult | undefined> {
+  ): Promise<UndefOr<TrimResult>> {
     const { prefix, suffix, preserveEnds, provider: srcProvider, maximumTrimType }
       = { ...tokenDefaults, ...options };
 
@@ -312,7 +314,7 @@ export default usModule((require, exports) => {
     content: TextOrFragment,
     maximumLength: number,
     options?: Partial<CommonTrimOptions>
-  ): TextFragment | undefined {
+  ): UndefOr<TextFragment> {
     const { preserveEnds, provider: srcProvider, maximumTrimType }
       = { ...commonDefaults, ...options };
 

@@ -3,6 +3,8 @@ import { enableLogging } from "@utils/logging";
 import { makeWrappedRequire, notifyToConsole } from "./require";
 import injectors, { Injector } from "./injectors";
 
+import type { UndefOr } from "@utils/utility-types";
+
 enableLogging();
 
 const injectorMap = dew(() => {
@@ -15,8 +17,8 @@ const injectorMap = dew(() => {
   return result;
 });
 
-let _chunkStore: Webpack.ChunkStore | undefined = undefined;
-let lastPushFn: Webpack.ChunkStore["push"] | undefined = undefined;
+let _chunkStore: UndefOr<Webpack.ChunkStore> = undefined;
+let lastPushFn: UndefOr<Webpack.ChunkStore["push"]> = undefined;
 
 // `unsafeWindow` is needed to properly intercept the Webpack chunk
 // storage so its `push` method can be monkey-patched for injection.

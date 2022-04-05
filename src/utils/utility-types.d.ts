@@ -1,3 +1,9 @@
+/** May be a value, or may not be. */
+export type Maybe<T> = T | null | undefined;
+
+/** Either a value or `undefined`; when `null` still has meaning. */
+export type UndefOr<T> = T | undefined;
+
 /** Gets the types of all possible property values on an object. */
 export type AnyValueOf<T extends {}> = T[keyof T];
 
@@ -13,7 +19,7 @@ export type KvpsOf<T extends {}>
 // @ts-ignore - TS will work it out correctly with a concrete `T`.
 export interface ConstrainedMap<T extends {}>
 extends Map<keyof T, AnyValueOf<T>> {
-  get<K extends keyof T>(key: K): T[K] | undefined;
+  get<K extends keyof T>(key: K): UndefOr<T[K]>;
   set<K extends keyof T>(key: K, value: T[K]): this;
   entries(): IterableIterator<KvpsOf<T>>;
   [Symbol.iterator](): IterableIterator<KvpsOf<T>>;
