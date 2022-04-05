@@ -2,7 +2,7 @@ import { usModule } from "@utils/usModule";
 import * as rxop from "@utils/rxop";
 import EphemeralHelpers from "@nai/EphemeralHelpers";
 
-import type { Observable as Obs } from "rxjs";
+import type { Observable as Obs } from "@utils/rx";
 import type { ContextSource } from "../../ContextSource";
 import type { StoryContent } from "@nai/EventModule";
 import type { EphemeralEntry } from "@nai/EphemeralHelpers";

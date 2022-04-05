@@ -1,4 +1,4 @@
-import { Subject } from "rxjs";
+import { Subject } from "@utils/rx";
 import type { ContextRecorder } from "@nai/ContextBuilder";
 
 /** A {@link Subject} that signals the start of context construction. */

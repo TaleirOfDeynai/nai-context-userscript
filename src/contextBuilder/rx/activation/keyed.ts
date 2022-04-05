@@ -1,10 +1,10 @@
-import * as rx from "rxjs";
+import * as rx from "@utils/rx";
 import { eachValueFrom } from "rxjs-for-await";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
 import SearchService from "../../SearchService";
 
-import type { Observable as Obs } from "rxjs";
+import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherResults } from "../../SearchService";

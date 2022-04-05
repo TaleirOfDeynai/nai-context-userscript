@@ -1,10 +1,10 @@
 
-import { partition, shareReplay } from "rxjs";
+import { partition, shareReplay } from "@utils/rx";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 
 import type { ContextSource } from "../../ContextSource";
-import type { Observable as Obs } from "rxjs";
+import type { Observable as Obs } from "@utils/rx";
 
 export default usModule((_require, exports) => {
   const isEnabled = <T extends ContextSource<any>>(source: T): boolean => {

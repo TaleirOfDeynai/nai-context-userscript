@@ -1,4 +1,4 @@
-export { noop } from "rxjs";
+export { noop } from "./rx";
 
 export type PredicateFn<T> = (value: T) => boolean;
 

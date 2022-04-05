@@ -3,7 +3,7 @@ import { isArray, isObject } from "@utils/is";
 import * as rxop from "@utils/rxop";
 import SearchService, { MatcherResults } from "../../SearchService";
 
-import type { Observable as Obs } from "rxjs";
+import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";

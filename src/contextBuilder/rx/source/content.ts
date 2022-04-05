@@ -1,4 +1,4 @@
-import { of } from "rxjs";
+import { of } from "@utils/rx";
 import { usModule } from "@utils/usModule";
 import ContextModule from "@nai/ContextModule";
 import ContextSource from "../../ContextSource";

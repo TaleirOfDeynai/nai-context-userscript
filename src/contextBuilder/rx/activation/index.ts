@@ -1,4 +1,4 @@
-import * as rx from "rxjs";
+import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";

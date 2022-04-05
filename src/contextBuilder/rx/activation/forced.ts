@@ -1,10 +1,10 @@
-import * as rx from "rxjs";
+import * as rx from "@utils/rx";
 import { eachValueFrom } from "rxjs-for-await";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 import ContextBuilder from "@nai/ContextBuilder";
 
-import type { Observable } from "rxjs";
+import type { Observable } from "@utils/rx";
 import type { AnyValueOf } from "@utils/utility-types";
 import type { ReportReasons, ContextField } from "@nai/ContextBuilder";
 import type { ContextSource, SourceType } from "../../ContextSource";

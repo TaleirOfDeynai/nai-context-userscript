@@ -1,11 +1,11 @@
-import * as rx from "rxjs";
+import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
 import { chain } from "@utils/iterables";
 import { whenActive, whenInactive, hasValidPhrase } from "./_shared";
 
-import type { Observable as Obs } from "rxjs";
+import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { SafeSource, InFlightObservable } from "../activation";

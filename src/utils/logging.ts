@@ -1,4 +1,4 @@
-import * as rx from "rxjs";
+import * as rx from "./rx";
 import * as rxop from "./rxop";
 
 interface LoggerMessage {
@@ -41,18 +41,23 @@ class Logger {
   }
 
   info = (...data: any[]) => {
+    if (!loggingEnabled) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   warn = (...data: any[]) => {
+    if (!loggingEnabled) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   error = (...data: any[]) => {
+    if (!loggingEnabled) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   dir = (...data: Parameters<Console["dir"]>) => {
+    if (!loggingEnabled) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   mark = (name: string) => {
+    if (!loggingEnabled) return;
     performance.mark(`[${this.#origin}] ${name}`);
   };
 

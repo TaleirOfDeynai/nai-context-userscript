@@ -1,8 +1,8 @@
+import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assertExists } from "@utils/assert";
 import { createLogger } from "@utils/logging";
-import * as rxop from "@utils/rxop";
 import LoreEntryHelpers from "@nai/LoreEntryHelpers";
 import { onEndContext } from "./rx/events";
 
