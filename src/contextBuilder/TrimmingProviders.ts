@@ -203,7 +203,7 @@ export default usModule((require, exports) => {
       };
     });
 
-    const prepare: TextSequencer["prepareInnerChunk"] = dew(() => {
+    const prepareInnerChunk: TextSequencer["prepareInnerChunk"] = dew(() => {
       if (reversed) return (current, last) => {
         if (!last) return mergeFragments(current.fragments);
         const diff = current.fragments.length - last.fragments.length;
@@ -219,7 +219,7 @@ export default usModule((require, exports) => {
     return {
       splitUp,
       encode,
-      prepareInnerChunk: prepare,
+      prepareInnerChunk,
       reversed
     };
   };
