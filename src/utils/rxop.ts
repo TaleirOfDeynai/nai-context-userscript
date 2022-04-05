@@ -2,6 +2,8 @@ import * as rx from "./rx";
 import * as rxop from "rxjs/operators";
 import { assert } from "./assert";
 
+import type { UndefOr } from "./utility-types";
+
 // Because this module is just going to export operators, instead of
 // importing multiple things, just re-export all of RxJS's operators.
 export * from "rxjs/operators";
@@ -31,7 +33,7 @@ export const whenCompleted = () => (
  */
 export const collect = <T, U>(
   /** The collection function. */
-  collectFn: (value: T, index: number) => U | undefined
+  collectFn: (value: T, index: number) => UndefOr<U>
 ) => rx.pipe(rxop.map(collectFn), rxop.filter(isDefined));
 
 /**

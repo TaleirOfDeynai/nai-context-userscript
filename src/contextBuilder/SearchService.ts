@@ -19,6 +19,7 @@ import { createLogger } from "@utils/logging";
 import { onEndContext } from "./rx/events";
 import MatcherService from "./MatcherService";
 
+import type { UndefOr } from "@utils/utility-types";
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatchResult } from "./MatcherService";
@@ -160,14 +161,14 @@ export default usModule((require, exports) => {
   }
 
   /** Finds the result with the lowest index of all keys searched. */
-  const findLowestIndex = (results: MatcherResults): [string, MatchResult] | undefined => {
+  const findLowestIndex = (results: MatcherResults): UndefOr<[string, MatchResult]> => {
     return Iterables.chain(results)
       .collect(([k, v]) => {
         const first = Iterables.first(v);
         return first ? [k, first] : undefined;
       })
       .value((kvps) => {
-        let best: [string, MatchResult] | undefined = undefined;
+        let best: UndefOr<[string, MatchResult]> = undefined;
         for (const kvp of kvps) {
           checks: {
             if (!best) break checks;
@@ -181,14 +182,14 @@ export default usModule((require, exports) => {
   };
 
   /** Finds the result with the highest index of all keys searched. */
-  const findHighestIndex = (results: MatcherResults): [string, MatchResult] | undefined => {
+  const findHighestIndex = (results: MatcherResults): UndefOr<[string, MatchResult]> => {
     return Iterables.chain(results)
       .collect(([k, v]) => {
         const last = Iterables.last(v);
         return last ? [k, last] : undefined;
       })
       .value((kvps) => {
-        let best: [string, MatchResult] | undefined = undefined;
+        let best: UndefOr<[string, MatchResult]> = undefined;
         for (const kvp of kvps) {
           checks: {
             if (!best) break checks;
@@ -205,7 +206,7 @@ export default usModule((require, exports) => {
    * Finds the first key in `entryKeys` with a valid match.
    * This emulates NovelAI's "fail fast" search order that it uses in quick-checks.
    */
-  const findLowestInOrder = (results: MatcherResults, entryKeys: string[]): string | undefined => {
+  const findLowestInOrder = (results: MatcherResults, entryKeys: string[]): UndefOr<string> => {
     if (!results.size) return undefined;
     if (!entryKeys.length) return undefined;
     for (const key of entryKeys)
