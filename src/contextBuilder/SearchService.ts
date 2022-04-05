@@ -16,7 +16,9 @@ import { usModule } from "@utils/usModule";
 import { isIterable, isString } from "@utils/is";
 import * as Iterables from "@utils/iterables";
 import { createLogger } from "@utils/logging";
+import { onEndContext } from "./rx/events";
 import MatcherService from "./MatcherService";
+
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatchResult } from "./MatcherService";
@@ -37,8 +39,8 @@ export default usModule((require, exports) => {
   /** The internal results cache of the service. */
   let resultsCache = new Map<string, MatcherResults>();
 
-  /** Handles rescaling of the cache. */
-  function rescaleCache() {
+  /** Performs maintenance on the cache. */
+  onEndContext.subscribe(() => {
     const totalUnique = textsSearched.size;
     const curSize = resultsCache.size;
 
@@ -62,22 +64,6 @@ export default usModule((require, exports) => {
     resultsCache = new Map(retainedEntries);
 
     logger.info({ curSize, idealSize, nextSize });
-  }
-
-  /** Discards results for keys that were not seen since last cycle. */
-  function discardUnusedResults(keysUsed: Set<string>) {
-    // Just delete all results for keys that were not searched in the last run.
-    // In the case of long-living results, this keeps them from growing out of
-    // control and hogging a bunch of memory.
-    for (const results of resultsCache.values())
-      for (const key of results.keys())
-        if (!keysUsed.has(key)) results.delete(key);
-  }
-
-  /** Performs maintenance on the cache. */
-  matcherService.onMaintainMatchers.subscribe((keysUsed) => {
-    rescaleCache();
-    discardUnusedResults(keysUsed);
     
     // Setup for the next run-through.
     textsSearched = new Set();

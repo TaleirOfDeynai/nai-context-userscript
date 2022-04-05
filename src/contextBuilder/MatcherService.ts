@@ -42,8 +42,7 @@ export default usModule((require, exports) => {
       const keysUsed = usedKeysCache;
       usedKeysCache = new Set();
       return keysUsed;
-    }),
-    rxop.share()
+    })
   );
 
   /** Discards any matcher functions that were not used since last cycle. */
@@ -146,7 +145,6 @@ export default usModule((require, exports) => {
   };
 
   return Object.assign(exports, {
-    onMaintainMatchers,
     markKeyAsUsed,
     getMatcherFor
   });
