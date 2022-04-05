@@ -85,6 +85,27 @@ export namespace Virtual {
     subContext?: ContextRecorder;
   }
 
+  export declare class StageReport {
+    constructor(
+      /** Defaults to `[]`. */
+      structuredOutput?: unknown[],
+      /** Defaults to `0`. */
+      reservedTokens?: number,
+      /** Defaults to `0`. */
+      remainingTokens?: number,
+      /** Defaults to `0`. */
+      usedTokens?: number,
+      /** Defaults to `""`. */
+      description?: string
+    );
+
+    structuredOutput: unknown[];
+    reservedTokens: number;
+    remainingTokens: number;
+    usedTokens: number;
+    description: string;
+  }
+
   export declare class ContextRecorder {
     maxTokens: number;
     preContextText: string;
@@ -93,7 +114,7 @@ export namespace Virtual {
     contextStatuses: ContextStatus<ContextField>[];
     spacesTrimed: number;
     structuredOutput: unknown[];
-    stageReports: unknown[];
+    stageReports: StageReport[];
     keyRejections: ContextStatus<ContextField>[];
     disabled: ContextStatus<ContextField>[];
     orderZeroPoint: number;
@@ -111,7 +132,7 @@ export type ContextRecorder = Virtual.ContextRecorder;
 export interface IContextBuilder {
   "AB": ReportReasons;
   "Ie": typeof Virtual.ContextRecorder;
-  "v$": unknown;
+  "v$": typeof Virtual.StageReport;
   "NV": typeof Virtual.ContextStatus;
   "rJ": typeof Virtual.buildContext;
   "eA": typeof Virtual.checkLorebook;
@@ -123,6 +144,7 @@ class ContextBuilder extends ModuleDef<IContextBuilder> {
   mapping = {
     "AB": ["REASONS", "object"],
     "Ie": ["ContextRecorder", "function"],
+    "v$": ["StageReport", "function"],
     "NV": ["ContextStatus", "function"],
     "rJ": ["buildContext", "function"],
     "eA": ["checkLorebook", "function"]
