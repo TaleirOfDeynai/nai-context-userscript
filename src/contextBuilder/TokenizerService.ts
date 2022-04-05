@@ -1,3 +1,5 @@
+import * as rx from "@utils/rx";
+import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isFunction, isObject } from "@utils/is";
@@ -7,6 +9,7 @@ import TextSplitterService from "./TextSplitterService";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextFragment } from "./TextSplitterService";
+import { defer, Deferred } from "@utils/functions";
 
 export interface SyncTokenCodec {
   encode(text: string): number[];
@@ -231,6 +234,7 @@ export default usModule((require, exports) => {
     }
   }
 
+  /** Checks if `value` satisfies the {@link TokenCodec} interface. */
   const isCodec = (value: any): value is TokenCodec => {
     if (!isObject(value)) return false;
     if (!("encode" in value)) return false;
@@ -238,18 +242,66 @@ export default usModule((require, exports) => {
     if (!isFunction(value.encode)) return false;
     if (!isFunction(value.decode)) return false;
     return true;
-  }
+  };
 
-  function codecFor(tokenizerType: TokenizerTypes, givenCodec?: TokenCodec): AsyncTokenCodec {
+  /**
+   * Ensures `givenCodec` is a codec, or returns an appropriate global
+   * codec instance.
+   */
+  const getCodec = (type: TokenizerTypes, givenCodec?: TokenCodec): AsyncTokenCodec => {
     if (isCodec(givenCodec)) return {
       encode: (text) => Promise.resolve(givenCodec.encode(text)),
       decode: (tokens) => Promise.resolve(givenCodec.decode(tokens))
     };
 
     return {
-      encode: (text) => new tokenizerCodec.GlobalEncoder().encode(text, tokenizerType),
-      decode: (tokens) => new tokenizerCodec.GlobalEncoder().decode(tokens, tokenizerType)
+      encode: (text) => new tokenizerCodec.GlobalEncoder().encode(text, type),
+      decode: (tokens) => new tokenizerCodec.GlobalEncoder().decode(tokens, type)
     };
+  };
+
+  /**
+   * Wraps the given `codec` in a task runner that will run two encode/decode
+   * tasks concurrently and buffer any more than that, favoring executing the
+   * latest task before older tasks.
+   * 
+   * This will hopefully utilize both the background worker and main thread
+   * more efficiently, keeping the worker saturated and the main thread
+   * unblocked (as much as is reasonable).
+   * 
+   * The task management would be better placed into the actual background
+   * worker, since a task-runner on the main thread can only actually advance
+   * its jobs after the current event loop ends...  But it will still be
+   * better than no management at all.
+   */
+  const wrapInTaskRunner = (codec: AsyncTokenCodec): AsyncTokenCodec => {
+    const jobSubject = new rx.Subject<Deferred<string| number[]>>();
+
+    // This will execute deferred tasks as appropriate.
+    jobSubject.pipe(rxop.taskRunner((v) => v.execute())).subscribe(rx.noop);
+
+    return {
+      encode: (text) => {
+        const def = defer(() => codec.encode(text));
+        jobSubject.next(def);
+        return def.promise;
+      },
+      decode: (tokens) => {
+        const def = defer(() => codec.decode(tokens));
+        jobSubject.next(def);
+        return def.promise;
+      }
+    };
+  };
+
+  /**
+   * Provides a codec of the given `tokenizerType`.  If `givenCodec` is
+   * provided, it will be checked to make sure it follows the interface
+   * and will be used instead of the global codec, if so.
+   */
+  function codecFor(tokenizerType: TokenizerTypes, givenCodec?: TokenCodec) {
+    const codec = getCodec(tokenizerType, givenCodec);
+    return wrapInTaskRunner(codec);
   }
 
   return Object.assign(exports, {
