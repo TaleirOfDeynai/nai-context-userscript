@@ -7,7 +7,7 @@ import BiasCategory from "./category";
 
 import type { StoryContent } from "@nai/EventModule";
 import type { ActivationPhaseResult } from "../activation";
-import type { TriggeredBiasGroup } from "./_shared";
+import type { TriggeredBiasGroup } from "../_shared";
 
 export interface BiasGroupPhaseResult {
   /** Resolves to a complete array of {@link TriggeredBiasGroup} instances. */

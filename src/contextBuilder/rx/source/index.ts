@@ -43,7 +43,7 @@ export default usModule((require, exports) => {
     ).pipe(logger.measureStream("All Sources"));
 
     // Figure out which are enabled or disabled and return the partitioned streams.
-    return source.separateEnabled(allSources);
+    return source.separateEnabled(storyContent, allSources);
   }
 
   return Object.assign(exports, source, { phaseRunner: sourcePhase });

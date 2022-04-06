@@ -3,14 +3,14 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
 import { chain } from "@utils/iterables";
-import { whenActive, whenInactive, hasValidPhrase } from "./_shared";
+import { biasGroups } from "../_shared";
 
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";
 import type { ActivationObservable } from "../activation";
-import type { TriggeredBiasGroup } from "./_shared";
+import type { TriggeredBiasGroup } from "../_shared";
 
 interface BiasedField extends ContextField {
   loreBiasGroups: LoreEntry["loreBiasGroups"];
@@ -42,8 +42,8 @@ export default usModule((_require, exports) => {
           if (!isBiased(source)) return undefined;
 
           const groups = chain(source.entry.loreBiasGroups)
-            .filter(whenActive)
-            .filter(hasValidPhrase)
+            .filter(biasGroups.whenActive)
+            .filter(biasGroups.hasValidPhrase)
             .toArray();
           if (!groups.length) return undefined;
 
@@ -58,8 +58,8 @@ export default usModule((_require, exports) => {
           if (!isBiased(source)) return undefined;
 
           const groups = chain(source.entry.loreBiasGroups)
-            .filter(whenInactive)
-            .filter(hasValidPhrase)
+            .filter(biasGroups.whenInactive)
+            .filter(biasGroups.hasValidPhrase)
             .toArray();
           if (!groups.length) return undefined;
 
