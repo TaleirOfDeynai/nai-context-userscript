@@ -8,20 +8,21 @@ import { whenActive, whenInactive, hasValidPhrase } from "./_shared";
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
-import type { SafeSource, InFlightObservable } from "../activation";
+import type { ContextSource } from "../../ContextSource";
+import type { ActivationObservable } from "../activation";
 import type { TriggeredBiasGroup } from "./_shared";
 
 interface BiasedField extends ContextField {
   loreBiasGroups: LoreEntry["loreBiasGroups"];
 }
 
-type BiasedSource = SafeSource<BiasedField>;
+type BiasedSource = ContextSource<BiasedField>;
 
 /**
  * Checks each {@link ContextSource} for lore bias group inclusions.
  */
 export default usModule((_require, exports) => {
-  const isBiased = (source: SafeSource<any>): source is BiasedSource => {
+  const isBiased = (source: ContextSource<any>): source is BiasedSource => {
     const { entry } = source;
     if (!isObject(entry)) return false;
     if (!("loreBiasGroups" in entry)) return false;
@@ -31,13 +32,13 @@ export default usModule((_require, exports) => {
 
   const createStream = (
     /** The stream of activation results. */
-    activating: InFlightObservable
+    activating: ActivationObservable
   ): Obs<TriggeredBiasGroup> => activating.pipe(
     rxop.connect((shared) => rx.merge(
       // Look for "when not inactive" bias groups by searching the activated entries.
       shared.pipe(
-        rxop.collect(([state, source]) => {
-          if (state !== "activated") return undefined;
+        rxop.collect((source) => {
+          if (source.activationState !== "activated") return undefined;
           if (!isBiased(source)) return undefined;
 
           const groups = chain(source.entry.loreBiasGroups)
@@ -52,8 +53,8 @@ export default usModule((_require, exports) => {
       // Look for "when inactive" bias groups by searching the rejections.
       // This intentionally does not include disabled sources; those are disabled!
       shared.pipe(
-        rxop.collect(([state, source]) => {
-          if (state !== "rejected") return undefined;
+        rxop.collect((source) => {
+          if (source.activationState !== "rejected") return undefined;
           if (!isBiased(source)) return undefined;
 
           const groups = chain(source.entry.loreBiasGroups)

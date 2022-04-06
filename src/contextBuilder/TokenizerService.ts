@@ -16,7 +16,8 @@ export interface SyncTokenCodec {
   decode(tokens: number[]): string;
 }
 
-export type TokenCodec = AsyncTokenCodec | SyncTokenCodec;
+export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
+export type TokenCodec = AsyncTokenCodec;
 
 export interface EncodeResult {
   fragments: readonly TextFragment[];
@@ -234,8 +235,8 @@ export default usModule((require, exports) => {
     }
   }
 
-  /** Checks if `value` satisfies the {@link TokenCodec} interface. */
-  const isCodec = (value: any): value is TokenCodec => {
+  /** Checks if `value` satisfies the {@link SomeTokenCodec} interface. */
+  const isCodec = (value: any): value is SomeTokenCodec => {
     if (!isObject(value)) return false;
     if (!("encode" in value)) return false;
     if (!("decode" in value)) return false;
@@ -248,7 +249,7 @@ export default usModule((require, exports) => {
    * Ensures `givenCodec` is a codec, or returns an appropriate global
    * codec instance.
    */
-  const getCodec = (type: TokenizerTypes, givenCodec?: TokenCodec): AsyncTokenCodec => {
+  const getCodec = (type: TokenizerTypes, givenCodec?: SomeTokenCodec): TokenCodec => {
     if (isCodec(givenCodec)) return {
       encode: (text) => Promise.resolve(givenCodec.encode(text)),
       decode: (tokens) => Promise.resolve(givenCodec.decode(tokens))
@@ -274,7 +275,7 @@ export default usModule((require, exports) => {
    * its jobs after the current event loop ends...  But it will still be
    * better than no management at all.
    */
-  const wrapInTaskRunner = (codec: AsyncTokenCodec): AsyncTokenCodec => {
+  const wrapInTaskRunner = (codec: TokenCodec): TokenCodec => {
     const jobSubject = new rx.Subject<Deferred<string| number[]>>();
 
     // This will execute deferred tasks as appropriate.
@@ -299,7 +300,7 @@ export default usModule((require, exports) => {
    * provided, it will be checked to make sure it follows the interface
    * and will be used instead of the global codec, if so.
    */
-  function codecFor(tokenizerType: TokenizerTypes, givenCodec?: TokenCodec) {
+  function codecFor(tokenizerType: TokenizerTypes, givenCodec?: SomeTokenCodec) {
     const codec = getCodec(tokenizerType, givenCodec);
     return wrapInTaskRunner(codec);
   }
