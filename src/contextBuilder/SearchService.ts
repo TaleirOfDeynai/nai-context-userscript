@@ -44,9 +44,11 @@ export default usModule((require, exports) => {
     const totalUnique = textsSearched.size;
     const curSize = resultsCache.size;
 
-    // Maintain a minimum of 20 extra search results.
-    const desiredOverflow = Math.max(20, (totalUnique * 1.1) - totalUnique) | 0;
-    const idealSize = totalUnique + desiredOverflow;
+    // Maintain an overflow of 110% the demand placed on the service.
+    const desiredOverflow = ((totalUnique * 1.1) - totalUnique) | 0;
+    // But we'll keep a minimum size of 50 entries.  That's actually
+    // NAI's vanilla retainment for their memoization.
+    const idealSize = Math.max(50, totalUnique + desiredOverflow);
 
     // If the cache is already within bounds of the ideal, do nothing.
     if (curSize <= idealSize) return;
