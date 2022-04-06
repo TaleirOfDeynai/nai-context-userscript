@@ -78,8 +78,11 @@ export default usModule((require, exports) => {
           // cascade activation is from a direct activation.
           const order = (activated.activations.get("cascade")?.order ?? 0) + 1;
   
-          // Check the keys for all cascading sources against the entry text.
-          const searchResults = searchForLore(activated.entry.text, [...entryToSource.keys()]);
+          // Check the keys for all cascading sources against the entry's
+          // assembled text.
+          const { prefix, suffix } = activated.entry.contextConfig;
+          const text = `${prefix}${activated.entry.text}${suffix}`;
+          const searchResults = searchForLore(text, [...entryToSource.keys()]);
           for (const [entry, results] of searchResults) {
             if (!results.size) continue;
 
