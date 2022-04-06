@@ -15,10 +15,10 @@
             "./typings.d.ts"
         ],
         "paths": {
-            "@utils/*": ["./src/utils/*"],
-            "@nai/*": ["./src/naiModules/*"]
+            "@utils/*": ["./utils/*"],
+            "@nai/*": ["./naiModules/*"]
         },
-        "baseUrl": "."
+        "baseUrl": "./src"
     },
     "exclude": [
         "node_modules"
