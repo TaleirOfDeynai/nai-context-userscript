@@ -18,7 +18,7 @@ import * as Iterables from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import MatcherService from "./MatcherService";
 
-import type { UndefOr } from "@utils/utility-types";
+import type { Maybe, UndefOr } from "@utils/utility-types";
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatchResult } from "./MatcherService";
@@ -176,7 +176,11 @@ export default usModule((require, exports) => {
   }
 
   /** Finds the result with the lowest index of all keys searched. */
-  const findLowestIndex = (results: MatcherResults): UndefOr<[string, MatchResult]> => {
+  const findLowestIndex = (
+    results: Maybe<MatcherResults>
+  ): UndefOr<[string, MatchResult]> => {
+    if (!results) return undefined;
+
     return Iterables.chain(results)
       .collect(([k, v]) => {
         const first = Iterables.first(v);
@@ -197,7 +201,11 @@ export default usModule((require, exports) => {
   };
 
   /** Finds the result with the highest index of all keys searched. */
-  const findHighestIndex = (results: MatcherResults): UndefOr<[string, MatchResult]> => {
+  const findHighestIndex = (
+    results: Maybe<MatcherResults>
+  ): UndefOr<[string, MatchResult]> => {
+    if (!results) return undefined;
+
     return Iterables.chain(results)
       .collect(([k, v]) => {
         const last = Iterables.last(v);
@@ -221,7 +229,10 @@ export default usModule((require, exports) => {
    * Finds the first key in `entryKeys` with a valid match.
    * This emulates NovelAI's "fail fast" search order that it uses in quick-checks.
    */
-  const findLowestInOrder = (results: MatcherResults, entryKeys: string[]): UndefOr<string> => {
+  const findLowestInOrder = (
+    results: MatcherResults,
+    entryKeys: string[]
+  ): UndefOr<string> => {
     if (!results.size) return undefined;
     if (!entryKeys.length) return undefined;
     for (const key of entryKeys)
@@ -321,6 +332,8 @@ export default usModule((require, exports) => {
     getKeys,
     search,
     searchForLore,
+    findLowestIndex,
+    findHighestIndex,
     naiCheckActivation
   });
 });

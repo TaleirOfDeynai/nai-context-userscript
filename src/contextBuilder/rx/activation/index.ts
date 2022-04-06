@@ -7,19 +7,17 @@ import ActEphemeral from "./ephemeral";
 import ActForced from "./forced";
 import ActKeyed from "./keyed";
 
-import type { ContextField } from "@nai/ContextBuilder";
 import type { StoryContent } from "@nai/EventModule";
 import type { ContextSource } from "../../ContextSource";
 import type { SourcePhaseResult } from "../source";
 
 export type ActivationState = "disabled" | "rejected" | "activated";
 
-export type SafeSource<T extends ContextField = ContextField>
-  = Omit<ContextSource<T>, "activations">;
+export interface ActivationResult extends ContextSource {
+  activationState: ActivationState;
+};
 
-export type InFlightResult = [ActivationState, SafeSource];
-
-export type InFlightObservable = rx.Observable<InFlightResult>;
+export type ActivationObservable = rx.Observable<ActivationResult>;
 
 export interface ActivationPhaseResult {
   /** Resolves to a complete {@link Set} of disabled {@link ContextSource}. */
@@ -40,12 +38,8 @@ export interface ActivationPhaseResult {
    * This observable may still be hot and while it is certain that
    * activated sources have activated, they may not have all data in their
    * {@link ContextSource.activations} property set.
-   * 
-   * As such, the sources from this observable have the property masked out
-   * at the type-level.  It is still there, but you should not be accessing
-   * it within this observable.
    */
-  readonly inFlight: InFlightObservable;
+  readonly inFlight: ActivationObservable;
 }
 
 const logger = createLogger("Activation Phase");
@@ -115,13 +109,13 @@ export default usModule((require, exports) => {
 
     const inFlight = rx
       .merge(
-        disabledSources.pipe(rxop.map((s) => ["disabled", s] as InFlightResult)),
-        inFlightRejections.pipe(rxop.map((s) => ["rejected", s] as InFlightResult)),
-        inFlightActivations.pipe(rxop.map((s) => ["activated", s] as InFlightResult))
+        disabledSources.pipe(rxop.map((s) => Object.assign(s, { activationState: "disabled" as const }))),
+        inFlightRejections.pipe(rxop.map((s) => Object.assign(s, { activationState: "rejected" as const }))),
+        inFlightActivations.pipe(rxop.map((s) => Object.assign(s, { activationState: "activated" as const })))
       )
       .pipe(
         logger.measureStream("In-flight Results")
-          .markItems(([status, source]) => `${source.identifier} (${status})`),
+          .markItems((source) => `${source.identifier} (${source.activationState})`),
         rxop.shareReplay()
       );
 

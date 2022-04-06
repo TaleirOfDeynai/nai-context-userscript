@@ -2,15 +2,16 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject, isString } from "@utils/is";
+import { chain } from "@utils/iterables";
 import { whenActive, whenInactive, hasValidPhrase } from "./_shared";
 
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { StoryContent } from "@nai/EventModule";
 import type { LoreEntry, PhraseBiasConfig, Categories } from "@nai/Lorebook";
-import type { SafeSource, InFlightObservable } from "../activation";
+import type { ContextSource } from "../../ContextSource";
+import type { ActivationObservable } from "../activation";
 import type { TriggeredBiasGroup } from "./_shared";
-import { chain } from "@utils/iterables";
 
 type BiasedCategory = Categories.Category & {
   categoryBiasGroups: PhraseBiasConfig[];
@@ -26,7 +27,7 @@ type CategorizedSource = SafeSource<CategorizedField>;
  * Checks each {@link ContextSource} for lore bias group inclusions.
  */
 export default usModule((_require, exports) => {
-  const isCategorized = (source: SafeSource<any>): source is CategorizedSource => {
+  const isCategorized = (source: ContextSource<any>): source is CategorizedSource => {
     const { entry } = source;
     if (!isObject(entry)) return false;
     if (!("category" in entry)) return false;
@@ -45,12 +46,12 @@ export default usModule((_require, exports) => {
     /** The story contents, to source the categories from. */
     storyContent: StoryContent,
     /** The stream of activation results. */
-    activating: InFlightObservable
+    activating: ActivationObservable
   ): Obs<TriggeredBiasGroup> => {
     return activating.pipe(
       // We only want activated entries with categories.
-      rxop.collect(([state, source]) => {
-        if (state !== "activated") return undefined;
+      rxop.collect((source) => {
+        if (source.activationState !== "activated") return undefined;
         if (!isCategorized(source)) return undefined;
         return source;
       }),
