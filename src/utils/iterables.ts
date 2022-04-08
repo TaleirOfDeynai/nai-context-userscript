@@ -2,18 +2,11 @@ import { isString, isIterable, isArray, TypePredicate } from "./is";
 import type { PredicateFn } from "./functions";
 import type { AnyValueOf, Maybe, UndefOr } from "./utility-types";
 
+/** Basic key-value pair, as a tuple. */
+export type KVP<K, V> = readonly [K, V];
+
 /** The primitive data-types. */
-type Primitives = number | string | boolean | Function | {} | null | undefined;
-
-type UnionToIntersection<T>
-  = (T extends any ? (x: T) => any : never) extends
-    (x: infer R) => any ? R : never;
-
-type PartitionResult<KVP> = KVP extends [infer K, infer V] ? [K, V[]] : never;
-type FromPairsResult<KVP>
-  = KVP extends [infer K, infer V]
-    ? K extends string | number ? { [Prop in K]: V } : never
-  : never;
+export type Primitives = number | string | boolean | Function | {} | null | undefined;
 
 export type Flattenable<T>
   = T extends string ? string
@@ -28,6 +21,16 @@ export type TupleTransformFn<TIn, TOut extends readonly Primitives[]> = (value: 
 export type CollectFn<TIn, TOut> = TransformFn<TIn, UndefOr<TOut>>;
 export type TupleCollectFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => UndefOr<[...TOut]>;
 export type TapFn<TValue> = (value: TValue) => unknown;
+
+type UnionToIntersection<T>
+  = (T extends any ? (x: T) => any : never) extends
+    (x: infer R) => any ? R : never;
+
+type PartitionResult<T> = T extends KVP<infer K, infer V> ? readonly [K, V[]] : never;
+type FromPairsResult<T>
+  = T extends KVP<infer K, infer V>
+    ? K extends string | number ? { [Prop in K]: V } : never
+  : never;
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   /** Transforms each element into a tuple. */
@@ -106,9 +109,9 @@ export const countBy = <T>(iter: Iterable<T>, predicateFn: PredicateFn<T>): numb
 /**
  * Creates an object from key-value-pairs.
  */
-export const fromPairs = <KVP extends [string | number, any]>(
-  kvps: Iterable<KVP>
-): UnionToIntersection<FromPairsResult<KVP>> => {
+export const fromPairs = <T extends KVP<string | number, any>>(
+  kvps: Iterable<T>
+): UnionToIntersection<FromPairsResult<T>> => {
   const result: any = {};
   for (const [k, v] of kvps) result[k] = v;
   return result;
@@ -398,15 +401,15 @@ export const groupBy = function*<TValue, TKey>(
   yield* groups;
 };
 
-const partitionKeys = <KVP extends [any, any]>([key]: KVP): KVP[0] => key;
-const partitionValues = <KVP extends [any, any]>([, value]: KVP): KVP[1] => value;
+const partitionKeys = <T extends KVP<any, any>>([key]: T): T[0] => key;
+const partitionValues = <T extends KVP<any, any>>([, value]: T): T[1] => value;
 
 /**
  * Creates an iterable that groups key-value-pairs when they share the same key.
  */
-export const partition = function*<KVP extends [any, any]>(
-  iterable: Iterable<KVP>
-): Iterable<PartitionResult<KVP>> {
+export const partition = function*<T extends KVP<any, any>>(
+  iterable: Iterable<T>
+): Iterable<PartitionResult<T>> {
   for (const [key, values] of groupBy(iterable, partitionKeys)) {
     const group = values.map(partitionValues);
     // @ts-ignore - This is correct.
