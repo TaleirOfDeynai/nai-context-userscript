@@ -7,10 +7,30 @@ import LoreEntryHelpers from "@nai/LoreEntryHelpers";
 import { onEndContext } from "./rx/events";
 
 export interface MatcherFn {
-  (needle: string, matchMode: "first" | "last"): [] | [MatchResult];
-  (needle: string, matchMode?: "all"): MatchResult[];
+  /** Finds the first match in the `haystack`. */
+  (haystack: string, matchMode: "first"): [] | [MatchResult];
+  /** Finds the last match in the `haystack`. */
+  (haystack: string, matchMode: "last"): [] | [MatchResult];
+  /** Finds all matches in the `haystack`.  This is the default behavior. */
+  (haystack: string, matchMode?: "all"): MatchResult[];
+  /**
+   * The actual string provided to initialize the matcher.
+   */
   source: string;
+  /**
+   * The underlying type of the matcher.
+   * - `"simple"` - Matches a word or phrase, as entered.
+   * - `"regex"` - Matches using a user-provided regular expression.
+   */
   type: "simple" | "regex";
+  /**
+   * Whether the matcher is unsuited for single-line matching.
+   * 
+   * Single line is more efficient (due to more aggressive caching), but
+   * regular expressions would need to be analyzed to check to see if
+   * they can cross line boundaries, and I'm not checking for that!
+   */
+  multiline: boolean;
 }
 
 export interface MatchResult {
@@ -112,9 +132,11 @@ export default usModule((require, exports) => {
     // function so that we can maybe add new ones in the future.
     const matcher = dew(() => {
       const [regex, type] = toRegex(key);
+      // Regular expressions are unsafe to use in single-line mode.
+      const multiline = type === "regex";
 
       const impl = (
-        needle: string,
+        haystack: string,
         mode: "all" | "first" | "last" = "all"
       ): MatchResult[] => {
         // Make sure the regex internal state is reset.
@@ -122,15 +144,15 @@ export default usModule((require, exports) => {
 
         switch (mode) {
           case "all": {
-            return Array.from(needle.matchAll(regex)).map(toMatchResult);
+            return Array.from(haystack.matchAll(regex)).map(toMatchResult);
           }
           case "first": {
-            const match = regex.exec(needle);
+            const match = regex.exec(haystack);
             return match ? [toMatchResult(match)] : [];
           }
           case "last": {
             let lastMatch: RegExpMatchArray | null = null;
-            for (const match of needle.matchAll(regex)) lastMatch = match;
+            for (const match of haystack.matchAll(regex)) lastMatch = match;
             return lastMatch ? [toMatchResult(lastMatch as any)] : [];
           }
           default:
@@ -138,7 +160,7 @@ export default usModule((require, exports) => {
         }
       };
 
-      return Object.assign(impl, { source: key, type }) as MatcherFn;
+      return Object.assign(impl, { source: key, type, multiline }) as MatcherFn;
     });
 
     matcherCache.set(key, matcher);

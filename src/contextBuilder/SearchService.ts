@@ -17,11 +17,12 @@ import { isIterable, isString } from "@utils/is";
 import * as Iterables from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import MatcherService from "./MatcherService";
+import TextSplitterService from "./TextSplitterService";
 
 import type { Maybe, UndefOr } from "@utils/utility-types";
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
-import type { MatchResult } from "./MatcherService";
+import type { MatcherFn, MatchResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
 
 export type WithKeys = { keys: string[] };
@@ -33,6 +34,7 @@ const logger = createLogger("SearchService");
 
 export default usModule((require, exports) => {
   const matcherService = MatcherService(require);
+  const splitterService = TextSplitterService(require);
 
   /** A set of texts search since the last maintenance cycle. */
   let textsSearched = new Set<string>();
@@ -87,29 +89,29 @@ export default usModule((require, exports) => {
     textsSearched = new Set();
   });
 
-  /** Internal function that does the searching. */
-  function findMatches(searchText: string, keys: Iterable<string>) {
+  /** Internal function that actually does the searching. */
+  function doMatching(searchText: string, matchers: MatcherFn[]): MatcherResults {
+    if (!matchers.length) return new Map();
+
     const cachedResults: MatcherResults = resultsCache.get(searchText) ?? new Map();
     const searchResults: MatcherResults = new Map();
 
-    for (const key of keys) {
-      const cached = cachedResults.get(key);
+    for (const matcher of matchers) {
+      const { source } = matcher;
+      const cached = cachedResults.get(source);
       if (cached) {
-        // Explicitly mark the key as used.
-        matcherService.markKeyAsUsed(key);
         // Only add the result if it has at least one match.
-        if (cached.length) searchResults.set(key, cached);
+        if (cached.length) searchResults.set(source, cached);
         continue;
       }
 
-      const matcher = matcherService.getMatcherFor(key);
       // These results are shared; make sure the array is immutable.
       const results = Object.freeze(matcher(searchText));
 
       // We do want to store empty results in the cache, but we will omit
       // them from the search result.
-      if (results.length) searchResults.set(key, results);
-      cachedResults.set(key, results);
+      if (results.length) searchResults.set(source, results);
+      cachedResults.set(source, results);
     }
 
     if (!textsSearched.has(searchText)) {
@@ -124,6 +126,23 @@ export default usModule((require, exports) => {
     return searchResults;
   }
 
+  /** Internal function that acts as the entry point to searching. */
+  function findMatches(haystack: TextOrFragment, matchers: MatcherFn[]) {
+    if (isString(haystack)) return doMatching(haystack, matchers);
+
+    // For fragments, we need to apply the offset to the results so
+    // they line up with the fragment's source string.
+    const { content, offset } = haystack;
+    const theResults = doMatching(content, matchers);
+
+    for (const [k, raw] of theResults) {
+      if (raw.length === 0) continue;
+      theResults.set(k, raw.map((m) => ({ ...m, index: offset + m.index })));
+    }
+
+    return theResults;
+  }
+
   /** Makes sure we have an iterable of strings from something matchable. */
   function getKeys(v: Matchable): Iterable<string> {
     if (isIterable(v)) return v;
@@ -131,34 +150,66 @@ export default usModule((require, exports) => {
     return [];
   };
 
-  function search(searchText: TextOrFragment, matchable: Matchable): MatcherResults {
-    const keys = getKeys(matchable);
+  /**
+   * Searches `searchText` using the given `matchable`, which will source the
+   * matchers necessary to perform the search.
+   */
+  function search(
+    /** The text or fragment to search. */
+    searchText: TextOrFragment,
+    /** The set of keys, or something that can provide keys, to match with. */
+    matchable: Matchable,
+    /**
+     * Whether to force multiline mode for all matchers.  Generally best
+     * to provide `true` for text that is expected to be generally static.
+     */
+    forceMultiline = false
+  ): MatcherResults {
+    const matcherChain = Iterables.chain(getKeys(matchable))
+      .map(matcherService.getMatcherFor);
 
-    // For fragments, we need to apply the offset to the results so
-    // they line up with the fragment's source string.
-    if (!isString(searchText)) {
-      const { content, offset } = searchText;
-      const theResults = findMatches(content, keys);
+    // No need to do anything fancy if we're forcing multiline mode.
+    if (forceMultiline)
+      return findMatches(searchText, matcherChain.toArray());
 
-      for (const [k, raw] of theResults) {
-        if (raw.length === 0) continue;
-        theResults.set(k, raw.map((m) => ({ ...m, index: offset + m.index })));
-      }
+    const { multi = [], single = [] } = matcherChain
+      .map((m) => [m.multiline ? "multi" : "single", m] as const)
+      .thru((matchers) => Iterables.partition(matchers))
+      .value(Iterables.fromPairs);
 
-      return theResults;
-    }
-
-    return findMatches(searchText, keys);
+    return new Map([
+      ...findMatches(searchText, multi),
+      ...dew(() => {
+        if (!single.length) return [];
+        return Iterables.chain(splitterService.byLine(searchText))
+          .filter(splitterService.hasWords)
+          .map((frag) => findMatches(frag, single))
+          .flatten()
+          .value();
+      })
+    ]);
   }
 
+  /**
+   * Searches `searchText` using the collective keys of `entries`.  This is a
+   * little faster than calling {@link search search()} with each entry
+   * individually as the matchers can be batched.
+   */
   function searchForLore<T extends WithKeys>(
+    /** The text or fragment to search. */
     searchText: TextOrFragment,
-    entries: T[]
+    /** The entries to include in the search. */
+    entries: T[],
+    /**
+     * Whether to force multiline mode for all matchers.  Generally best
+     * to provide `true` for text that is expected to be generally static.
+     */
+    forceMultiline = false
   ): EntryResults<T> {
     // We just need to grab all the keys from the entries and pull their
     // collective matches.  We'll only run each key once.
     const keySet = new Set(Iterables.flatMap(entries, getKeys));
-    const keyResults = search(searchText, keySet);
+    const keyResults = search(searchText, keySet, forceMultiline);
     
     // Now, we can just grab the results for each entry's keys and assemble
     // the results into a final map.

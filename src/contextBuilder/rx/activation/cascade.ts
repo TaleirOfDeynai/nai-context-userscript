@@ -82,7 +82,7 @@ export default usModule((require, exports) => {
           // assembled text.
           const { prefix, suffix } = activated.entry.contextConfig;
           const text = `${prefix}${activated.entry.text}${suffix}`;
-          const searchResults = searchForLore(text, [...entryToSource.keys()]);
+          const searchResults = searchForLore(text, [...entryToSource.keys()], true);
           for (const [entry, results] of searchResults) {
             if (!results.size) continue;
 
