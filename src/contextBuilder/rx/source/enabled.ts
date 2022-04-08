@@ -24,8 +24,8 @@ export default usModule((_require, exports) => {
 
   const checkCategory = (allCategories: Map<string, Categories.Category>) =>
     (source: ContextSource<any>): boolean => {
-      // The entry must have a category to be disabled through it.
-      if (!categories.isCategorized(source)) return false;
+      // The entry must have a category to even be disabled through it.
+      if (!categories.isCategorized(source)) return true;
 
       const category = allCategories.get(source.entry.category);
       // We'll accept only an explicit `false` to disable it.
