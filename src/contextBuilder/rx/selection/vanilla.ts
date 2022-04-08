@@ -4,29 +4,44 @@ import SearchService from "../../SearchService";
 
 import type { ContextSource } from "../../ContextSource";
 import type { ActivationObservable } from "../activation";
+import { isNumber } from "@utils/is";
 
 export default usModule((require, exports) => {
   const { findHighestIndex } = SearchService(require);
 
+  /** Sorts sources with token reservations first. */
+  const reservationSorter = (a: ContextSource, b: ContextSource) => {
+    const { reservedTokens: ar } = a.entry.contextConfig;
+    const { reservedTokens: br } = b.entry.contextConfig;
+    const aReserved = isNumber(ar) && ar > 0;
+    const bReserved = isNumber(br) && br > 0;
+    if (aReserved === bReserved) return 0;
+    if (aReserved) return -1;
+    return 1;
+  };
+
+  /** Sorts sources by their budget priority, descending. */
   const prioritySorter = (a: ContextSource, b: ContextSource) => {
-    // Budget priority is king.
     const { budgetPriority: ap } = a.entry.contextConfig;
     const { budgetPriority: bp } = b.entry.contextConfig;
-    const diff = bp - ap;
-    if (diff !== 0) return diff;
+    return bp - ap;
+  };
 
-    // Favor forced entries over other entries.
+  /** Sorts sources that were force-activated first. */
+  const forceActivationSorter = (a: ContextSource, b: ContextSource) => {
     const aForced = a.activations.has("forced");
     const bForced = b.activations.has("forced");
     if (aForced === bForced) return 0;
-    if (aForced) return 1;
-    return -1;
+    if (aForced) return -1;
+    return 1;
   };
 
+  /**
+   * Sorts sources that activated by keyword:
+   * - Over those that did not.
+   * - In the order of where the match was found, later in the story first.
+   */
   const keyOrderSorter = (a: ContextSource, b: ContextSource) => {
-    const priorityDiff = prioritySorter(a, b);
-    if (priorityDiff !== 0) return priorityDiff;
-
     // Keyed entries are higher priority than un-keyed entries.
     const aBest = findHighestIndex(a.activations.get("keyed"));
     const bBest = findHighestIndex(b.activations.get("keyed"));
@@ -49,7 +64,21 @@ export default usModule((require, exports) => {
    * user in the report, but it isn't really used for insertion or trimming.
    */
   const makeSelectorStream = (orderByKeyLocations: boolean) => {
-    const sortingFn = orderByKeyLocations ? keyOrderSorter : prioritySorter;
+    /** Sorting functions we're going to use. */
+    const sorters = [
+      reservationSorter,
+      prioritySorter,
+      forceActivationSorter,
+      orderByKeyLocations ? keyOrderSorter : undefined
+    ].filter(Boolean);
+
+    const sortingFn = (a: ContextSource, b: ContextSource) => {
+      for (let i = 0, len = sorters.length; i < len; i++) {
+        const result = sorters[i](a, b);
+        if (result !== 0) return result;
+      }
+      return 0;
+    };
 
     return (sources: ActivationObservable): ActivationObservable => sources.pipe(
       rxop.toArray(),
