@@ -1,13 +1,13 @@
-import * as rx from "@utils/rx";
-import { eachValueFrom } from "rxjs-for-await";
+import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 import ContextBuilder from "@nai/ContextBuilder";
 
 import type { Observable } from "@utils/rx";
 import type { AnyValueOf } from "@utils/utility-types";
-import type { ReportReasons, ContextField } from "@nai/ContextBuilder";
+import type { ReportReasons } from "@nai/ContextBuilder";
 import type { ContextSource, SourceType } from "../../ContextSource";
+import type { ActivationState } from ".";
 
 export type ForcedActivation = AnyValueOf<ReportReasons>;
 
@@ -32,18 +32,15 @@ export default usModule((require, exports) => {
     return undefined;
   };
 
-  async function* impl_checkActivation(sources: Observable<ContextSource>) {
-    for await (const source of eachValueFrom(sources)) {
-      const reason = checkSource(source);
-      if (!reason) continue;
+  const checkActivation = (states: Observable<ActivationState>) => states.pipe(
+    rxop.collect((state) => {
+      const reason = checkSource(state.source);
+      if (!reason) return undefined;
 
-      source.activations.set("forced", reason);
-      yield source;
-    }
-  };
-
-  const checkActivation = (sources: Observable<ContextSource>) =>
-    rx.from(impl_checkActivation(sources));
+      state.activations.set("forced", reason);
+      return state;
+    })
+  );
 
   return Object.assign(exports, { checkActivation });
 });

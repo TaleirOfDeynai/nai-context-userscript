@@ -1,16 +1,16 @@
-import { usModule } from "@utils/usModule";
+import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
+import { usModule } from "@utils/usModule";
+import { isNumber } from "@utils/is";
 import SearchService from "../../SearchService";
 
-import type { ContextSource } from "../../ContextSource";
-import type { ActivationObservable } from "../activation";
-import { isNumber } from "@utils/is";
+import type { ActivatedSource } from "../activation";
 
 export default usModule((require, exports) => {
   const { findHighestIndex } = SearchService(require);
 
   /** Sorts sources with token reservations first. */
-  const reservationSorter = (a: ContextSource, b: ContextSource) => {
+  const reservationSorter = (a: ActivatedSource, b: ActivatedSource) => {
     const { reservedTokens: ar } = a.entry.contextConfig;
     const { reservedTokens: br } = b.entry.contextConfig;
     const aReserved = isNumber(ar) && ar > 0;
@@ -21,14 +21,14 @@ export default usModule((require, exports) => {
   };
 
   /** Sorts sources by their budget priority, descending. */
-  const prioritySorter = (a: ContextSource, b: ContextSource) => {
+  const prioritySorter = (a: ActivatedSource, b: ActivatedSource) => {
     const { budgetPriority: ap } = a.entry.contextConfig;
     const { budgetPriority: bp } = b.entry.contextConfig;
     return bp - ap;
   };
 
   /** Sorts sources that were force-activated first. */
-  const forceActivationSorter = (a: ContextSource, b: ContextSource) => {
+  const forceActivationSorter = (a: ActivatedSource, b: ActivatedSource) => {
     const aForced = a.activations.has("forced");
     const bForced = b.activations.has("forced");
     if (aForced === bForced) return 0;
@@ -41,7 +41,7 @@ export default usModule((require, exports) => {
    * - Over those that did not.
    * - In the order of where the match was found, later in the story first.
    */
-  const keyOrderSorter = (a: ContextSource, b: ContextSource) => {
+  const keyOrderSorter = (a: ActivatedSource, b: ActivatedSource) => {
     // Keyed entries are higher priority than un-keyed entries.
     const aBest = findHighestIndex(a.activations.get("keyed"));
     const bBest = findHighestIndex(b.activations.get("keyed"));
@@ -72,7 +72,7 @@ export default usModule((require, exports) => {
       orderByKeyLocations ? keyOrderSorter : undefined
     ].filter(Boolean);
 
-    const sortingFn = (a: ContextSource, b: ContextSource) => {
+    const sortingFn = (a: ActivatedSource, b: ActivatedSource) => {
       for (let i = 0, len = sorters.length; i < len; i++) {
         const result = sorters[i](a, b);
         if (result !== 0) return result;
@@ -80,7 +80,7 @@ export default usModule((require, exports) => {
       return 0;
     };
 
-    return (sources: ActivationObservable): ActivationObservable => sources.pipe(
+    return (sources: rx.Observable<ActivatedSource>) => sources.pipe(
       rxop.toArray(),
       rxop.tap((arr) => arr.sort(sortingFn)),
       rxop.mergeMap((arr) => arr)

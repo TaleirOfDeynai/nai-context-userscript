@@ -2,7 +2,17 @@ import { isObject, isString } from "@utils/is";
 
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry, PhraseBiasConfig } from "@nai/Lorebook";
+import type { ActivationSource, ActivatedSource, RejectedSource } from "./activation";
 import type { ContextSource } from "../ContextSource";
+
+// Activation stuff.
+
+export const activation = {
+  isActivated: (source: ActivationSource): source is ActivatedSource =>
+    source.activated,
+  isRejected: (source: ActivationSource): source is RejectedSource =>
+    !source.activated
+};
 
 // Category stuff.
 

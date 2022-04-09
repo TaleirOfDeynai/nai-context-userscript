@@ -35,7 +35,7 @@ export default usModule((_require, exports) => {
     return activating.pipe(
       // We only want activated entries with categories.
       rxop.collect((source) => {
-        if (source.activationState !== "activated") return undefined;
+        if (!source.activated) return undefined;
         if (!categories.isCategorized(source)) return undefined;
         return source;
       }),

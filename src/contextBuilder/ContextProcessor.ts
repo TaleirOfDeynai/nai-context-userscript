@@ -78,22 +78,23 @@ export default usModule((require, exports) => {
     const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
     const resolvedCodec = tokenizer.codecFor(tokenizerType, tokenCodec);
 
-    // Start getting the story text, but do not await, as there's plenty
-    // to do while we're waiting for it to come down.
-    const promisedStoryText = getStoryText(
-      storyState, resolvedCodec,
-      maxTokens, givenLength,
-      removeComments
-    );
+    // Defer getting the story text until after we've setup the pipeline.
+    const deferredStoryText = rx
+      .defer(() => getStoryText(
+        storyState, resolvedCodec,
+        maxTokens, givenLength,
+        removeComments
+      ))
+      .pipe(rxop.share());
 
     // Figure out our sources for context content.
     const sourceResults = processing.source.phaseRunner(
-      storyContent, promisedStoryText
+      storyContent, deferredStoryText
     );
 
     // Figure out what to do with all this content.
     const activationResults = processing.activation.phaseRunner(
-      storyContent, promisedStoryText, sourceResults
+      storyContent, deferredStoryText, sourceResults
     );
 
     // Grab the triggered bias groups as content activates.
@@ -106,10 +107,10 @@ export default usModule((require, exports) => {
     //   preContextText: await inFlightStoryText
     // });
 
-    const [disabled, rejected, activated, biasGroups] = await Promise.all([
-      activationResults.disabled,
-      activationResults.rejected,
+    const [activated, rejected, disabled, biasGroups] = await Promise.all([
       activationResults.activated,
+      activationResults.rejected,
+      activationResults.disabled,
       biasGroupResults.biasGroups
     ]);
 

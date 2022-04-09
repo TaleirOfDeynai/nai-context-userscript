@@ -8,11 +8,14 @@ import SourceLore from "./lore";
 import EnabledSeparator from "./enabled";
 
 import type { StoryContent } from "@nai/EventModule";
-import type { ContextSource } from "../../ContextSource";
+import type { EnabledSource, DisabledSource } from "./enabled";
+
+// Re-export these for convenience.
+export { EnabledSource, DisabledSource };
 
 export interface SourcePhaseResult {
-  enabledSources: rx.Observable<ContextSource>,
-  disabledSources: rx.Observable<ContextSource>
+  enabledSources: rx.Observable<EnabledSource>,
+  disabledSources: rx.Observable<DisabledSource>
 }
 
 const logger = createLogger("Source Phase");
@@ -27,13 +30,12 @@ export default usModule((require, exports) => {
 
   function sourcePhase(
     storyContent: StoryContent,
-    promisedStoryText: Promise<string>
+    deferredStoryText: rx.Observable<string>
   ): SourcePhaseResult {
-    const inFlightStory = rx.from(promisedStoryText);
     // Gather our content sources.
     const allSources = rx.merge(
       // Stalling on getting the story text as much as possible.
-      inFlightStory.pipe(
+      deferredStoryText.pipe(
         rxop.map(source.content),
         rxop.mergeMap((contentSourcer) => contentSourcer(storyContent))
       ),

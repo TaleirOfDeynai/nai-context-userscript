@@ -1,14 +1,21 @@
 
-import { partition } from "@utils/rx";
-import { shareReplay } from "@utils/rxop";
+import * as rx from "@utils/rx";
+import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isBoolean, isObject } from "@utils/is";
 import { categories } from "../_shared";
 
-import type { Observable as Obs } from "@utils/rx";
 import type { Categories } from "@nai/Lorebook";
 import type { StoryContent } from "@nai/EventModule";
 import type { ContextSource } from "../../ContextSource";
+
+export interface EnabledSource extends ContextSource {
+  enabled: true;
+};
+
+export interface DisabledSource extends ContextSource {
+  enabled: false;
+};
 
 export default usModule((_require, exports) => {
   const isEnabled = <T extends ContextSource<any>>(source: T): boolean => {
@@ -31,22 +38,29 @@ export default usModule((_require, exports) => {
       // We'll accept only an explicit `false` to disable it.
       return category?.enabled !== false;
     };
+  
+  const toEnabled = (source: ContextSource): EnabledSource =>
+    Object.assign(source, { enabled: true } as const);
+
+  const toDisabled = (source: ContextSource): DisabledSource =>
+    Object.assign(source, { enabled: false } as const);
 
   const separate = <T extends ContextSource>(
     storyContent: StoryContent,
-    sources: Obs<T>
+    sources: rx.Observable<T>
   ) => {
     const catKvps = storyContent.lorebook.categories.map((c) => [c.name, c] as const);
     const isCategoryEnabled = checkCategory(new Map(catKvps));
 
-    const [enabled, disabled] = partition(sources, (source) => {
+    const [enabled, disabled] = rx.partition(sources, (source) => {
       if (!isEnabled(source)) return false;
       if (!isCategoryEnabled(source)) return false;
       return true;
     });
+
     return {
-      enabledSources: enabled.pipe(shareReplay()),
-      disabledSources: disabled.pipe(shareReplay())
+      enabledSources: enabled.pipe(rxop.map(toEnabled), rxop.shareReplay()),
+      disabledSources: disabled.pipe(rxop.map(toDisabled), rxop.shareReplay())
     };
   };
 

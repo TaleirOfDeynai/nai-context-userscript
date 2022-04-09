@@ -1,21 +1,20 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { activation } from "../_shared";
 import Vanilla from "./vanilla";
 
-import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { ContextSource } from "../../ContextSource";
 import type { TokenCodec } from "../../TokenizerService";
-import type { ActivationResult, ActivationPhaseResult } from "../activation";
+import type { ActivatedSource, ActivationPhaseResult } from "../activation";
 
-
-export interface SelectionResult extends ActivationResult {
+export interface SelectionSource extends ActivatedSource {
   selectionOrder: number;
   tokenCount: Promise<number>;
 }
 
-export type SelectionObservable = Obs<SelectionResult>;
+export type SelectionObservable = rx.Observable<SelectionSource>;
 
 export interface SelectionPhaseResult {
   readonly tokenCounts: Promise<Map<ContextSource, number>>;
@@ -39,6 +38,7 @@ export default usModule((require, exports) => {
     const { orderByKeyLocations = false } = storyContent.lorebook.settings ?? {};
 
     const inFlight: SelectionObservable = activationResults.inFlight.pipe(
+      rxop.filter(activation.isActivated),
       selectors.vanilla(orderByKeyLocations),
       rxop.map((source, selectionOrder) => {
         const { contextConfig, text } = source.entry;

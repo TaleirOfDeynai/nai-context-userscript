@@ -5,7 +5,6 @@ import { isArray, isObject } from "@utils/is";
 import { chain } from "@utils/iterables";
 import { biasGroups } from "../_shared";
 
-import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";
@@ -33,12 +32,12 @@ export default usModule((_require, exports) => {
   const createStream = (
     /** The stream of activation results. */
     activating: ActivationObservable
-  ): Obs<TriggeredBiasGroup> => activating.pipe(
+  ): rx.Observable<TriggeredBiasGroup> => activating.pipe(
     rxop.connect((shared) => rx.merge(
       // Look for "when not inactive" bias groups by searching the activated entries.
       shared.pipe(
         rxop.collect((source) => {
-          if (source.activationState !== "activated") return undefined;
+          if (!source.activated) return undefined;
           if (!isBiased(source)) return undefined;
 
           const groups = chain(source.entry.loreBiasGroups)
@@ -54,7 +53,7 @@ export default usModule((_require, exports) => {
       // This intentionally does not include disabled sources; those are disabled!
       shared.pipe(
         rxop.collect((source) => {
-          if (source.activationState !== "rejected") return undefined;
+          if (source.activated) return undefined;
           if (!isBiased(source)) return undefined;
 
           const groups = chain(source.entry.loreBiasGroups)

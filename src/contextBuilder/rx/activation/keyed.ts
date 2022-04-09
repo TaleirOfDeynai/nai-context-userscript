@@ -11,6 +11,7 @@ import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherResults } from "../../SearchService";
 import type { ContextSource } from "../../ContextSource";
 import type { TextOrFragment } from "../../TextSplitterService";
+import type { ActivationState } from ".";
 
 interface SearchableField extends ContextField {
   keys: LoreEntry["keys"];
@@ -41,41 +42,45 @@ export default usModule((require, exports) => {
    */
   async function* impl_checkActivation_batched(
     storyText: TextOrFragment,
-    sources: Obs<ContextSource>
-  ): AsyncIterable<ContextSource> {
+    sources: Obs<ActivationState>
+  ): AsyncIterable<ActivationState> {
     // First, grab all sources with entries that can do keyword searching.
-    const keyedSources = new Map<SearchableSource["entry"], SearchableSource>();
-    for await (const source of eachValueFrom(sources)) {
+    const keyedSources = new Map<SearchableSource["entry"], ActivationState>();
+    for await (const state of eachValueFrom(sources)) {
+      const { source } = state;
       if (!isKeyed(source)) continue;
-      keyedSources.set(source.entry, source);
+      keyedSources.set(source.entry, state);
     }
 
     // Now check all these entries for matches on the story text and
     // yield any that have activated.
     const searchResults = searchForLore(storyText, [...keyedSources.keys()]);
     for (const [entry, results] of searchResults) {
-      const source = keyedSources.get(entry) as SearchableSource;
       if (!results.size) continue;
 
-      source.activations.set("keyed", results);
-      yield source;
+      const state = keyedSources.get(entry) as ActivationState;
+      state.activations.set("keyed", results);
+      yield state;
     }
   }
 
   /** Version that checks the keys on individual entries, one at a time. */
   function impl_checkActivation_individual(
     storyText: TextOrFragment,
-    sources: Obs<ContextSource>
+    sources: Obs<ActivationState>
   ) {
-    return sources.pipe(rxop.collect((source) => {
-      if (!isKeyed(source)) return undefined;
-      const result = search(storyText, source.entry);
+    return sources.pipe(rxop.collect((state) => {
+      if (!isKeyed(state.source)) return undefined;
+
+      const result = search(storyText, state.source.entry);
       if (!result.size) return undefined;
-      return source;
+
+      state.activations.set("keyed", result);
+      return state;
     }));
   }
 
-  const checkActivation = (storyText: TextOrFragment) => (sources: Obs<ContextSource>) =>
+  const checkActivation = (storyText: TextOrFragment) => (sources: Obs<ActivationState>) =>
     rx.from(impl_checkActivation_batched(storyText, sources));
 
   return Object.assign(exports, { checkActivation });

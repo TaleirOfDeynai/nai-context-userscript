@@ -1,20 +1,23 @@
+import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
-import * as rxop from "@utils/rxop";
+import { createLogger } from "@utils/logging";
 import SearchService, { MatcherResults } from "../../SearchService";
 
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
-import type { ContextSource } from "../../ContextSource";
-import { createLogger } from "@utils/logging";
+import type { EnabledSource } from "../source";
+import type { ActivationState } from ".";
 
 interface CascadingField extends ContextField {
   keys: LoreEntry["keys"];
   nonStoryActivatable: LoreEntry["nonStoryActivatable"];
 }
 
-type CascadingSource = ContextSource<CascadingField>;
+type CascadingState = ActivationState<EnabledSource & {
+  entry: CascadingField
+}>;
 
 const logger = createLogger("activation/cascade");
 
@@ -43,8 +46,8 @@ export interface CascadeActivation {
 export default usModule((require, exports) => {
   const { searchForLore } = SearchService(require);
 
-  const isCascading = (source: ContextSource<any>): source is CascadingSource => {
-    const { entry } = source;
+  const isCascading = (state: ActivationState<any>): state is CascadingState => {
+    const { entry } = state.source;
     if (!isObject(entry)) return false;
     if (!("nonStoryActivatable" in entry)) return false;
     if (!entry.nonStoryActivatable) return false;
@@ -53,49 +56,50 @@ export default usModule((require, exports) => {
     return entry.keys.length > 0;
   };
 
-  const checkActivation = (sources: Obs<ContextSource>) =>
-    (directActivations: Obs<ContextSource>): Obs<ContextSource> => sources.pipe(
+  const checkActivation = (sources: Obs<ActivationState>) =>
+    (directActivations: Obs<ActivationState>): Obs<ActivationState> => sources.pipe(
       rxop.filter(isCascading),
       rxop.toArray(),
       // Starting from `directActivations`, we check for cascading activations.
       // Any entries activated by cascade will then go through this `expand`
       // operator themselves, which may activate additional entries and so on
       // until we get through an expansion without activating any new entries.
-      rxop.mergeMap((cascadingSources) => {
-        logger.info("Sources:", cascadingSources);
-        const entryKvps = new Map(cascadingSources.map((s) => [s.entry, s]));
+      rxop.mergeMap((cascadingStates) => {
+        logger.info("Sources:", cascadingStates);
+        const entryKvps = new Map(cascadingStates.map((s) => [s.source.entry, s]));
 
-        function* doCascade(activated: ContextSource) {
+        function* doCascade(activatedState: ActivationState) {
+          const { source: activated } = activatedState;
           // Do not match on the story again.
           if (activated.type === "story") return;
 
-          logger.info("Searching activated:", activated);
+          logger.info("Searching activated:", activatedState);
 
-          const entryToSource = new Map(entryKvps);
+          const entryToState = new Map(entryKvps);
           // Do not cascade off yourself.
-          entryToSource.delete(activated.entry as any);
+          entryToState.delete(activated.entry as any);
           // The cascade's order determines how many degrees of separation a
           // cascade activation is from a direct activation.
-          const order = (activated.activations.get("cascade")?.order ?? 0) + 1;
+          const order = (activatedState.activations.get("cascade")?.order ?? 0) + 1;
   
           // Check the keys for all cascading sources against the entry's
           // assembled text.
           const { prefix, suffix } = activated.entry.contextConfig;
           const text = `${prefix}${activated.entry.text}${suffix}`;
-          const searchResults = searchForLore(text, [...entryToSource.keys()], true);
+          const searchResults = searchForLore(text, [...entryToState.keys()], true);
           for (const [entry, results] of searchResults) {
             if (!results.size) continue;
 
-            const source = entryToSource.get(entry) as CascadingSource;
-            const firstActivation = source.activations.size === 0;
+            const state = entryToState.get(entry) as CascadingState;
+            const firstActivation = state.activations.size === 0;
 
             // Pull the activation data for an upsert.
-            const data = source.activations.get("cascade") ?? { order, matches: new Map() };
+            const data = state.activations.get("cascade") ?? { order, matches: new Map() };
             data.matches.set(activated.entry, results);
-            source.activations.set("cascade", data);
+            state.activations.set("cascade", data);
 
             // If this was the first time this activated, yield it.
-            if (firstActivation) yield source;
+            if (firstActivation) yield state;
           }
         }
 

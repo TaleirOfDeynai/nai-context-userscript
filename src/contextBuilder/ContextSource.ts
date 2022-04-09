@@ -4,22 +4,6 @@ import { assertAs } from "@utils/assert";
 import UUID from "@nai/UUID";
 
 import type * as CB from "@nai/ContextBuilder";
-import type { ConstrainedMap } from "@utils/utility-types";
-import type { ForcedActivation } from "./rx/activation/forced";
-import type { KeyedActivation } from "./rx/activation/keyed";
-import type { EphemeralActivation } from "./rx/activation/ephemeral";
-import type { CascadeActivation } from "./rx/activation/cascade";
-
-/** Just provides a source of types for {@link ActivationMap}. */
-interface ActivationMapping {
-  forced: ForcedActivation;
-  keyed: KeyedActivation;
-  cascade: CascadeActivation;
-  ephemeral: EphemeralActivation;
-}
-
-/** A {@link Map} for types of activations. */
-export type ActivationMap = ConstrainedMap<ActivationMapping>;
 
 export type SourceType
   = "story" | "memory" | "an"
@@ -34,7 +18,6 @@ export interface ContextSource<
   identifier: string;
   type: TType;
   entry: TField;
-  activations: ActivationMap;
 }
 
 export default usModule((require, exports) => {
@@ -72,8 +55,7 @@ export default usModule((require, exports) => {
   ): ContextSource<TField, TType> => {
     return {
       uniqueId: uuid.v4(),
-      identifier, type, entry,
-      activations: new Map()
+      identifier, type, entry
     };
   };
 

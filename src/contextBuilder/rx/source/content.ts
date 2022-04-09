@@ -1,7 +1,8 @@
-import { of } from "@utils/rx";
+import * as rx from "@utils/rx";
 import { usModule } from "@utils/usModule";
 import ContextModule from "@nai/ContextModule";
 import ContextSource from "../../ContextSource";
+
 import type { ContextContent } from "@nai/ContextModule";
 import type { StoryContent } from "@nai/EventModule";
 
@@ -27,7 +28,7 @@ export default usModule((require, exports) => {
       new ContextContent(storyContent.storyContextConfig, storyText),
       ...storyContent.context
     ];
-    return of(...contextChunks.map(toContextSource))
+    return rx.of(...contextChunks.map(toContextSource))
   };
 
   return Object.assign(exports, {
