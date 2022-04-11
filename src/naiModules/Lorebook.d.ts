@@ -33,6 +33,28 @@ export interface LoreEntryConfig {
   nonStoryActivatable: boolean;
   category: string;
   loreBiasGroups: PhraseBiasConfig[];
+
+  /**
+   * An experimental property.  Seems intended to allow control
+   * over whether the context assembler can insert this entry into
+   * other entries that are already inserted into the context.
+   * 
+   * The target entry must have `allowInsertionInside` set to `true`
+   * in order for this to be effective.
+   */
+  allowInnerInsertion?: boolean;
+
+  /**
+   * This is the counter-config to `allowInnerInsertion`.  It
+   * allows another entry to be inserted into this entry after it
+   * has been inserted into the context.  Both entries must have
+   * the respective properties set to `true` for it to be permitted.
+   * 
+   * For the moment, the story content is assumed to have this set to
+   * `true`, regardless of its config's actual setting.  Everything
+   * else is defaulted to `false`.
+   */
+  allowInsertionInside?: boolean;
 }
 
 export interface LoreEntry extends LoreEntryConfig {
