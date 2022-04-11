@@ -123,13 +123,11 @@ export default usModule((require, exports) => {
       rxop.shareReplay()
     );
 
-    // We can only get rejections after all activations have completed,
-    // so we'll have to wait and then check the final activation data
-    // to see who has no activations at all.
-    const whenActivated = inFlightActivations.pipe(rxop.whenCompleted(), rxop.share());
     const inFlightRejections = activationStates.pipe(
-      rxop.delayWhen(() => whenActivated),
-      rxop.filter((state) => state.activations.size === 0),
+      rxop.rejectedBy(inFlightActivations, {
+        source: ({ source }) => source.uniqueId,
+        output: (source) => source.uniqueId
+      }),
       rxop.map(({ source, activations }): RejectedSource => Object.assign(source, {
         activated: false as const,
         activations

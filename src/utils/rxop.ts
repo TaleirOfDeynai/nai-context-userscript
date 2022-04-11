@@ -1,6 +1,9 @@
 import * as rx from "./rx";
 import * as rxop from "rxjs/operators";
+import { dew } from "./dew";
 import { assert } from "./assert";
+import { isFunction } from "./is";
+import { ident } from "./functions";
 
 import type { UndefOr } from "./utility-types";
 
@@ -105,3 +108,53 @@ export const taskRunner = <T, U>(
     )
   );
 };
+
+type KeyFn<T, K> = (value: T) => K;
+type KeyObject<T, U, K> = { source: KeyFn<T, K>, output: KeyFn<U, K> };
+const defaultKeyObject: KeyObject<unknown, unknown, any> = { source: ident, output: ident };
+
+/**
+ * Finds values that were emitted in the source observable, but not emitted
+ * by `output`.  When `output` is a stream forked from the source, this can
+ * be used to figure out what the `output` stream filtered out from the
+ * source.
+ * 
+ * A function can be provided to convert each item into a shared key to
+ * identify each item, in case the items in each observable are differing
+ * instances.  These keys are compared using the semantics of {@link Set sets}
+ * and {@link Map maps}.
+ * 
+ * By default, the {@link ident identity} function is used, comparing
+ * emitted references or primitive values.
+ * 
+ * Both observables must be able to complete and each unique item will
+ * only be emitted once in the resulting observable.
+ */
+function rejectedBy<T>(output: rx.Observable<T>): rx.MonoTypeOperatorFunction<T>;
+function rejectedBy<T, K>(output: rx.Observable<T>, keyFn: KeyFn<T, K>): rx.MonoTypeOperatorFunction<T>;
+function rejectedBy<T, U, K>(output: rx.Observable<U>, keyFn: KeyFn<T | U, K>): rx.MonoTypeOperatorFunction<T>;
+function rejectedBy<T, U, K>(output: rx.Observable<U>, keyBy: KeyObject<T, U, K>): rx.MonoTypeOperatorFunction<T>;
+function rejectedBy<T, U, K>(output: rx.Observable<U>, keyBy: KeyFn<T, K> | KeyObject<T, U, K> = defaultKeyObject) {
+  const { source: sKeyFn, output: oKeyFn } = dew(() => {
+    if (!isFunction(keyBy)) return keyBy;
+    // @ts-ignore - Overloads will error if this does not hold.
+    return { source: keyBy, output: keyBy as KeyFn<U, K> };
+  });
+
+  return (input: rx.Observable<T>) => {
+    const keysOfOutput = output.pipe(
+      rxop.reduce((a, v) => a.add(oKeyFn(v)), new Set<K>())
+    );
+    const mapOfSource = input.pipe(
+      rxop.reduce((a, v) => a.set(sKeyFn(v), v), new Map<K, T>())
+    );
+
+    return rx.forkJoin([mapOfSource, keysOfOutput]).pipe(
+      rx.mergeMap(([sources, outputs]) => {
+        for (const key of outputs) sources.delete(key);
+        return sources.values();
+      })
+    );
+  };
+}
+export { rejectedBy };
