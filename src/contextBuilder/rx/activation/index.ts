@@ -134,15 +134,15 @@ export default usModule((require, exports) => {
         activated: false as const,
         activations
       })),
-      logger.measureStream("In-flight Rejections")
+      logger.measureStream("In-flight Rejections"),
+      rxop.shareReplay()
     );
 
     const inFlight = rx.merge(inFlightRejections, inFlightActivations).pipe(
       logger.measureStream("In-flight Results").markItems((source) => {
         const state = source.activations.size ? "activated" : "rejected";
         return `${source.identifier} (${state})`
-      }),
-      rxop.shareReplay()
+      })
     );
 
     return {
