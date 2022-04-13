@@ -1,11 +1,8 @@
 import { dew } from "@utils/dew";
-import { enableLogging } from "@utils/logging";
 import { makeWrappedRequire, notifyToConsole } from "./require";
 import injectors, { Injector } from "./injectors";
 
 import type { UndefOr } from "@utils/utility-types";
-
-enableLogging();
 
 const injectorMap = dew(() => {
   const result = new Map<string | number, Set<Injector>>();

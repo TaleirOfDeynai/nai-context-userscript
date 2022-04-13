@@ -1,5 +1,6 @@
 import * as rx from "./rx";
 import * as rxop from "./rxop";
+import config from "../config";
 
 interface LoggerMessage {
   origin: string;
@@ -27,7 +28,6 @@ interface MeasureStreamOperator<T> extends rx.OperatorFunction<T, T> {
   ): rx.OperatorFunction<U, U>;
 }
 
-let loggingEnabled = false;
 const omegaLogger = new rx.Subject<LoggerMessage>();
 
 class Logger {
@@ -41,23 +41,23 @@ class Logger {
   }
 
   info = (...data: any[]) => {
-    if (!loggingEnabled) return;
+    if (!config.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   warn = (...data: any[]) => {
-    if (!loggingEnabled) return;
+    if (!config.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   error = (...data: any[]) => {
-    if (!loggingEnabled) return;
+    if (!config.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   dir = (...data: Parameters<Console["dir"]>) => {
-    if (!loggingEnabled) return;
+    if (!config.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   mark = (name: string) => {
-    if (!loggingEnabled) return;
+    if (!config.debugLogging) return;
     performance.mark(`[${this.#origin}] ${name}`);
   };
 
@@ -69,7 +69,7 @@ class Logger {
     /** The name of this measurement. */
     name: string
   ): StopWatch {
-    if (!loggingEnabled) return { start: rx.noop, stop: rx.noop };
+    if (!config.debugLogging) return { start: rx.noop, stop: rx.noop };
 
     const NAME = `[${this.#origin}] ${name}`;
     const START = `[${this.#origin}] START ${name}`;
@@ -105,7 +105,7 @@ class Logger {
     /** A zero-arity function to call after measurement has begun. */
     task: () => Promise<T>
   ): Promise<T> {
-    if (!loggingEnabled) return await task();
+    if (!config.debugLogging) return await task();
 
     const stopWatch = this.stopWatch(name);
     stopWatch.start();
@@ -117,7 +117,7 @@ class Logger {
   measureStream<T>(
     name: string
   ): MeasureStreamOperator<T> {
-    if (!loggingEnabled) {
+    if (!config.debugLogging) {
       return Object.assign((source) => source, {
         markItems: () => (source) => source
       });
@@ -189,5 +189,3 @@ omegaLogger.forEach(({ origin, type, data }) => {
 });
 
 export const createLogger = (origin: string): Logger => new Logger(origin);
-
-export const enableLogging = (): void => (loggingEnabled = true, void 0);
