@@ -7,28 +7,26 @@ import TrimmingProviders from "./TrimmingProviders";
 import TrimmingService from "./TrimmingService";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { StoryState } from "@nai/EventModule";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { ContextConfig } from "@nai/Lorebook";
-import type { Trimmer, ReplayTrimmer, TokenizedContent } from "./TrimmingService";
-import type { TokenCodec } from "./TokenizerService";
+import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
+import type { ContextParams } from "./ParamsService";
 
 export default usModule((require, exports) => {
   const eventModule = require(EventModule);
   const providers = TrimmingProviders(require);
-  const trimmer = TrimmingService(require);
 
   const { asContent } = TextSplitterService(require);
-  const { createTrimmer, execTrimTokens, trimByLength } = trimmer;
+  const { createTrimmer, execTrimTokens, trimByLength } = TrimmingService(require);
 
-  const getBudget = (config: ContextConfig, contextSize: number) => {
+  const getBudget = (config: ContextConfig, contextParams: ContextParams) => {
     // Invalid values default to `contextSize`.
-    if (!isNumber(config.tokenBudget)) return contextSize;
-    if (config.tokenBudget <= 0) return contextSize;
-    // 1 or more are treated as is.
-    if (config.tokenBudget >= 1) return config.tokenBudget;
+    if (!isNumber(config.tokenBudget)) return contextParams.contextSize;
+    if (config.tokenBudget <= 0) return contextParams.contextSize;
+    // 1 or more is converted into an integer, if needed.
+    if (config.tokenBudget >= 1) return config.tokenBudget | 0;
     // Values less than 1 are scaled by the context size.
-    return config.tokenBudget * contextSize;
+    return config.tokenBudget * contextParams.contextSize;
   };
 
   class ContextContent<T extends ContextField = ContextField> {
@@ -36,7 +34,7 @@ export default usModule((require, exports) => {
     constructor(
       origField: T,
       trimmer: Trimmer | ReplayTrimmer,
-      contextSize: number
+      contextParams: ContextParams
     ) {
       const { text, contextConfig, ...fieldConfig } = origField;
       this.#field = origField;
@@ -45,29 +43,28 @@ export default usModule((require, exports) => {
       this.#trimmer = trimmer;
 
       // The starting budget based on the config.
-      this.#currentBudget = getBudget(contextConfig, contextSize);
+      this.#currentBudget = getBudget(contextConfig, contextParams);
     }
 
-    static forField<T extends ContextField>(field: T, codec: TokenCodec, contextSize: number) {
+    static forField<T extends ContextField>(field: T, contextParams: ContextParams) {
       const { text, contextConfig } = field;
       const { prefix, suffix, maximumTrimType, trimDirection: provider } = contextConfig;
       const trimmer = createTrimmer(
-        text, codec,
+        text, contextParams,
         { prefix, suffix, provider, maximumTrimType, preserveEnds: false },
         // Token reservations are most likely to benefit from replay.
         contextConfig.reservedTokens > 0
       );
 
-      return new ContextContent(field, trimmer, contextSize);
+      return new ContextContent(field, trimmer, contextParams);
     }
 
     static forStory(
-      storyState: StoryState,
-      codec: TokenCodec,
-      contextSize: number,
+      contextParams: ContextParams,
       storyLength?: number,
       removeComments: boolean = true
     ): ContextContent {
+      const { storyState, tokenCodec } = contextParams;
       const contextConfig = storyState.storyContent.storyContextConfig;
       const storyText = storyState.storyContent.story.getText();
 
@@ -93,7 +90,7 @@ export default usModule((require, exports) => {
       const { prefix, suffix } = contextConfig;
 
       const trimmer = createTrimmer(
-        innerText, codec,
+        innerText, contextParams,
         { ...trimConfig, prefix, suffix },
         true
       );
@@ -101,7 +98,7 @@ export default usModule((require, exports) => {
       return new ContextContent(
         { text: asContent(innerText), contextConfig },
         trimmer,
-        contextSize
+        contextParams
       );
     }
 

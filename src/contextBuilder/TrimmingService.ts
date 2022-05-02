@@ -1,7 +1,8 @@
 import { dew } from "@utils/dew";
+import { isFunction } from "@utils/is";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
-import { chain, journey, buffer, flatten, flatMap } from "@utils/iterables";
+import { journey, buffer, flatten } from "@utils/iterables";
 import { toReplay, ReplaySource } from "@utils/asyncIterables";
 import TextSplitterService from "./TextSplitterService";
 import TrimmingProviders from "./TrimmingProviders";
@@ -13,8 +14,7 @@ import type { TokenCodec, EncodeResult } from "./TokenizerService";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
-import { ident } from "@utils/functions";
-import { isFunction } from "@utils/is";
+import type { ContextParams } from "./ParamsService";
 
 export interface TrimOptions {
   /**
@@ -110,7 +110,7 @@ export default usModule((require, exports) => {
    */
   function createTrimmer(
     content: TextOrFragment,
-    codec: TokenCodec,
+    contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: true
   ): ReplayTrimmer;
@@ -121,7 +121,7 @@ export default usModule((require, exports) => {
    */
   function createTrimmer(
     content: TextOrFragment,
-    codec: TokenCodec,
+    contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay?: false
   ): Trimmer;
@@ -130,17 +130,19 @@ export default usModule((require, exports) => {
    */
   function createTrimmer(
     content: TextOrFragment,
-    codec: TokenCodec,
+    contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: boolean
   ): Trimmer | ReplayTrimmer;
   // Actual implementation.
   function createTrimmer(
     content: TextOrFragment,
-    codec: TokenCodec,
+    contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay = false
   ): Trimmer {
+    const { tokenCodec } = contextParams;
+
     const config = { ...optionDefaults, ...options };
     const provider = providers.asProvider(config.provider);
     const fragment = provider.preProcess(content);
@@ -168,7 +170,7 @@ export default usModule((require, exports) => {
           }
         });
 
-        const encoding = sequencer.encode(codec, fragments, {
+        const encoding = sequencer.encode(tokenCodec, fragments, {
           prefix, suffix, seedResult
         });
 
@@ -272,13 +274,13 @@ export default usModule((require, exports) => {
     content: TextOrFragment,
     /** The token budget. */
     tokenBudget: number,
-    /** The {@link TokenCodec} to use for token counting. */
-    codec: TokenCodec,
+    /** The context parameters object. */
+    contextParams: ContextParams,
     /** Trimming options. */
     options?: Partial<TrimOptions>
   ): Promise<UndefOr<TokenizedContent>> {
     // Create a single-use trimmer and execute.
-    const trimmer = createTrimmer(content, codec, options);
+    const trimmer = createTrimmer(content, contextParams, options);
     return await execTrimTokens(trimmer, tokenBudget);
   }
 
