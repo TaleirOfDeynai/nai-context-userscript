@@ -1,8 +1,11 @@
 /** May be a value, or may not be. */
 export type Maybe<T> = T | null | undefined;
 
-/** Either a value or `undefined`; when `null` still has meaning. */
+/** Either a value or `undefined`; when `null` is forbidden. */
 export type UndefOr<T> = T | undefined;
+
+/** Either a value or `null`; when `null` has some extra meaning. */
+export type NullOr<T> = T | null;
 
 /** Gets the types of all possible property values on an object. */
 export type AnyValueOf<T extends {}> = T[keyof T];

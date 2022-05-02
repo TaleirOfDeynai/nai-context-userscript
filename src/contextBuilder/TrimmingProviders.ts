@@ -36,12 +36,6 @@ export interface TrimProvider extends Record<TrimType, SplitterFn> {
    * This is typically `true` for `trimTop`.
    */
   reversed: boolean;
-  /**
-   * Whether this provider cannot perform sequencing.
-   * 
-   * This is typically `true` for `doNotTrim`.
-   */
-  noSequencing: boolean;
 }
 
 type CommonProviders = Record<TrimDirection, TrimProvider>;
@@ -82,24 +76,22 @@ export default usModule((require, exports) => {
       newline: splitterService.byLine,
       sentence: splitterService.bySentence,
       token: splitterService.byWord,
-      reversed: false,
-      noSequencing: false
+      reversed: false
     }),
     trimTop: Object.freeze({
       preProcess: splitterService.asFragment,
       newline: splitterService.byLineFromEnd,
       sentence: (text) => iterReverse(splitterService.bySentence(text)),
       token: (text) => iterReverse(splitterService.byWord(text)),
-      reversed: true,
-      noSequencing: false
+      reversed: true
     }),
     doNotTrim: Object.freeze({
       preProcess: splitterService.asFragment,
-      newline: noop,
+      // Do no actual splitting; just return an array with a single element.
+      newline: (inputText: TextFragment) => [inputText],
       sentence: noop,
       token: noop,
-      reversed: false,
-      noSequencing: true
+      reversed: false
     })
   });
 
@@ -234,8 +226,6 @@ export default usModule((require, exports) => {
     maximumTrimType: TrimType
   ): TextSequencer[] => {
     const p = asProvider(provider);
-    assert("Expected provider to support sequencing.", !p.noSequencing)
-
     const order = dew(() => {
       switch (maximumTrimType) {
         case "token": return TRIM_ORDER;

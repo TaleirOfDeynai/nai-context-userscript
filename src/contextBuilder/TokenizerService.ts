@@ -20,8 +20,8 @@ export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
 export type TokenCodec = AsyncTokenCodec;
 
 export interface EncodeResult {
-  fragments: readonly TextFragment[];
-  tokens: readonly number[];
+  readonly fragments: readonly TextFragment[];
+  readonly tokens: readonly number[];
 }
 
 export interface StreamEncodeOptions {
@@ -30,7 +30,7 @@ export interface StreamEncodeOptions {
   /** A string to be appended to each intermediate result. */
   suffix?: string;
   /** A previous result to continue from. */
-  seedResult?: Readonly<EncodeResult>;
+  seedResult?: EncodeResult;
   /** How many tokens to set aside as unverified between encodings. */
   bufferSize?: number;
 }

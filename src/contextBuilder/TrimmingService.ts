@@ -2,17 +2,21 @@ import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { chain, journey, buffer, flatten, flatMap } from "@utils/iterables";
+import { toReplay, ReplaySource } from "@utils/asyncIterables";
 import TextSplitterService from "./TextSplitterService";
 import TrimmingProviders from "./TrimmingProviders";
 
 import type { UndefOr } from "@utils/utility-types";
+import type { ReplayWrapper } from "@utils/asyncIterables";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TokenCodec, EncodeResult } from "./TokenizerService";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
+import { ident } from "@utils/functions";
+import { isFunction } from "@utils/is";
 
-export interface CommonTrimOptions {
+export interface TrimOptions {
   /**
    * An explicit {@link TrimProvider} to use or a {@link TrimDirection}
    * indicating the common provider to use.
@@ -20,7 +24,7 @@ export interface CommonTrimOptions {
   provider: TrimDirection | TrimProvider;
   /**
    * The maximum {@link TrimType} allowed.  Ignored if
-   * {@link CommonTrimOptions.provider provider} is set to `doNotTrim`.
+   * {@link TrimOptions.provider provider} is set to `doNotTrim`.
    */
   maximumTrimType: TrimType;
   /**
@@ -29,43 +33,68 @@ export interface CommonTrimOptions {
    * Setting this to `true` will ensure these fragments are not lost.
    */
   preserveEnds: boolean;
-}
 
-export interface TokenTrimOptions extends CommonTrimOptions {
   prefix: ContextConfig["prefix"];
   suffix: ContextConfig["suffix"];
 }
 
-export interface TrimResult {
+export interface TrimmedContent {
   /** The prefix used during the trim. */
-  prefix: ContextConfig["prefix"];
-  /** The content of the trimmed text. */
-  fragment: TextFragment;
+  readonly prefix: ContextConfig["prefix"];
+  /** The inner fragment of the trimmed text. */
+  readonly fragment: TextFragment;
   /** The suffix used during the trim. */
-  suffix: ContextConfig["suffix"];
-  /** 
-   * Count of tokens that make up the string resulting from concatenating
-   * `prefix`, `content`, and `suffix`.
-   */
-  tokenCount: number;
+  readonly suffix: ContextConfig["suffix"];
 }
 
-type TrimExecResult = [content: TextFragment, tokenCount: number];
+export interface TokenizedContent extends TrimmedContent {
+  /**
+   * The array of tokens for the full content, built from the concatenation
+   * of `prefix`, `content`, and `suffix`.
+   */
+  readonly tokens: readonly number[];
+}
+
+export interface TrimResult extends EncodeResult {
+  split(): AsyncIterable<TrimResult>;
+}
+
+export interface Trimmer extends AsyncIterable<TrimResult> {
+  prefix: string;
+  fragment: TextFragment;
+  suffix: string;
+};
+
+export interface ReplayTrimResult extends EncodeResult {
+  split(): ReplayWrapper<ReplayTrimResult>;
+}
+
+export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
+  prefix: string;
+  fragment: TextFragment;
+  suffix: string;
+};
+
+/**
+ * Basically a compatibility identity function for {@link toReplay}.
+ * If a zero-arity async generator function is given, it calls it and
+ * returns the async iterable.
+ */
+const noReplay = <T>(source: ReplaySource<T>): AsyncIterable<T> =>
+  isFunction(source) ? source() : source;
+
+const EMPTY = async function*() {};
 
 export default usModule((require, exports) => {
   const splitterService = TextSplitterService(require);
   const providers = TrimmingProviders(require);
 
-  const { hasWords, asContent, asFragment, mergeFragments } = splitterService;
+  const { hasWords, asContent, mergeFragments } = splitterService;
 
-  const commonDefaults: CommonTrimOptions = {
+  const optionDefaults: TrimOptions = {
     provider: "doNotTrim",
     maximumTrimType: "token",
-    preserveEnds: true
-  };
-
-  const tokenDefaults: TokenTrimOptions = {
-    ...commonDefaults,
+    preserveEnds: true,
     prefix: "",
     suffix: ""
   };
@@ -75,107 +104,156 @@ export default usModule((require, exports) => {
   // PS: it was straight-forward and now it is not.
 
   /**
+   * Creates a trimmer that provides replay caching, which can save work,
+   * at the cost of a larger memory footprint, if the content may need to
+   * be trimmed multiple times.
+   */
+  function createTrimmer(
+    content: TextOrFragment,
+    codec: TokenCodec,
+    options: Partial<TrimOptions>,
+    doReplay: true
+  ): ReplayTrimmer;
+  /**
+   * Creates a trimmer that provides no replay caching.  If the content
+   * needs to be trimmed multiple times, it will need to re-run the token
+   * encoder on fragments it has already encoded before.
+   */
+  function createTrimmer(
+    content: TextOrFragment,
+    codec: TokenCodec,
+    options?: Partial<TrimOptions>,
+    doReplay?: false
+  ): Trimmer;
+  /**
+   * Creates a trimmer.  It is ambiguous whether or not it does replay caching.
+   */
+  function createTrimmer(
+    content: TextOrFragment,
+    codec: TokenCodec,
+    options: Partial<TrimOptions>,
+    doReplay: boolean
+  ): Trimmer | ReplayTrimmer;
+  // Actual implementation.
+  function createTrimmer(
+    content: TextOrFragment,
+    codec: TokenCodec,
+    options?: Partial<TrimOptions>,
+    doReplay = false
+  ): Trimmer {
+    const config = { ...optionDefaults, ...options };
+    const provider = providers.asProvider(config.provider);
+    const fragment = provider.preProcess(content);
+    const sequencers = providers.getSequencersFrom(provider, config.maximumTrimType);
+    const { prefix, suffix } = config;
+    const wrapperFn = doReplay ? toReplay : noReplay;
+
+    const nextSplit = (
+      content: TextFragment,
+      sequencers: TextSequencer[],
+      preserveMode: "initial" | "ends" | "none",
+      seedResult?: Readonly<EncodeResult>
+    ) => {
+      if (sequencers.length === 0) return EMPTY;
+
+      const [sequencer, ...restSequencers] = sequencers;
+
+      return async function*() {
+        const fragments = dew(() => {
+          const splitFrags = sequencer.splitUp(content);
+          switch (preserveMode) {
+            case "ends": return splitFrags;
+            case "initial": return flatten(buffer(splitFrags, hasWords, false));
+            default: return journey(splitFrags, hasWords);
+          }
+        });
+
+        const encoding = sequencer.encode(codec, fragments, {
+          prefix, suffix, seedResult
+        });
+
+        let lastResult = seedResult;
+        for await (const curResult of encoding) {
+          // `lastResult` is a mutable variable.  Copy the reference into a
+          // block-scoped constant.
+          const capturedLastResult = lastResult;
+          yield Object.freeze(Object.assign(curResult, {
+            split() {
+              const nextChunk = sequencer.prepareInnerChunk(curResult, capturedLastResult);
+
+              return wrapperFn(nextSplit(
+                nextChunk,
+                restSequencers,
+                // Use "initial" mode for recursive calls instead of "none".
+                preserveMode === "ends" ? "ends" : "initial",
+                capturedLastResult
+              ));
+            }
+          }));
+          lastResult = curResult;
+        }
+      };
+    }
+
+    return Object.assign(
+      wrapperFn(nextSplit(
+        fragment,
+        sequencers,
+        config.preserveEnds ? "ends" : "none"
+      )),
+      { prefix, fragment, suffix }
+    );
+  }
+
+  /**
    * Given a sequence of text fragments and a token count, builds a complete
    * text fragment.
    */
   const tokenResultFrom = (
+    prefix: string,
     fragParts: readonly TextFragment[],
-    tokenCount: number
-  ): TrimExecResult => {
+    suffix: string,
+    tokens: readonly number[]
+  ): TokenizedContent => {
     assert("Expected at least one text fragment.", fragParts.length > 0);
     const content = fragParts.map(asContent).join("");
     const [{ offset }] = fragParts;
-    return [{ content, offset }, tokenCount];
+    return {
+      prefix, suffix, tokens,
+      fragment: { content, offset }
+    }
   };
 
   /**
-   * For absolute consistency in how trimming behaves, this will split
-   * `content` by the maximum trim allowed (except `token`) and discard
-   * non-content fragments if `preserveEnds` is `false`.
-   * 
-   * Use this whenever you're not using sequenced trimming.
+   * Executes the given `trimmer`, searching for a result that is below the
+   * given `tokenBudget`.
    */
-  const makeConsistent = (
-    content: TextFragment,
-    provider: TrimProvider,
-    maximumTrim: TrimType,
-    preserveEnds: boolean
-  ) => {
-    const newlineOnly = maximumTrim === "newline";
-    const fragments = chain(provider.newline(content))
-      .thru((frags) => newlineOnly ? frags : flatMap(frags, provider.sentence))
-      .thru((frags) => preserveEnds ? frags : journey(frags, hasWords))
-      .toArray();
-    
-    if (provider.reversed) fragments.reverse();
-    return fragments;
-  };
-
-  /** A special execution function just for `noTrim`. */
-  async function execNoTrimTokens(
-    prefix: string, fragments: TextFragment[], suffix: string,
-    tokenBudget: number, codec: TokenCodec
-  ): Promise<UndefOr<TrimExecResult>> {
-    const fullText = [prefix, ...fragments.map(asContent), suffix].join("");
-    const tokenCount = (await codec.encode(fullText)).length;
-    if (tokenCount > tokenBudget) return undefined;
-    return tokenResultFrom(fragments, tokenCount);
-  };
-
   async function execTrimTokens(
-    sequencers: TextSequencer[],
-    prefix: string, content: TextFragment, suffix: string,
-    tokenBudget: number,
-    preserveMode: "initial" | "ends" | "none",
-    codec: TokenCodec,
-    seedResult?: Readonly<EncodeResult>
-  ): Promise<UndefOr<TrimExecResult>> {
-    // If we have no sequencers left, end recursion.
-    if (!sequencers.length) return undefined;
-    // Split the current sequencer from the rest.
-    const [sequencer, ...restSequencers] = sequencers;
+    trimmer: Trimmer,
+    tokenBudget: number
+  ): Promise<UndefOr<TokenizedContent>> {
+    // Ensue the budget is valid.
+    tokenBudget = Math.max(0, tokenBudget);
 
-    const fragments = dew(() => {
-      const splitFrags = sequencer.splitUp(content);
-      switch (preserveMode) {
-        case "ends": return splitFrags;
-        case "initial": return flatten(buffer(splitFrags, hasWords, false));
-        default: return journey(splitFrags, hasWords);
-      }
-    });
-    
-    const encoding = sequencer.encode(codec, fragments, {
-      prefix, suffix, seedResult
-    });
-    
-    let lastResult = seedResult;
-    for await (const curResult of encoding) {
-      if (curResult.tokens.length <= tokenBudget) {
-        lastResult = curResult;
-        continue;
-      }
-      // We've busted the budget.  The problematic fragment can be gleaned
-      // from the difference in the `fragments` of our last and current
-      // results.  However, we do need to account for trim direction.
-      const nextChunk = sequencer.prepareInnerChunk(curResult, lastResult);
-      const innerResult = await execTrimTokens(
-        restSequencers,
-        prefix, nextChunk, suffix,
-        tokenBudget,
-        // Use "initial" mode for recursive calls instead of "none".
-        preserveMode === "ends" ? "ends" : "initial",
-        codec,
-        lastResult
-      );
+    /** The current iterator; we'll change this when we split. */
+    let iterator: AsyncIterable<TrimResult> = trimmer;
+    /** The last in-budget result. */
+    let lastResult: UndefOr<TrimResult> = undefined;
 
-      // Use this result if we got one...
-      if (innerResult) return innerResult;
-      // ...and the current `lastResult` otherwise.
-      break;
+    for await (const curResult of iterator) {
+      if (curResult.tokens.length <= tokenBudget) lastResult = curResult;
+      // We've busted the budget.  We can simply attempt to split into
+      // the current result.  If it yields something, this loop may
+      // continue.  If not, we'll end it here.
+      else iterator = curResult.split();
     }
 
-    if (!lastResult) return undefined;
-    return tokenResultFrom(lastResult.fragments, lastResult.tokens.length);
+    return !lastResult ? undefined : tokenResultFrom(
+      trimmer.prefix,
+      lastResult.fragments,
+      trimmer.suffix,
+      lastResult.tokens
+    );
   }
 
   /**
@@ -184,6 +262,10 @@ export default usModule((require, exports) => {
    * 
    * Returns `undefined` if the content could not be trimmed to fit the
    * desired budget with the given constraints.
+   * 
+   * This function creates a new {@link Trimmer} on the fly.  If you have a
+   * {@link ReplayTrimmer} for this content already, call {@link execTrimTokens}
+   * directly and pass it in to avoid repeat work.
    */
   async function trimByTokens(
     /** The content to trim. */
@@ -193,63 +275,11 @@ export default usModule((require, exports) => {
     /** The {@link TokenCodec} to use for token counting. */
     codec: TokenCodec,
     /** Trimming options. */
-    options?: Partial<TokenTrimOptions>
-  ): Promise<UndefOr<TrimResult>> {
-    const { prefix, suffix, preserveEnds, provider: srcProvider, maximumTrimType }
-      = { ...tokenDefaults, ...options };
-
-    const provider = providers.asProvider(srcProvider);
-    const fragment = provider.preProcess(content);
-    tokenBudget = Math.max(0, tokenBudget);
-
-    // It's pretty common to hear "one token is around 4 characters" tossed
-    // around.  We'll use a conservative value of `3.5` to guesstimate how
-    // likely we are to bust the budget.  If we're below this threshold, 
-    // we'll hail-mary on doing a single, bulk encode as a sanity check.
-    // Otherwise, we'll immediately take the longer and more thorough route.
-    if (provider.noSequencing || fragment.content.length <= (tokenBudget * 3.5)) {
-      const fragments = [...makeConsistent(
-        fragment, provider, maximumTrimType, preserveEnds
-      )];
-
-      // The provider may do its own fragment filtering.
-      if (!fragments.length) return undefined;
-
-      const noTrimResult = await execNoTrimTokens(
-        prefix, fragments, suffix,
-        tokenBudget, codec
-      );
-
-      // No need to go any further if we have a result.
-      if (noTrimResult) return {
-        prefix,
-        fragment: noTrimResult[0],
-        suffix,
-        tokenCount: noTrimResult[1]
-      };
-
-      // We're also done if we can't do sequencer trimming.
-      if (provider.noSequencing) return undefined;
-    }
-
-    // Now we get complicated!
-    const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
-    const complexResult = await execTrimTokens(
-      sequencers,
-      prefix, fragment, suffix, 
-      tokenBudget,
-      preserveEnds ? "ends" : "none",
-      codec
-    );
-
-    if (complexResult) return {
-      prefix,
-      fragment: complexResult[0],
-      suffix,
-      tokenCount: complexResult[1]
-    };
-
-    return undefined;
+    options?: Partial<TrimOptions>
+  ): Promise<UndefOr<TokenizedContent>> {
+    // Create a single-use trimmer and execute.
+    const trimmer = createTrimmer(content, codec, options);
+    return await execTrimTokens(trimmer, tokenBudget);
   }
 
   function* execTrimLength(
@@ -305,35 +335,21 @@ export default usModule((require, exports) => {
    * Returns `undefined` if the content could not be trimmed to the desired
    * length with the given constraints.
    * 
-   * Unlike {@link trimByTokens}, this function does not support the
-   * {@link TokenTrimOptions.prefix prefix} or {@link TokenTrimOptions.suffix suffix}
-   * options.  Just subtract the lengths of your prefix and suffix from
-   * the `maximumLength` instead.
+   * If the {@link TrimOptions.prefix prefix} or {@link TrimOptions.suffix suffix}
+   * options are provided, their length will be subtracted from `maximumLength`
+   * prior to performing the trim.
    */
   function trimByLength(
     content: TextOrFragment,
     maximumLength: number,
-    options?: Partial<CommonTrimOptions>
-  ): UndefOr<TextFragment> {
-    const { preserveEnds, provider: srcProvider, maximumTrimType }
-      = { ...commonDefaults, ...options };
+    options?: Partial<TrimOptions>
+  ): UndefOr<TrimmedContent> {
+    const { prefix, suffix, preserveEnds, provider: srcProvider, maximumTrimType }
+      = { ...optionDefaults, ...options };
 
     const provider = providers.asProvider(srcProvider);
     const fragment = provider.preProcess(content);
-    maximumLength = Math.max(0, maximumLength);
-
-    // Do the easy things.
-    if (fragment.content.length <= maximumLength) {
-      const fragments = [...makeConsistent(
-        fragment, provider, maximumTrimType, preserveEnds
-      )];
-
-      // The provider may do its own fragment filtering.
-      if (!fragments.length) return undefined;
-      return mergeFragments(fragments);
-    }
-
-    if (provider.noSequencing) return undefined;
+    maximumLength = Math.max(0, maximumLength - (prefix.length + suffix.length));
 
     // Now we can trim.
     const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
@@ -344,10 +360,17 @@ export default usModule((require, exports) => {
     if (trimmedFrags.length === 0) return undefined;
     // Un-reverse if the provider runs in reverse.
     if (provider.reversed) trimmedFrags.reverse();
-    return mergeFragments(trimmedFrags);
+    
+    return {
+      prefix,
+      fragment: mergeFragments(trimmedFrags),
+      suffix
+    };
   }
 
   return Object.assign(exports, {
+    createTrimmer,
+    execTrimTokens,
     trimByTokens,
     trimByLength
   });

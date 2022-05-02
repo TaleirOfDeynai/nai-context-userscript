@@ -4,7 +4,7 @@ import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import ContextBuilder from "@nai/ContextBuilder";
-import EventModule, { StoryContent, StoryState} from "@nai/EventModule";
+import EventModule, { StoryContent, StoryState } from "@nai/EventModule";
 import AppConstants from "@nai/AppConstants";
 import TokenizerHelpers from "@nai/TokenizerHelpers";
 import ContextModule from "@nai/ContextModule";
@@ -58,7 +58,7 @@ export default usModule((require, exports) => {
 
     if (storyLength) {
       const result = trimByLength(sourceText, storyLength, trimOptions);
-      return result?.content ?? "";
+      return result?.fragment.content ?? "";
     }
     else {
       const result = await trimByTokens(sourceText, tokenLimit, tokenCodec, trimOptions);
