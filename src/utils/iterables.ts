@@ -16,6 +16,7 @@ export type FlatElementOf<T> = T extends Iterable<infer TEl> ? Flattenable<TEl> 
 
 export type ElementOf<T> = T extends Iterable<infer TEl> ? TEl : never;
 
+export type ReduceFn<TIn, TOut, TInit = TOut> = (accumulator: TOut | TInit, currentValue: TIn) => TOut;
 export type TransformFn<TIn, TOut> = (value: TIn) => TOut;
 export type TupleTransformFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => [...TOut];
 export type CollectFn<TIn, TOut> = TransformFn<TIn, UndefOr<TOut>>;
@@ -33,6 +34,8 @@ type FromPairsResult<T>
   : never;
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
+  /** Reduces the iterable to a single value. */
+  reduce<TOut, TInit = TOut>(initialValue: TInit, reducer: ReduceFn<ElementOf<TIterIn>, TOut, TInit>): TInit | TOut;
   /** Transforms each element into a tuple. */
   map<TOut extends readonly Primitives[]>(xformFn: TupleTransformFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
   /** Transforms each element. */
@@ -76,6 +79,15 @@ declare global {
     filter(predicate: BooleanConstructor): Exclude<T, null | undefined>[];
   }
 }
+
+/**
+ * Converts the given iterable into a readonly array, if needed.
+ */
+export const toImmutable = <T>(iterable: Iterable<T>): readonly T[] => {
+  if (!isArray(iterable)) return Object.freeze([...iterable]);
+  if (Object.isFrozen(iterable)) return iterable;
+  return Object.freeze(iterable.slice());
+};
 
 /**
  * Gets the first element of an iterable or `undefined` if it has none.
@@ -382,6 +394,22 @@ export const filterIter = function*<T extends Iterable<any>>(
       yield value;
 };
 
+export const reduceIter = function<TIter extends Iterable<any>, TOut, TInit = TOut>(
+  iterable: TIter,
+  initialValue: TInit,
+  reducer: ReduceFn<ElementOf<TIter>, TOut, TInit>
+): TInit | TOut {
+  // Fast-path for array instances.  We do need to adapt the `reducer`,
+  // since `Array#reduce` passes additional arguments to it that can
+  // break things like `Math.min`.
+  if (isArray(iterable))
+    return iterable.reduce((p, v) => reducer(p, v), initialValue);
+
+  let acc: TInit | TOut = initialValue;
+  for (const value of iterable) acc = reducer(acc, value);
+  return acc;
+};
+
 /**
  * Creates an iterable that groups values based on a transformation function.
  */
@@ -541,6 +569,7 @@ function chain(): ChainComposition<[]>;
 function chain(iterable?: any) {
   iterable = iterable ?? [];
   return {
+    reduce: (init, reducer) => reduceIter(iterable, init, reducer),
     map: (transformFn) => chain(mapIter(iterable, transformFn)),
     flatten: () => chain(flatten(iterable)),
     filter: (predicateFn) => chain(filterIter(iterable, predicateFn)),

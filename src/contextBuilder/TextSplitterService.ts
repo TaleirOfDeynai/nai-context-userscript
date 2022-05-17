@@ -107,8 +107,10 @@ export default usModule((require, exports) => {
 
   /** Builds a {@link TextFragment} given some inputs. */
   const resultFrom = (content: string, offset: number, source?: TextOrFragment): TextFragment => {
-    if (!source || isString(source)) return { content, offset };
-    return { content, offset: source.offset + offset };
+    const result
+      = !source || isString(source) ? { content, offset }
+      : { content, offset: source.offset + offset };
+    return Object.freeze(result);
   };
 
   /** Standardizes on text fragments for processing. */
@@ -135,6 +137,30 @@ export default usModule((require, exports) => {
     const content = parts.map(asContent).join("");
     const [{ offset }] = parts;
     return { content, offset };
+  };
+
+  /**
+   * Splits a text fragment at a specific offset.  The offset should be
+   * relative to the source text and within the bounds of the fragment.
+   */
+  const splitFragmentAt = (
+    fragment: TextFragment,
+    cutOffset: number
+  ): [TextFragment, TextFragment] => {
+    const { offset, content } = fragment;
+    assert(
+      "Expected cut offset to be in bounds of the fragment.",
+      cutOffset >= offset && cutOffset <= offset + content.length
+    );
+
+    // Get the relative position of the offset.
+    const position = cutOffset - offset;
+    const before = content.slice(0, position);
+    const after = content.slice(position);
+    return [
+      resultFrom(before, 0, fragment),
+      resultFrom(after, before.length, fragment)
+    ];
   };
   
   /**
@@ -337,6 +363,7 @@ export default usModule((require, exports) => {
     createFragment: resultFrom,
     mergeFragments,
     asFragment,
-    asContent
+    asContent,
+    splitFragmentAt
   });
 });

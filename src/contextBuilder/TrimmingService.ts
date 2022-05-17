@@ -42,7 +42,7 @@ export interface TrimmedContent {
   /** The prefix used during the trim. */
   readonly prefix: ContextConfig["prefix"];
   /** The inner fragment of the trimmed text. */
-  readonly fragment: TextFragment;
+  readonly fragments: readonly TextFragment[];
   /** The suffix used during the trim. */
   readonly suffix: ContextConfig["suffix"];
 }
@@ -213,17 +213,12 @@ export default usModule((require, exports) => {
    */
   const tokenResultFrom = (
     prefix: string,
-    fragParts: readonly TextFragment[],
+    fragments: readonly TextFragment[],
     suffix: string,
     tokens: readonly number[]
   ): TokenizedContent => {
-    assert("Expected at least one text fragment.", fragParts.length > 0);
-    const content = fragParts.map(asContent).join("");
-    const [{ offset }] = fragParts;
-    return {
-      prefix, suffix, tokens,
-      fragment: { content, offset }
-    }
+    assert("Expected at least one text fragment.", fragments.length > 0);
+    return { prefix, suffix, tokens, fragments };
   };
 
   /**
@@ -365,7 +360,7 @@ export default usModule((require, exports) => {
     
     return {
       prefix,
-      fragment: mergeFragments(trimmedFrags),
+      fragments: trimmedFrags,
       suffix
     };
   }
