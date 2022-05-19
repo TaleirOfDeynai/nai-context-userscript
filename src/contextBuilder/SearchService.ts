@@ -16,15 +16,18 @@ import { usModule } from "@utils/usModule";
 import { isIterable, isString } from "@utils/is";
 import * as Iterables from "@utils/iterables";
 import { createLogger } from "@utils/logging";
-import MatcherService from "./MatcherService";
-import TextSplitterService from "./TextSplitterService";
+import $MatcherService from "./MatcherService";
+import $TextSplitterService from "./TextSplitterService";
+import $TextAssembly from "./TextAssembly";
 
 import type { Maybe, UndefOr } from "@utils/utility-types";
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherFn, MatchResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
+import type { TextAssembly } from "./TextAssembly";
 
+export type Searchable = TextOrFragment | TextAssembly;
 export type WithKeys = { keys: string[] };
 export type Matchable = Iterable<string> | WithKeys;
 export type MatcherResults = Map<string, readonly MatchResult[]>;
@@ -33,8 +36,9 @@ export type EntryResults<T extends WithKeys> = Map<T, MatcherResults>;
 const logger = createLogger("SearchService");
 
 export default usModule((require, exports) => {
-  const matcherService = MatcherService(require);
-  const splitterService = TextSplitterService(require);
+  const matcherService = $MatcherService(require);
+  const splitterService = $TextSplitterService(require);
+  const { TextAssembly } = $TextAssembly(require);
 
   /** A set of texts search since the last maintenance cycle. */
   let textsSearched = new Set<string>();
@@ -150,40 +154,53 @@ export default usModule((require, exports) => {
     return [];
   };
 
+  /** Converts something searchable into something usable for by-line matching. */
+  const getForLines = (text: Searchable): Iterable<TextOrFragment> =>
+    text instanceof TextAssembly ? text : [text];
+
+  /** Converts something searchable into something usable for full-text matching. */
+  const getForFull = (text: Searchable): TextOrFragment =>
+    text instanceof TextAssembly ? text.fullText : text;
+
   /**
    * Searches `searchText` using the given `matchable`, which will source the
    * matchers necessary to perform the search.
    */
   function search(
-    /** The text or fragment to search. */
-    searchText: TextOrFragment,
+    /** The text-like thing to search. */
+    searchable: Searchable,
     /** The set of keys, or something that can provide keys, to match with. */
     matchable: Matchable,
     /**
-     * Whether to force multiline mode for all matchers.  Generally best
+     * Whether to force full-text mode for all matchers.  Generally best
      * to provide `true` for text that is expected to be generally static.
      */
-    forceMultiline = false
+    forceFullText = false
   ): MatcherResults {
-    const matcherChain = Iterables.chain(getKeys(matchable))
-      .map(matcherService.getMatcherFor);
+    // No need to do anything fancy if we're forcing full-text mode.
+    if (forceFullText) return findMatches(
+      getForFull(searchable),
+      [...Iterables.mapIter(getKeys(matchable), matcherService.getMatcherFor)]
+    );
 
-    // No need to do anything fancy if we're forcing multiline mode.
-    if (forceMultiline)
-      return findMatches(searchText, matcherChain.toArray());
-
-    const { multi = [], single = [] } = matcherChain
-      .map((m) => [m.multiline ? "multi" : "single", m] as const)
+    const { matchFull = [], matchLine = [] } = Iterables.chain(getKeys(matchable))
+      .map(matcherService.getMatcherFor)
+      .map((m) => [m.multiline ? "matchFull" : "matchLine", m] as const)
       .thru((matchers) => Iterables.partition(matchers))
       .value(Iterables.fromPairs);
 
     return new Map([
-      ...findMatches(searchText, multi),
       ...dew(() => {
-        if (!single.length) return [];
-        return Iterables.chain(splitterService.byLine(searchText))
+        if (!matchFull.length) return [];
+        return findMatches(getForFull(searchable), matchFull);
+      }),
+      ...dew(() => {
+        if (!matchLine.length) return [];
+        return Iterables.chain(getForLines(searchable))
+          .map((fragment) => splitterService.byLine(fragment))
+          .flatten()
           .filter(splitterService.hasWords)
-          .map((frag) => findMatches(frag, single))
+          .map((frag) => findMatches(frag, matchLine))
           .flatten()
           .value();
       })
@@ -196,20 +213,20 @@ export default usModule((require, exports) => {
    * individually as the matchers can be batched.
    */
   function searchForLore<T extends WithKeys>(
-    /** The text or fragment to search. */
-    searchText: TextOrFragment,
+    /** The text-like thing to search. */
+    searchText: Searchable,
     /** The entries to include in the search. */
     entries: T[],
     /**
-     * Whether to force multiline mode for all matchers.  Generally best
-     * to provide `true` for text that is expected to be generally static.
+     * Whether to force full-text mode for all matchers.  Generally best
+     * to provide `true` for text that is expected to be static.
      */
-    forceMultiline = false
+    forceFullText = false
   ): EntryResults<T> {
     // We just need to grab all the keys from the entries and pull their
     // collective matches.  We'll only run each key once.
     const keySet = new Set(Iterables.flatMap(entries, getKeys));
-    const keyResults = search(searchText, keySet, forceMultiline);
+    const keyResults = search(searchText, keySet, forceFullText);
     
     // Now, we can just grab the results for each entry's keys and assemble
     // the results into a final map.
@@ -329,7 +346,7 @@ export default usModule((require, exports) => {
       return makeQuickResult(Number.POSITIVE_INFINITY);
 
     const searchRange = searchRangeDonor?.searchRange ?? entry.searchRange;
-    const textFragment = dew(() => {
+    const textFragment: TextOrFragment = dew(() => {
       // No offset correction for whole string searches.
       if (searchRange >= searchText.length) return searchText;
 
@@ -337,8 +354,7 @@ export default usModule((require, exports) => {
       // No offset correction for quick checks.
       if (quickCheck) return content;
 
-      const offset = searchText.length - content.length;
-      return { content, offset, length: content.length };
+      return splitterService.createFragment(content, searchText.length - content.length);
     });
     
     const results = search(textFragment, entry);
