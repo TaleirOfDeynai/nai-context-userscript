@@ -23,27 +23,35 @@ import $TextAssembly from "./TextAssembly";
 import type { Maybe, UndefOr } from "@utils/utility-types";
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
-import type { MatcherFn, MatchResult } from "./MatcherService";
+import type { MatcherFn, MatchResult as TextResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
-import type { TextAssembly } from "./TextAssembly";
+import type { TextAssembly, TextCursor, TextSelection } from "./TextAssembly";
 
-export type Searchable = TextOrFragment | TextAssembly;
 export type WithKeys = { keys: string[] };
 export type Matchable = Iterable<string> | WithKeys;
-export type MatcherResults = Map<string, readonly MatchResult[]>;
-export type EntryResults<T extends WithKeys> = Map<T, MatcherResults>;
+
+export interface AssemblyResult {
+  readonly match: TextResult["match"];
+  readonly groups: TextResult["groups"];
+  readonly namedGroups: TextResult["namedGroups"];
+  readonly selection: TextSelection;
+}
+
+export type TextResultMap = Map<string, readonly TextResult[]>;
+export type AssemblyResultMap = Map<string, readonly AssemblyResult[]>;
+export type EntryResultMap<T extends WithKeys> = Map<T, AssemblyResultMap>;
 
 const logger = createLogger("SearchService");
 
 export default usModule((require, exports) => {
   const matcherService = $MatcherService(require);
   const splitterService = $TextSplitterService(require);
-  const { TextAssembly } = $TextAssembly(require);
+  const { toSelection } = $TextAssembly(require);
 
   /** A set of texts search since the last maintenance cycle. */
   let textsSearched = new Set<string>();
   /** The internal results cache of the service. */
-  let resultsCache = new Map<string, MatcherResults>();
+  let resultsCache = new Map<string, TextResultMap>();
 
   /** Handles rescaling of the cache. */
   function rescaleCache() {
@@ -94,11 +102,11 @@ export default usModule((require, exports) => {
   });
 
   /** Internal function that actually does the searching. */
-  function doMatching(searchText: string, matchers: MatcherFn[]): MatcherResults {
+  function doMatching(textToSearch: string, matchers: MatcherFn[]): TextResultMap {
     if (!matchers.length) return new Map();
 
-    const cachedResults: MatcherResults = resultsCache.get(searchText) ?? new Map();
-    const searchResults: MatcherResults = new Map();
+    const cachedResults: TextResultMap = resultsCache.get(textToSearch) ?? new Map();
+    const searchResults: TextResultMap = new Map();
 
     for (const matcher of matchers) {
       const { source } = matcher;
@@ -110,7 +118,7 @@ export default usModule((require, exports) => {
       }
 
       // These results are shared; make sure the array is immutable.
-      const results = Object.freeze(matcher(searchText));
+      const results = Object.freeze(matcher(textToSearch));
 
       // We do want to store empty results in the cache, but we will omit
       // them from the search result.
@@ -118,15 +126,15 @@ export default usModule((require, exports) => {
       cachedResults.set(source, results);
     }
 
-    if (!textsSearched.has(searchText)) {
-      textsSearched.add(searchText);
+    if (!textsSearched.has(textToSearch)) {
+      textsSearched.add(textToSearch);
       // Shift this text so it'll be reinserted at the end.  We only need
       // to do this once as that's enough to preserve the data into the
       // next run.
-      resultsCache.delete(searchText);
+      resultsCache.delete(textToSearch);
     }
 
-    resultsCache.set(searchText, cachedResults);
+    resultsCache.set(textToSearch, cachedResults);
     return searchResults;
   }
 
@@ -153,22 +161,68 @@ export default usModule((require, exports) => {
     if ("keys" in v) return v.keys;
     return [];
   };
+  
+  interface PartitionedMatches {
+    matchFull: TextResultMap;
+    matchLine: TextResultMap;
+  }
+  
+  function doSearching(
+    /** Text used for full-text searching. */
+    fullText: TextOrFragment,
+    /** Text used for per-line searching; provide `undefined` to force full-text. */
+    lineText: UndefOr<Iterable<TextOrFragment>>,
+    /** The set of keys, or something that can provide keys, to match with. */
+    matchable: Matchable
+  ): PartitionedMatches {
+    // No need to partition the matchers if we're only doing full-text.
+    if (lineText == null) return {
+      matchFull: findMatches(
+        fullText,
+        [...Iterables.mapIter(getKeys(matchable), matcherService.getMatcherFor)]
+      ),
+      matchLine: new Map()
+    };
 
-  /** Converts something searchable into something usable for by-line matching. */
-  const getForLines = (text: Searchable): Iterable<TextOrFragment> =>
-    text instanceof TextAssembly ? text : [text];
+    const { matchFull = [], matchLine = [] } = Iterables.chain(getKeys(matchable))
+      .map(matcherService.getMatcherFor)
+      .map((m) => [m.multiline ? "matchFull" : "matchLine", m] as const)
+      .thru((matchers) => Iterables.partition(matchers))
+      .value(Iterables.fromPairs);
+    
+    return {
+      matchFull: dew(() => {
+        if (!matchFull.length) return new Map();
+        return findMatches(fullText, matchFull);
+      }),
+      matchLine: dew(() => {
+        if (!matchLine.length) return new Map();
+        return Iterables.chain(lineText)
+          .map((fragment) => splitterService.byLine(fragment))
+          .flatten()
+          .filter(splitterService.hasWords)
+          .map((frag) => findMatches(frag, matchLine))
+          .flatten()
+          .value((kvps) => new Map(kvps));
+      })
+    };
+  }
 
-  /** Converts something searchable into something usable for full-text matching. */
-  const getForFull = (text: Searchable): TextOrFragment =>
-    text instanceof TextAssembly ? text.fullText : text;
+  const toAssemblyResult =
+    (assembly: TextAssembly, type: TextCursor["type"]) =>
+    (theMatch: TextResult): AssemblyResult => {
+      const { match, groups, namedGroups } = theMatch;
+      const selection = toSelection(theMatch, assembly, type);
+      return Object.freeze({ match, groups, namedGroups, selection });
+    };
 
   /**
-   * Searches `searchText` using the given `matchable`, which will source the
+   * Searches `assembly` using the given `matchable`, which will source the
    * matchers necessary to perform the search.
    */
   function search(
-    /** The text-like thing to search. */
-    searchable: Searchable,
+    /** The text assembly to search. */
+    assembly: TextAssembly,
     /** The set of keys, or something that can provide keys, to match with. */
     matchable: Matchable,
     /**
@@ -176,45 +230,53 @@ export default usModule((require, exports) => {
      * to provide `true` for text that is expected to be generally static.
      */
     forceFullText = false
-  ): MatcherResults {
-    // No need to do anything fancy if we're forcing full-text mode.
-    if (forceFullText) return findMatches(
-      getForFull(searchable),
-      [...Iterables.mapIter(getKeys(matchable), matcherService.getMatcherFor)]
-    );
+  ): AssemblyResultMap {
+    const fullText = assembly.fullText;
+    const lineText = forceFullText ? undefined : assembly;
+    const results = doSearching(fullText, lineText, matchable);
+    
+    // We need to convert these matches into a variant using the more
+    // generalized cursors.
+    const fullResultFn = toAssemblyResult(assembly, "fullText");
+    const lineResultFn = toAssemblyResult(assembly, "assembly");
 
-    const { matchFull = [], matchLine = [] } = Iterables.chain(getKeys(matchable))
-      .map(matcherService.getMatcherFor)
-      .map((m) => [m.multiline ? "matchFull" : "matchLine", m] as const)
-      .thru((matchers) => Iterables.partition(matchers))
-      .value(Iterables.fromPairs);
-
-    return new Map([
-      ...dew(() => {
-        if (!matchFull.length) return [];
-        return findMatches(getForFull(searchable), matchFull);
-      }),
-      ...dew(() => {
-        if (!matchLine.length) return [];
-        return Iterables.chain(getForLines(searchable))
-          .map((fragment) => splitterService.byLine(fragment))
-          .flatten()
-          .filter(splitterService.hasWords)
-          .map((frag) => findMatches(frag, matchLine))
-          .flatten()
-          .value();
-      })
-    ]);
+    return new Map(Iterables.concat(
+      Iterables.mapValuesOf(results.matchFull, (m) => Object.freeze(m.map(fullResultFn))),
+      Iterables.mapValuesOf(results.matchLine, (m) => Object.freeze(m.map(lineResultFn)))
+    ));
   }
 
   /**
-   * Searches `searchText` using the collective keys of `entries`.  This is a
-   * little faster than calling {@link search search()} with each entry
+   * Searches `text` using the given `matchable`, which will source the
+   * matchers necessary to perform the search.
+   */
+  function searchText(
+    /** The text or fragment to search. */
+    textToSearch: TextOrFragment,
+    /** The set of keys, or something that can provide keys, to match with. */
+    matchable: Matchable,
+    /**
+     * Whether to force full-text mode for all matchers.  Generally best
+     * to provide `true` for text that is expected to be generally static.
+     */
+    forceFullText = false
+  ): TextResultMap {
+    const fullText = textToSearch;
+    const lineText = forceFullText ? undefined : [textToSearch];
+    const { matchFull, matchLine } = doSearching(fullText, lineText, matchable);
+
+    // For regular text searches, we can just merge the results.
+    return new Map([...matchFull, ...matchLine]);
+  }
+
+  /**
+   * Searches `assembly` using the collective keys of `entries`.  This is
+   * a little faster than calling {@link search search()} with each entry
    * individually as the matchers can be batched.
    */
   function searchForLore<T extends WithKeys>(
     /** The text-like thing to search. */
-    searchText: Searchable,
+    assembly: TextAssembly,
     /** The entries to include in the search. */
     entries: T[],
     /**
@@ -222,17 +284,17 @@ export default usModule((require, exports) => {
      * to provide `true` for text that is expected to be static.
      */
     forceFullText = false
-  ): EntryResults<T> {
+  ): EntryResultMap<T> {
     // We just need to grab all the keys from the entries and pull their
     // collective matches.  We'll only run each key once.
     const keySet = new Set(Iterables.flatMap(entries, getKeys));
-    const keyResults = search(searchText, keySet, forceFullText);
+    const keyResults = search(assembly, keySet, forceFullText);
     
     // Now, we can just grab the results for each entry's keys and assemble
     // the results into a final map.
-    const entryResults: EntryResults<T> = new Map();
+    const entryResults: EntryResultMap<T> = new Map();
     for (const entry of entries) {
-      const entryResult: MatcherResults = new Map();
+      const entryResult: AssemblyResultMap = new Map();
       for (const key of entry.keys) {
         const result = keyResults.get(key);
         if (!result?.length) continue;
@@ -247,8 +309,8 @@ export default usModule((require, exports) => {
 
   /** Finds the result with the lowest index of all keys searched. */
   const findLowestIndex = (
-    results: Maybe<MatcherResults>
-  ): UndefOr<[string, MatchResult]> => {
+    results: Maybe<TextResultMap>
+  ): UndefOr<[string, TextResult]> => {
     if (!results) return undefined;
 
     return Iterables.chain(results)
@@ -257,7 +319,7 @@ export default usModule((require, exports) => {
         return first ? [k, first] : undefined;
       })
       .value((kvps) => {
-        let best: UndefOr<[string, MatchResult]> = undefined;
+        let best: UndefOr<[string, TextResult]> = undefined;
         for (const kvp of kvps) {
           checks: {
             if (!best) break checks;
@@ -272,8 +334,8 @@ export default usModule((require, exports) => {
 
   /** Finds the result with the highest index of all keys searched. */
   const findHighestIndex = (
-    results: Maybe<MatcherResults>
-  ): UndefOr<[string, MatchResult]> => {
+    results: Maybe<TextResultMap>
+  ): UndefOr<[string, TextResult]> => {
     if (!results) return undefined;
 
     return Iterables.chain(results)
@@ -282,7 +344,7 @@ export default usModule((require, exports) => {
         return last ? [k, last] : undefined;
       })
       .value((kvps) => {
-        let best: UndefOr<[string, MatchResult]> = undefined;
+        let best: UndefOr<[string, TextResult]> = undefined;
         for (const kvp of kvps) {
           checks: {
             if (!best) break checks;
@@ -300,7 +362,7 @@ export default usModule((require, exports) => {
    * This emulates NovelAI's "fail fast" search order that it uses in quick-checks.
    */
   const findLowestInOrder = (
-    results: MatcherResults,
+    results: TextResultMap,
     entryKeys: string[]
   ): UndefOr<string> => {
     if (!results.size) return undefined;
@@ -324,7 +386,7 @@ export default usModule((require, exports) => {
     /** The lorebook entry to check. */
     entry: LoreEntry,
     /** The text available to search for keyword matches. */
-    searchText: string,
+    textToSearch: string,
     /**
      * Whether to do a quick test only.  When `true` and a match is found,
      * this will return a result where `index` and `length` are both `0`.
@@ -348,20 +410,20 @@ export default usModule((require, exports) => {
     const searchRange = searchRangeDonor?.searchRange ?? entry.searchRange;
     const textFragment: TextOrFragment = dew(() => {
       // No offset correction for whole string searches.
-      if (searchRange >= searchText.length) return searchText;
+      if (searchRange >= textToSearch.length) return textToSearch;
 
-      const content = searchText.slice(-1 * searchRange);
+      const content = textToSearch.slice(-1 * searchRange);
       // No offset correction for quick checks.
       if (quickCheck) return content;
 
-      return splitterService.createFragment(content, searchText.length - content.length);
+      return splitterService.createFragment(content, textToSearch.length - content.length);
     });
     
-    const results = search(textFragment, entry);
+    const results = searchText(textFragment, entry);
 
     if (quickCheck) {
       const bestKey = findLowestInOrder(results, entry.keys);
-      const offset = Math.max(0, searchText.length - searchRange);
+      const offset = Math.max(0, textToSearch.length - searchRange);
       return makeQuickResult(bestKey ? offset : -1, bestKey);
     }
 
@@ -400,6 +462,7 @@ export default usModule((require, exports) => {
   return Object.assign(exports, {
     getKeys,
     search,
+    searchText,
     searchForLore,
     findLowestIndex,
     findHighestIndex,

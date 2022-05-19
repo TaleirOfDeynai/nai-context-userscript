@@ -2,13 +2,15 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isArray } from "@utils/is";
 import { assert, assertExists } from "@utils/assert";
-import { chain, ElementOf, first, ReduceFn, toImmutable } from "@utils/iterables";
+import { chain, first, toImmutable } from "@utils/iterables";
 import config from "../config";
-import TextSplitterService, { TextOrFragment } from "./TextSplitterService";
+import $TextSplitterService from "./TextSplitterService";
 
 import type { UndefOr } from "@utils/utility-types";
+import type { ReduceFn } from "@utils/iterables";
 import type { ContextConfig } from "@nai/Lorebook";
-import type { TextFragment } from "./TextSplitterService";
+import type { TextFragment, TextOrFragment } from "./TextSplitterService";
+import type { MatchResult } from "./MatcherService";
 
 export interface TextAssemblyOptions {
   prefix?: ContextConfig["prefix"];
@@ -49,9 +51,7 @@ export interface FullTextCursor {
 
 export type TextCursor = AssemblyCursor | FullTextCursor;
 
-export type TextSelection
-  = [AssemblyCursor, AssemblyCursor]
-  | [FullTextCursor, FullTextCursor];
+export type TextSelection = readonly [AssemblyCursor, AssemblyCursor];
 
 export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";
 
@@ -62,7 +62,7 @@ const defaultOptions: Required<TextAssemblyOptions> = {
 };
 
 const theModule = usModule((require, exports) => {
-  const { createFragment, asContent, splitFragmentAt } = TextSplitterService(require);
+  const { createFragment, asContent, splitFragmentAt } = $TextSplitterService(require);
 
   /** Creates a full-text cursor. */
   function makeCursor(origin: TextAssembly, offset: number, type: "fullText"): FullTextCursor;
@@ -88,6 +88,31 @@ const theModule = usModule((require, exports) => {
     if (offset < fragment.offset) return false;
     if (offset > fragment.offset + fragment.content.length) return false;
     return true;
+  };
+
+  /** Ensures the given cursor is an {@link AssemblyCursor}. */
+  const asAssemblyCursor = (cursor: TextCursor): AssemblyCursor => {
+    if (cursor.type === "assembly") return cursor;
+    return cursor.origin.fromFullText(cursor);
+  };
+
+  /**
+   * Converts a {@link MatchResult} to a {@link TextSelection}.
+   * 
+   * If the match is zero-length, the two cursors will both be
+   * identical instances.
+   */
+  const toSelection = (
+    match: MatchResult,
+    origin: TextAssembly,
+    type: TextCursor["type"]
+  ): TextSelection => {
+    const { index, length } = match;
+    const left = asAssemblyCursor(makeCursor(origin, index, type));
+    if (length === 0) return Object.freeze([left, left] as const);
+
+    const right = asAssemblyCursor(makeCursor(origin, index + length, type));
+    return Object.freeze([left, right] as const);
   };
 
   /**
@@ -681,9 +706,11 @@ const theModule = usModule((require, exports) => {
 
   return Object.assign(exports, {
     isCursorInside,
+    makeCursor,
+    asAssemblyCursor,
+    toSelection,
     isContiguous,
     getStats,
-    makeCursor,
     TextAssembly
   });
 });

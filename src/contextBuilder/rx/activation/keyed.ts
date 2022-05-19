@@ -3,14 +3,14 @@ import * as rxop from "@utils/rxop";
 import { eachValueFrom } from "rxjs-for-await";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
-import SearchService from "../../SearchService";
+import $SearchService from "../../SearchService";
 
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
-import type { MatcherResults } from "../../SearchService";
+import type { AssemblyResultMap } from "../../SearchService";
 import type { ContextSource } from "../../ContextSource";
-import type { TextOrFragment } from "../../TextSplitterService";
+import type { TextAssembly } from "../../TextAssembly";
 import type { ActivationState } from ".";
 
 interface SearchableField extends ContextField {
@@ -19,14 +19,14 @@ interface SearchableField extends ContextField {
 
 type SearchableSource = ContextSource<SearchableField>;
 
-export type KeyedActivation = MatcherResults;
+export type KeyedActivation = AssemblyResultMap;
 
 /**
  * Checks each {@link ContextSource} for keyword activations against
  * the story text.
  */
 export default usModule((require, exports) => {
-  const { search, searchForLore } = SearchService(require);
+  const { search, searchForLore } = $SearchService(require);
 
   const isKeyed = (source: ContextSource<any>): source is SearchableSource => {
     const { entry } = source;
@@ -41,7 +41,7 @@ export default usModule((require, exports) => {
    * all their keys in one big batch.
    */
   async function* impl_checkActivation_batched(
-    storyText: TextOrFragment,
+    storyText: TextAssembly,
     sources: Obs<ActivationState>
   ): AsyncIterable<ActivationState> {
     // First, grab all sources with entries that can do keyword searching.
@@ -66,7 +66,7 @@ export default usModule((require, exports) => {
 
   /** Version that checks the keys on individual entries, one at a time. */
   function impl_checkActivation_individual(
-    storyText: TextOrFragment,
+    storyText: TextAssembly,
     sources: Obs<ActivationState>
   ) {
     return sources.pipe(rxop.collect((state) => {
@@ -80,7 +80,7 @@ export default usModule((require, exports) => {
     }));
   }
 
-  const checkActivation = (storyText: TextOrFragment) => (sources: Obs<ActivationState>) =>
+  const checkActivation = (storyText: TextAssembly) => (sources: Obs<ActivationState>) =>
     rx.from(impl_checkActivation_batched(storyText, sources));
 
   return Object.assign(exports, { checkActivation });

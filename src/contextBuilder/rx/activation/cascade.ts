@@ -2,11 +2,12 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
 import { createLogger } from "@utils/logging";
-import SearchService, { MatcherResults } from "../../SearchService";
+import $SearchService from "../../SearchService";
 
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
+import type { AssemblyResultMap } from "../../SearchService";
 import type { EnabledSource } from "../source";
 import type { ActivationState } from ".";
 
@@ -37,14 +38,14 @@ export interface CascadeActivation {
    * A record of the matches from each activated entry that this entry
    * found a keyword match within.
    */
-  matches: Map<ContextField, MatcherResults>;
+  matches: Map<ContextField, AssemblyResultMap>;
 }
 
 /**
  * Checks each {@link ContextSource} for cascade activation.
  */
 export default usModule((require, exports) => {
-  const { searchForLore } = SearchService(require);
+  const { searchForLore } = $SearchService(require);
 
   const isCascading = (state: ActivationState<any>): state is CascadingState => {
     const { entry } = state.source;
