@@ -87,9 +87,13 @@ export default usModule((require, exports) => {
     // Just delete all results for keys that were not searched in the last run.
     // In the case of long-living results, this keeps them from growing out of
     // control and hogging a bunch of memory.
-    for (const results of resultsCache.values())
+    for (const [text, results] of resultsCache) {
       for (const key of results.keys())
         if (!keysUsed.has(key)) results.delete(key);
+
+      // If it's now empty, delete the entry.
+      if (results.size === 0) resultsCache.delete(text);
+    }
   }
 
   /** Performs maintenance on the cache. */
