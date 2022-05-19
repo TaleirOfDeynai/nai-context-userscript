@@ -3,7 +3,7 @@ import type { PredicateFn } from "./functions";
 import type { AnyValueOf, Maybe, UndefOr } from "./utility-types";
 
 /** Basic key-value pair, as a tuple. */
-export type KVP<K, V> = readonly [K, V];
+export type KVP<K = string | number, V = any> = readonly [K, V];
 
 /** The primitive data-types. */
 export type Primitives = number | string | boolean | Function | {} | null | undefined;
@@ -27,7 +27,7 @@ type UnionToIntersection<T>
   = (T extends any ? (x: T) => any : never) extends
     (x: infer R) => any ? R : never;
 
-type PartitionResult<T> = T extends KVP<infer K, infer V> ? readonly [K, V[]] : never;
+type PartitionResult<T extends KVP> = KVP<T[0], T[1][]>;
 type FromPairsResult<T>
   = T extends KVP<infer K, infer V>
     ? K extends string | number ? { [Prop in K]: V } : never
@@ -121,7 +121,7 @@ export const countBy = <T>(iter: Iterable<T>, predicateFn: PredicateFn<T>): numb
 /**
  * Creates an object from key-value-pairs.
  */
-export const fromPairs = <T extends KVP<string | number, any>>(
+export const fromPairs = <T extends KVP>(
   kvps: Iterable<T>
 ): UnionToIntersection<FromPairsResult<T>> => {
   const result: any = {};
@@ -134,12 +134,9 @@ export const fromPairs = <T extends KVP<string | number, any>>(
  */
 export const toPairs = function*<TObj extends Record<string, any>>(
   obj: Maybe<TObj>
-): Iterable<[keyof TObj, AnyValueOf<TObj>]> {
+): Iterable<KVP<keyof TObj, AnyValueOf<TObj>>> {
   if (obj == null) return;
-  for(const key of Object.keys(obj)) {
-    // @ts-ignore - `Object.keys` is too dumb.
-    yield tuple2(key, obj[key]);
-  }
+  for(const key of Object.keys(obj)) yield [key, obj[key]];
 };
 
 /**
@@ -369,6 +366,16 @@ export const mapIter = function*<TIn, TOut>(
 };
 
 /**
+ * Transforms the values of an iterable of {@link KVP}.
+ */
+export const mapValuesOf = <T extends KVP<any>, U>(
+  iterable: Iterable<T>,
+  transformFn: TransformFn<T[1], U>
+): Iterable<KVP<T[0], U>> => {
+  return mapIter(iterable, ([k, v]) => [k, transformFn(v)] as const);
+};
+
+/**
  * Creates an iterable that transforms values, and yields the result if it is
  * not `undefined`.
  */
@@ -429,20 +436,17 @@ export const groupBy = function*<TValue, TKey>(
   yield* groups;
 };
 
-const partitionKeys = <T extends KVP<any, any>>([key]: T): T[0] => key;
-const partitionValues = <T extends KVP<any, any>>([, value]: T): T[1] => value;
+const partitionKeys = <T extends KVP<any>>(kvp: T): T[0] => kvp[0];
+const partitionValues = <T extends KVP<any>>(kvp: T): T[1] => kvp[1];
 
 /**
  * Creates an iterable that groups key-value-pairs when they share the same key.
  */
-export const partition = function*<T extends KVP<any, any>>(
+export const partition = function*<T extends KVP<any>>(
   iterable: Iterable<T>
 ): Iterable<PartitionResult<T>> {
-  for (const [key, values] of groupBy(iterable, partitionKeys)) {
-    const group = values.map(partitionValues);
-    // @ts-ignore - This is correct.
-    yield [key, group];
-  }
+  for (const [key, values] of groupBy(iterable, partitionKeys))
+    yield [key, values.map(partitionValues)];
 };
 
 /**
