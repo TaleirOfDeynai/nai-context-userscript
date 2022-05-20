@@ -62,7 +62,8 @@ const defaultOptions: Required<TextAssemblyOptions> = {
 };
 
 const theModule = usModule((require, exports) => {
-  const { createFragment, asContent, splitFragmentAt } = $TextSplitterService(require);
+  const splitterService = $TextSplitterService(require);
+  const { createFragment, isContiguous } = splitterService;
 
   /** Creates a full-text cursor. */
   function makeCursor(origin: TextAssembly, offset: number, type: "fullText"): FullTextCursor;
@@ -113,25 +114,6 @@ const theModule = usModule((require, exports) => {
 
     const right = asAssemblyCursor(makeCursor(origin, index + length, type));
     return Object.freeze([left, right] as const);
-  };
-
-  /**
-   * Checks if the given collection of fragments is contiguous; this means
-   * the collection has no gaps and all fragments are not out-of-order.
-   * 
-   * Returns `false` if `fragments` was empty.
-   */
-  const isContiguous = (fragments: Iterable<TextFragment>): boolean => {
-    let lastFrag: UndefOr<TextFragment> = undefined;
-    for (const curFrag of fragments) {
-      if (lastFrag) {
-        const expectedOffset = lastFrag.offset + lastFrag.content.length;
-        if (curFrag.offset !== expectedOffset) return false;
-      }
-      lastFrag = curFrag;
-    }
-    // Return `false` if `fragments` was empty.
-    return Boolean(lastFrag);
   };
 
   /** Produces some useful stats given a collection of fragments. */
@@ -369,7 +351,7 @@ const theModule = usModule((require, exports) => {
         this.#prefix,
         ...this.#content,
         this.#suffix
-      ].map(asContent).join("");
+      ].map(splitterService.asContent).join("");
     }
     #fullText: UndefOr<string> = undefined;
 
@@ -635,7 +617,7 @@ const theModule = usModule((require, exports) => {
             beforeCut.push(frag);
             break;
           default: {
-            const [before, after] = splitFragmentAt(frag, cursor.offset);
+            const [before, after] = splitterService.splitFragmentAt(frag, cursor.offset);
             beforeCut.push(before);
             afterCut.push(after);
             break;
@@ -709,7 +691,6 @@ const theModule = usModule((require, exports) => {
     makeCursor,
     asAssemblyCursor,
     toSelection,
-    isContiguous,
     getStats,
     TextAssembly
   });

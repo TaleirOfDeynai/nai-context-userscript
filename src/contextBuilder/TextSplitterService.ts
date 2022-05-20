@@ -5,6 +5,8 @@ import { iterReverse, countBy } from "@utils/iterables";
 import { isArray, isString } from "@utils/is";
 import AppConstants from "@nai/AppConstants";
 
+import type { UndefOr } from "@utils/utility-types";
+
 /** Represents a fragment of some larger body of text. */
 export interface TextFragment {
   readonly content: string;
@@ -137,6 +139,25 @@ export default usModule((require, exports) => {
     const content = parts.map(asContent).join("");
     const [{ offset }] = parts;
     return { content, offset };
+  };
+
+  /**
+   * Checks if the given collection of fragments is contiguous; this means
+   * the collection has no gaps and all fragments are not out-of-order.
+   * 
+   * Returns `false` if `fragments` was empty.
+   */
+  const isContiguous = (fragments: Iterable<TextFragment>): boolean => {
+    let lastFrag: UndefOr<TextFragment> = undefined;
+    for (const curFrag of fragments) {
+      if (lastFrag) {
+        const expectedOffset = lastFrag.offset + lastFrag.content.length;
+        if (curFrag.offset !== expectedOffset) return false;
+      }
+      lastFrag = curFrag;
+    }
+    // Return `false` if `fragments` was empty.
+    return Boolean(lastFrag);
   };
 
   /**
@@ -361,9 +382,10 @@ export default usModule((require, exports) => {
     byWord,
     hasWords,
     createFragment: resultFrom,
-    mergeFragments,
     asFragment,
     asContent,
+    mergeFragments,
+    isContiguous,
     splitFragmentAt
   });
 });
