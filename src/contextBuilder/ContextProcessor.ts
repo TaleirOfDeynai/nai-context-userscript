@@ -3,23 +3,27 @@ import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
-import EventModule, { StoryContent, StoryState } from "@nai/EventModule";
-import ParamsService, { ContextParams } from "./ParamsService";
-import TrimmingProviders from "./TrimmingProviders";
-import TrimmingService from "./TrimmingService";
-import ReactiveProcessing from "./rx";
+import EventModule from "@nai/EventModule";
+import $ParamsService from "./ParamsService";
+import $TextSplitterService from "./TextSplitterService";
+import $TrimmingProviders from "./TrimmingProviders";
+import $TrimmingService from "./TrimmingService";
+import $ReactiveProcessing from "./rx";
 
 import type { TokenCodec } from "@nai/TokenizerCodec";
+import type { StoryContent, StoryState } from "@nai/EventModule";
+import type { ContextParams } from "./ParamsService";
 
 const logger = createLogger("ContextProcessor");
 
 export default usModule((require, exports) => {
   const eventModule = require(EventModule);
-  const providers = TrimmingProviders(require);
+  const providers = $TrimmingProviders(require);
 
-  const { makeParams } = ParamsService(require);
-  const { trimByLength, trimByTokens } = TrimmingService(require);
-  const processing = ReactiveProcessing(require);
+  const { makeParams } = $ParamsService(require);
+  const { mergeFragments } = $TextSplitterService(require);
+  const { trimByLength, trimByTokens } = $TrimmingService(require);
+  const processing = $ReactiveProcessing(require);
 
   async function getStoryText(
     contextParams: ContextParams,
@@ -48,11 +52,11 @@ export default usModule((require, exports) => {
 
     if (storyLength) {
       const result = trimByLength(sourceText, storyLength, trimOptions);
-      return result?.fragment.content ?? "";
+      return result ? mergeFragments(result.fragments).content : "";
     }
     else {
       const result = await trimByTokens(sourceText, contextSize, contextParams, trimOptions);
-      return result?.fragment.content ?? "";
+      return result ? mergeFragments(result.fragments).content : "";
     }
   }
 

@@ -30,10 +30,7 @@ import type { TextAssembly, TextCursor, TextSelection } from "./TextAssembly";
 export type WithKeys = { keys: string[] };
 export type Matchable = Iterable<string> | WithKeys;
 
-export interface AssemblyResult {
-  readonly match: TextResult["match"];
-  readonly groups: TextResult["groups"];
-  readonly namedGroups: TextResult["namedGroups"];
+export interface AssemblyResult extends TextResult {
   readonly selection: TextSelection;
 }
 
@@ -215,9 +212,8 @@ export default usModule((require, exports) => {
   const toAssemblyResult =
     (assembly: TextAssembly, type: TextCursor["type"]) =>
     (theMatch: TextResult): AssemblyResult => {
-      const { match, groups, namedGroups } = theMatch;
       const selection = toSelection(theMatch, assembly, type);
-      return Object.freeze({ match, groups, namedGroups, selection });
+      return Object.freeze({ ...theMatch, selection });
     };
 
   /**

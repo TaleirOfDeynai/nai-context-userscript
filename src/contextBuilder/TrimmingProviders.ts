@@ -1,13 +1,14 @@
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
-import { iterReverse } from "@utils/iterables";
-import TextSplitterService from "./TextSplitterService";
-import TokenizerService from "./TokenizerService";
+import { assertExists } from "@utils/assert";
+import { chain, iterReverse } from "@utils/iterables";
+import $TextSplitterService from "./TextSplitterService";
+import $TokenizerService from "./TokenizerService";
+
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { StreamEncodeFn, EncodeResult } from "./TokenizerService";
-import { assert, assertExists } from "@utils/assert";
 
 export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];
@@ -28,7 +29,7 @@ export interface TrimProvider extends Record<TrimType, SplitterFn> {
    * Typically performs the conversion of a `string` into a {@link TextFragment}
    * as needed, but can also handle other pre-trimming string processing.
    */
-  preProcess: (text: TextOrFragment) => TextFragment;
+  preProcess: (text: TextOrFragment) => Iterable<TextFragment>;
   /**
    * Whether this provider iterates fragments in reverse, from the end of
    * the input string towards the beginning.
@@ -62,9 +63,12 @@ const BUFFER_SIZE = Object.freeze([10, 5, 5] as const);
  * those odd special cases.
  */
 export default usModule((require, exports) => {
-  const tokenizerService = TokenizerService(require);
-  const splitterService = TextSplitterService(require);
+  const tokenizerService = $TokenizerService(require);
+  const splitterService = $TextSplitterService(require);
   const { mergeFragments } = splitterService;
+
+  const basicPreProcess = (text: TextOrFragment) =>
+    [splitterService.asFragment(text)];
 
   // For `doNotTrim`, we do not trim...  So, yield an empty iterable.
   const noop = (): Iterable<TextFragment> => [];
@@ -72,21 +76,21 @@ export default usModule((require, exports) => {
   /** Providers for basic trimming. */
   const basic: CommonProviders = Object.freeze({
     trimBottom: Object.freeze({
-      preProcess: splitterService.asFragment,
+      preProcess: basicPreProcess,
       newline: splitterService.byLine,
       sentence: splitterService.bySentence,
       token: splitterService.byWord,
       reversed: false
     }),
     trimTop: Object.freeze({
-      preProcess: splitterService.asFragment,
+      preProcess: basicPreProcess,
       newline: splitterService.byLineFromEnd,
       sentence: (text) => iterReverse(splitterService.bySentence(text)),
       token: (text) => iterReverse(splitterService.byWord(text)),
       reversed: true
     }),
     doNotTrim: Object.freeze({
-      preProcess: splitterService.asFragment,
+      preProcess: basicPreProcess,
       // Do no actual splitting; just return an array with a single element.
       newline: (inputText: TextFragment) => [inputText],
       sentence: noop,
@@ -148,14 +152,10 @@ export default usModule((require, exports) => {
     }),
     doNotTrim: {
       ...basic.doNotTrim,
-      preProcess: (text) => {
-        // We could have just used a regular-expression that removes the
-        // comment lines with `String.replace`, but this will preserve
-        // the resulting fragment's initial offset correctly.
-        const frag = basic.doNotTrim.preProcess(text);
-        const withoutComments = removeComments.trimBottom.newline(frag);
-        return mergeFragments([...withoutComments]);
-      }
+      preProcess: (text) => chain(basic.doNotTrim.preProcess(text))
+        .map((frag) => removeComments.trimBottom.newline(frag))
+        .flatten()
+        .value()
     }
   });
 

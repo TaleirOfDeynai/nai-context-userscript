@@ -2,15 +2,15 @@ import { dew } from "@utils/dew";
 import { isFunction } from "@utils/is";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
-import { journey, buffer, flatten } from "@utils/iterables";
+import { chain, journey, buffer } from "@utils/iterables";
 import { toReplay, ReplaySource } from "@utils/asyncIterables";
-import TextSplitterService from "./TextSplitterService";
-import TrimmingProviders from "./TrimmingProviders";
+import $TextSplitterService from "./TextSplitterService";
+import $TrimmingProviders from "./TrimmingProviders";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReplayWrapper } from "@utils/asyncIterables";
 import type { ContextConfig } from "@nai/Lorebook";
-import type { TokenCodec, EncodeResult } from "./TokenizerService";
+import type { EncodeResult } from "./TokenizerService";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
@@ -61,7 +61,7 @@ export interface TrimResult extends EncodeResult {
 
 export interface Trimmer extends AsyncIterable<TrimResult> {
   prefix: string;
-  fragment: TextFragment;
+  fragments: TextFragment[];
   suffix: string;
 };
 
@@ -86,10 +86,10 @@ const noReplay = <T>(source: ReplaySource<T>): AsyncIterable<T> =>
 const EMPTY = async function*() {};
 
 export default usModule((require, exports) => {
-  const splitterService = TextSplitterService(require);
-  const providers = TrimmingProviders(require);
+  const splitterService = $TextSplitterService(require);
+  const providers = $TrimmingProviders(require);
 
-  const { hasWords, asContent, mergeFragments } = splitterService;
+  const { hasWords } = splitterService;
 
   const optionDefaults: TrimOptions = {
     provider: "doNotTrim",
@@ -140,18 +140,18 @@ export default usModule((require, exports) => {
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay = false
-  ): Trimmer {
+  ): Trimmer | ReplayTrimmer {
     const { tokenCodec } = contextParams;
 
     const config = { ...optionDefaults, ...options };
     const provider = providers.asProvider(config.provider);
-    const fragment = provider.preProcess(content);
+    const fragments = provider.preProcess(content);
     const sequencers = providers.getSequencersFrom(provider, config.maximumTrimType);
     const { prefix, suffix } = config;
     const wrapperFn = doReplay ? toReplay : noReplay;
 
     const nextSplit = (
-      content: TextFragment,
+      content: Iterable<TextFragment>,
       sequencers: TextSequencer[],
       preserveMode: "initial" | "ends" | "none",
       seedResult?: Readonly<EncodeResult>
@@ -162,11 +162,18 @@ export default usModule((require, exports) => {
 
       return async function*() {
         const fragments = dew(() => {
-          const splitFrags = sequencer.splitUp(content);
+          const splitFrags = chain(content)
+            .map(sequencer.splitUp)
+            .flatten();
           switch (preserveMode) {
-            case "ends": return splitFrags;
-            case "initial": return flatten(buffer(splitFrags, hasWords, false));
-            default: return journey(splitFrags, hasWords);
+            case "ends": return splitFrags.value();
+            case "initial": return splitFrags
+              .thru((iter) => buffer(iter, hasWords, false))
+              .flatten()
+              .value();
+            default: return splitFrags
+              .thru((iter) => journey(iter, hasWords))
+              .value();
           }
         });
 
@@ -184,7 +191,7 @@ export default usModule((require, exports) => {
               const nextChunk = sequencer.prepareInnerChunk(curResult, capturedLastResult);
 
               return wrapperFn(nextSplit(
-                nextChunk,
+                [nextChunk],
                 restSequencers,
                 // Use "initial" mode for recursive calls instead of "none".
                 preserveMode === "ends" ? "ends" : "initial",
@@ -199,11 +206,11 @@ export default usModule((require, exports) => {
 
     return Object.assign(
       wrapperFn(nextSplit(
-        fragment,
+        fragments,
         sequencers,
         config.preserveEnds ? "ends" : "none"
       )),
-      { prefix, fragment, suffix }
+      { prefix, fragments: [...fragments], suffix }
     );
   }
 
@@ -281,7 +288,7 @@ export default usModule((require, exports) => {
 
   function* execTrimLength(
     sequencers: TextSequencer[],
-    content: TextFragment,
+    content: Iterable<TextFragment>,
     maximumLength: number,
     preserveMode: "initial" | "ends" | "none",
     currentLength: number = 0
@@ -292,11 +299,18 @@ export default usModule((require, exports) => {
     const [sequencer, ...restSequencers] = sequencers;
 
     const fragments = dew(() => {
-      const splitFrags = sequencer.splitUp(content);
+      const splitFrags = chain(content)
+        .map(sequencer.splitUp)
+        .flatten();
       switch (preserveMode) {
-        case "ends": return splitFrags;
-        case "initial": return flatten(buffer(splitFrags, hasWords, false));
-        default: return journey(splitFrags, hasWords);
+        case "ends": return splitFrags.value();
+        case "initial": return splitFrags
+          .thru((iter) => buffer(iter, hasWords, false))
+          .flatten()
+          .value();
+        default: return splitFrags
+          .thru((iter) => journey(iter, hasWords))
+          .value();
       }
     });
 
@@ -314,7 +328,7 @@ export default usModule((require, exports) => {
 
         yield* execTrimLength(
           restSequencers,
-          mergeFragments(buffered),
+          buffered,
           maximumLength,
           // Use "initial" mode for recursive calls instead of "none".
           preserveMode === "ends" ? "ends" : "initial",
@@ -345,13 +359,13 @@ export default usModule((require, exports) => {
       = { ...optionDefaults, ...options };
 
     const provider = providers.asProvider(srcProvider);
-    const fragment = provider.preProcess(content);
+    const fragments = provider.preProcess(content);
     maximumLength = Math.max(0, maximumLength - (prefix.length + suffix.length));
 
     // Now we can trim.
     const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
     const trimmedFrags = [...execTrimLength(
-      sequencers, fragment, maximumLength,
+      sequencers, fragments, maximumLength,
       preserveEnds ? "ends" : "none"
     )];
     if (trimmedFrags.length === 0) return undefined;

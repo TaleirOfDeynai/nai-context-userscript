@@ -3,6 +3,7 @@ import { usModule } from "@utils/usModule";
 import { isArray, isObject } from "@utils/is";
 import { createLogger } from "@utils/logging";
 import $SearchService from "../../SearchService";
+import $TextAssembly from "../../TextAssembly";
 
 import type { Observable as Obs } from "@utils/rx";
 import type { ContextField } from "@nai/ContextBuilder";
@@ -46,6 +47,7 @@ export interface CascadeActivation {
  */
 export default usModule((require, exports) => {
   const { searchForLore } = $SearchService(require);
+  const { TextAssembly } = $TextAssembly(require);
 
   const isCascading = (state: ActivationState<any>): state is CascadingState => {
     const { entry } = state.source;
@@ -85,9 +87,12 @@ export default usModule((require, exports) => {
   
           // Check the keys for all cascading sources against the entry's
           // assembled text.
-          const { prefix, suffix } = activated.entry.contextConfig;
-          const text = `${prefix}${activated.entry.text}${suffix}`;
-          const searchResults = searchForLore(text, [...entryToState.keys()], true);
+          // TODO: A text assembly should exist before this point.
+          const assembly = TextAssembly.fromSource(
+            activated.entry.text,
+            activated.entry.contextConfig
+          );
+          const searchResults = searchForLore(assembly, [...entryToState.keys()], true);
           for (const [entry, results] of searchResults) {
             if (!results.size) continue;
 
