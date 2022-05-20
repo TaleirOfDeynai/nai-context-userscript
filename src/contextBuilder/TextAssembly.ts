@@ -3,7 +3,7 @@ import { dew } from "@utils/dew";
 import { isArray } from "@utils/is";
 import { assert, assertExists } from "@utils/assert";
 import { chain, first, toImmutable } from "@utils/iterables";
-import config from "../config";
+import userScriptConfig from "../config";
 import $TextSplitterService from "./TextSplitterService";
 
 import type { UndefOr } from "@utils/utility-types";
@@ -312,7 +312,7 @@ const theModule = usModule((require, exports) => {
       );
 
       // Also sanity check the content if debug logging is enabled.
-      if (config.debugLogging) {
+      if (userScriptConfig.debugLogging) {
         const oldStats = source.contentStats;
         const newStats = assembly.contentStats;
         assert(

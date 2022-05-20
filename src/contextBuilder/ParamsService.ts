@@ -1,6 +1,7 @@
 import { usModule } from "@utils/usModule";
 import TokenizerHelpers from "@nai/TokenizerHelpers";
-import TokenizerService from "./TokenizerService";
+import userScriptConfig from "../config";
+import $TokenizerService from "./TokenizerService";
 
 import type { StoryContent, StoryState } from "@nai/EventModule";
 import type { TokenCodec } from "@nai/TokenizerCodec";
@@ -21,7 +22,7 @@ export interface ContextParams {
 
 export default usModule((require, exports) => {
   const tokenizerHelpers = require(TokenizerHelpers);
-  const tokenizer = TokenizerService(require);
+  const tokenizer = $TokenizerService(require);
 
   function makeParams(
     storyContent: StoryContent,
@@ -33,6 +34,10 @@ export default usModule((require, exports) => {
     const contextSize = givenTokenLimit - (storyContent.settings.prefix === "vanilla" ? 0 : 20);
     const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
     const tokenCodec = tokenizer.codecFor(tokenizerType, givenCodec);
+
+    // Since I'm not sure when NovelAI would NOT request comments
+    // be removed, you can just force it using the config.
+    removeComments = userScriptConfig.comments.alwaysRemove || removeComments;
 
     return Object.freeze({
       storyContent,
