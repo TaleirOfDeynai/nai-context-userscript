@@ -6,14 +6,14 @@ import { isArray, isObject } from "@utils/is";
 import $SearchService from "../../SearchService";
 
 import type { Observable as Obs } from "@utils/rx";
-import type { ContextField } from "@nai/ContextBuilder";
+import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { AssemblyResultMap } from "../../SearchService";
 import type { ContextSource } from "../../ContextSource";
 import type { TextAssembly } from "../../TextAssembly";
 import type { ActivationState } from ".";
 
-interface SearchableField extends ContextField {
+interface SearchableField extends IContextField {
   keys: LoreEntry["keys"];
 }
 

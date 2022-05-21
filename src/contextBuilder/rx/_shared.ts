@@ -1,6 +1,6 @@
 import { isObject, isString } from "@utils/is";
 
-import type { ContextField } from "@nai/ContextBuilder";
+import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry, PhraseBiasConfig } from "@nai/Lorebook";
 import type { ActivationSource, ActivatedSource, RejectedSource } from "./activation";
 import type { ContextSource } from "../ContextSource";
@@ -16,7 +16,7 @@ export const activation = {
 
 // Category stuff.
 
-export interface CategorizedField extends ContextField {
+export interface CategorizedField extends IContextField {
   category: LoreEntry["category"];
 }
 

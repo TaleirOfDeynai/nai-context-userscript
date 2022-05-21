@@ -3,7 +3,7 @@ import { usModule } from "@utils/usModule";
 import ContextModule from "@nai/ContextModule";
 import ContextSource from "../../ContextSource";
 
-import type { ContextContent } from "@nai/ContextModule";
+import type { ContextField } from "@nai/ContextModule";
 import type { StoryContent } from "@nai/EventModule";
 
 /**
@@ -13,7 +13,7 @@ export default usModule((require, exports) => {
   const { ContextContent } = require(ContextModule);
   const contextSource = ContextSource(require);
 
-  const toContextSource = (content: ContextContent, index: number) => {
+  const toContextSource = (content: ContextField, index: number) => {
     // THese are expected to come in an assumed order.
     switch (index) {
       case 0: return contextSource.create(content, "story");

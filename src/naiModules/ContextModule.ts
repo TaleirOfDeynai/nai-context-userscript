@@ -7,8 +7,14 @@ export interface TrimTypes {
   TrimTop: "trimTop";
 }
 
+/** A generic interface for anything that can be provide content to the context. */
+export interface IContextField {
+  text: string;
+  contextConfig: ContextConfig;
+}
+
 export namespace Virtual {
-  export declare class ContextContent {
+  export declare class ContextField implements IContextField {
     constructor(contextConfig: ContextConfig, text?: string);
     static serializeInfo: unknown;
     static deserialize: Function;
@@ -18,10 +24,10 @@ export namespace Virtual {
   }
 }
 
-export type ContextContent = Virtual.ContextContent;
+export type ContextField = Virtual.ContextField;
 
 export interface IContextModule {
-  "SI": typeof Virtual.ContextContent;
+  "SI": typeof Virtual.ContextField;
   "vU": TrimTypes
 };
 

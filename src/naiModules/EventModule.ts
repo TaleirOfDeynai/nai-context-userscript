@@ -1,7 +1,7 @@
 import { ModuleDef } from "../require";
 import type * as Lorebook from "./Lorebook";
-import type * as ContextModule from "./ContextModule";
 import type * as EphemeralHelpers from "./EphemeralHelpers";
+import type { IContextField } from "./ContextModule";
 import type { StoryController } from "./Story";
 import type { AnyValueOf } from "@utils/utility-types";
 
@@ -52,7 +52,7 @@ export interface StoryContent {
 
   bannedSequenceGroups: unknown[];
   changeIndex: number;
-  context: ContextModule.Virtual.ContextContent[];
+  context: IContextField[];
   contextDefaults: {
     ephemeralDefaults: unknown[];
     loreDefaults: unknown[];

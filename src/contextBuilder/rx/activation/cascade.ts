@@ -6,13 +6,13 @@ import $SearchService from "../../SearchService";
 import $TextAssembly from "../../TextAssembly";
 
 import type { Observable as Obs } from "@utils/rx";
-import type { ContextField } from "@nai/ContextBuilder";
+import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { AssemblyResultMap } from "../../SearchService";
 import type { EnabledSource } from "../source";
 import type { ActivationState } from ".";
 
-interface CascadingField extends ContextField {
+interface CascadingField extends IContextField {
   keys: LoreEntry["keys"];
   nonStoryActivatable: LoreEntry["nonStoryActivatable"];
 }
@@ -39,7 +39,7 @@ export interface CascadeActivation {
    * A record of the matches from each activated entry that this entry
    * found a keyword match within.
    */
-  matches: Map<ContextField, AssemblyResultMap>;
+  matches: Map<IContextField, AssemblyResultMap>;
 }
 
 /**

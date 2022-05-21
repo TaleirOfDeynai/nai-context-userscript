@@ -1,16 +1,13 @@
 import { ModuleDef } from "../require";
+
+import type { AnyValueOf } from "@utils/utility-types";
 import type * as Lorebook from "./Lorebook";
 import type * as MatchResults from "./MatchResults";
 import type * as EventModule from "./EventModule";
+import type { IContextField } from "./ContextModule";
 import type { TokenizerTypes } from "./TokenizerHelpers";
 import type { TokenCodec } from "./TokenizerCodec";
-import type { AnyValueOf } from "@utils/utility-types";
 
-/** A generic interface for anything that can be provide content to the context. */
-export interface ContextField {
-  text: string;
-  contextConfig: Lorebook.ContextConfig;
-}
 
 export interface TrimStates {
   Included: "included";
@@ -63,7 +60,7 @@ export namespace Virtual {
     tokenCodec?: TokenCodec
   ): Promise<ContextRecorder>;
 
-  export declare class ContextStatus<T extends ContextField = ContextField> {
+  export declare class ContextStatus<T extends IContextField = IContextField> {
     included: boolean;
     identifier: string;
     /** Misspelled in NAI source. */
@@ -111,12 +108,12 @@ export namespace Virtual {
     preContextText: string;
     output: string;
     tokens: unknown[];
-    contextStatuses: ContextStatus<ContextField>[];
+    contextStatuses: ContextStatus<IContextField>[];
     spacesTrimed: number;
     structuredOutput: unknown[];
     stageReports: StageReport[];
-    keyRejections: ContextStatus<ContextField>[];
-    disabled: ContextStatus<ContextField>[];
+    keyRejections: ContextStatus<IContextField>[];
+    disabled: ContextStatus<IContextField>[];
     orderZeroPoint: number;
     biases: Array<{
       groups: Lorebook.PhraseBiasConfig[],

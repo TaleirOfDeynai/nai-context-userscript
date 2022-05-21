@@ -8,7 +8,7 @@ import $TrimmingService, { TokenizedAssembly } from "./TrimmingService";
 import $TextAssembly, { TextAssembly } from "./TextAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { ContextField } from "@nai/ContextBuilder";
+import type { IContextField } from "@nai/ContextModule";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
@@ -156,7 +156,7 @@ const theModule = usModule((require, exports) => {
    * It also manages some of the normalization options in the user-script
    * configuration.
    */
-  class ContextContent<T extends ContextField = ContextField> {
+  class ContextContent<T extends IContextField = IContextField> {
 
     constructor(
       origField: T,
@@ -176,7 +176,7 @@ const theModule = usModule((require, exports) => {
       this.#currentBudget = this.#initialBudget;
     }
 
-    static async forField<T extends ContextField>(field: T, contextParams: ContextParams) {
+    static async forField<T extends IContextField>(field: T, contextParams: ContextParams) {
       const { text, contextConfig } = field;
       const { maximumTrimType, trimDirection } = contextConfig;
       const provider = getProvider(false, false, trimDirection, contextParams);
