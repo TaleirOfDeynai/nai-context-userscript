@@ -6,6 +6,7 @@ import { chain, journey, buffer } from "@utils/iterables";
 import { toReplay, ReplaySource } from "@utils/asyncIterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TrimmingProviders from "./TrimmingProviders";
+import $TextAssembly from "./TextAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReplayWrapper } from "@utils/asyncIterables";
@@ -15,6 +16,7 @@ import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
 import type { ContextParams } from "./ParamsService";
+import type { TextAssembly } from "./TextAssembly";
 
 export interface TrimOptions {
   /**
@@ -38,18 +40,9 @@ export interface TrimOptions {
   suffix: ContextConfig["suffix"];
 }
 
-export interface TrimmedContent {
-  /** The prefix used during the trim. */
-  readonly prefix: ContextConfig["prefix"];
-  /** The inner fragment of the trimmed text. */
-  readonly fragments: readonly TextFragment[];
-  /** The suffix used during the trim. */
-  readonly suffix: ContextConfig["suffix"];
-}
-
-export interface TokenizedContent extends TrimmedContent {
+export interface TokenizedAssembly extends TextAssembly {
   /**
-   * The array of tokens for the full content, built from the concatenation
+   * The array of tokens for the assembly, built from the concatenation
    * of `prefix`, `content`, and `suffix`.
    */
   readonly tokens: readonly number[];
@@ -60,9 +53,7 @@ export interface TrimResult extends EncodeResult {
 }
 
 export interface Trimmer extends AsyncIterable<TrimResult> {
-  prefix: string;
-  fragments: TextFragment[];
-  suffix: string;
+  origin: TextAssembly;
 };
 
 export interface ReplayTrimResult extends EncodeResult {
@@ -70,9 +61,7 @@ export interface ReplayTrimResult extends EncodeResult {
 }
 
 export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
-  prefix: string;
-  fragment: TextFragment;
-  suffix: string;
+  origin: TextAssembly;
 };
 
 /**
@@ -86,10 +75,9 @@ const noReplay = <T>(source: ReplaySource<T>): AsyncIterable<T> =>
 const EMPTY = async function*() {};
 
 export default usModule((require, exports) => {
-  const splitterService = $TextSplitterService(require);
   const providers = $TrimmingProviders(require);
-
-  const { hasWords } = splitterService;
+  const { hasWords } = $TextSplitterService(require);
+  const { TextAssembly } = $TextAssembly(require);
 
   const optionDefaults: TrimOptions = {
     provider: "doNotTrim",
@@ -109,7 +97,7 @@ export default usModule((require, exports) => {
    * be trimmed multiple times.
    */
   function createTrimmer(
-    content: TextOrFragment,
+    assembly: TextAssembly,
     contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: true
@@ -120,7 +108,7 @@ export default usModule((require, exports) => {
    * encoder on fragments it has already encoded before.
    */
   function createTrimmer(
-    content: TextOrFragment,
+    assembly: TextAssembly,
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay?: false
@@ -129,14 +117,14 @@ export default usModule((require, exports) => {
    * Creates a trimmer.  It is ambiguous whether or not it does replay caching.
    */
   function createTrimmer(
-    content: TextOrFragment,
+    assembly: TextAssembly,
     contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: boolean
   ): Trimmer | ReplayTrimmer;
   // Actual implementation.
   function createTrimmer(
-    content: TextOrFragment,
+    assembly: TextAssembly,
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay = false
@@ -145,7 +133,7 @@ export default usModule((require, exports) => {
 
     const config = { ...optionDefaults, ...options };
     const provider = providers.asProvider(config.provider);
-    const fragments = provider.preProcess(content);
+    const fragments = provider.preProcess(assembly);
     const sequencers = providers.getSequencersFrom(provider, config.maximumTrimType);
     const { prefix, suffix } = config;
     const wrapperFn = doReplay ? toReplay : noReplay;
@@ -210,7 +198,7 @@ export default usModule((require, exports) => {
         sequencers,
         config.preserveEnds ? "ends" : "none"
       )),
-      { prefix, fragments: [...fragments], suffix }
+      { origin: assembly }
     );
   }
 
@@ -219,13 +207,15 @@ export default usModule((require, exports) => {
    * text fragment.
    */
   const tokenResultFrom = (
-    prefix: string,
+    origin: TextAssembly,
     fragments: readonly TextFragment[],
-    suffix: string,
     tokens: readonly number[]
-  ): TokenizedContent => {
+  ): TokenizedAssembly => {
     assert("Expected at least one text fragment.", fragments.length > 0);
-    return { prefix, suffix, tokens, fragments };
+    return Object.assign(
+      TextAssembly.fromDerived(fragments, origin),
+      { tokens }
+    );
   };
 
   /**
@@ -235,7 +225,7 @@ export default usModule((require, exports) => {
   async function execTrimTokens(
     trimmer: Trimmer,
     tokenBudget: number
-  ): Promise<UndefOr<TokenizedContent>> {
+  ): Promise<UndefOr<TokenizedAssembly>> {
     // Ensue the budget is valid.
     tokenBudget = Math.max(0, tokenBudget);
 
@@ -253,9 +243,8 @@ export default usModule((require, exports) => {
     }
 
     return !lastResult ? undefined : tokenResultFrom(
-      trimmer.prefix,
+      trimmer.origin,
       lastResult.fragments,
-      trimmer.suffix,
       lastResult.tokens
     );
   }
@@ -273,16 +262,16 @@ export default usModule((require, exports) => {
    */
   async function trimByTokens(
     /** The content to trim. */
-    content: TextOrFragment,
+    assembly: TextAssembly,
     /** The token budget. */
     tokenBudget: number,
     /** The context parameters object. */
     contextParams: ContextParams,
     /** Trimming options. */
     options?: Partial<TrimOptions>
-  ): Promise<UndefOr<TokenizedContent>> {
+  ): Promise<UndefOr<TokenizedAssembly>> {
     // Create a single-use trimmer and execute.
-    const trimmer = createTrimmer(content, contextParams, options);
+    const trimmer = createTrimmer(assembly, contextParams, options);
     return await execTrimTokens(trimmer, tokenBudget);
   }
 
@@ -351,16 +340,18 @@ export default usModule((require, exports) => {
    * prior to performing the trim.
    */
   function trimByLength(
-    content: TextOrFragment,
+    assembly: TextAssembly,
     maximumLength: number,
     options?: Partial<TrimOptions>
-  ): UndefOr<TrimmedContent> {
-    const { prefix, suffix, preserveEnds, provider: srcProvider, maximumTrimType }
+  ): UndefOr<TextAssembly> {
+    const { preserveEnds, provider: srcProvider, maximumTrimType }
       = { ...optionDefaults, ...options };
 
     const provider = providers.asProvider(srcProvider);
-    const fragments = provider.preProcess(content);
-    maximumLength = Math.max(0, maximumLength - (prefix.length + suffix.length));
+    const fragments = provider.preProcess(assembly);
+    const prefixLength = assembly.prefix.content.length;
+    const suffixLength = assembly.suffix.content.length;
+    maximumLength = Math.max(0, maximumLength - (prefixLength + suffixLength));
 
     // Now we can trim.
     const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
@@ -372,11 +363,7 @@ export default usModule((require, exports) => {
     // Un-reverse if the provider runs in reverse.
     if (provider.reversed) trimmedFrags.reverse();
     
-    return {
-      prefix,
-      fragments: trimmedFrags,
-      suffix
-    };
+    return TextAssembly.fromDerived(trimmedFrags, assembly);
   }
 
   return Object.assign(exports, {

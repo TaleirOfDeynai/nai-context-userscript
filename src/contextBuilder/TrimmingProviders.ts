@@ -6,9 +6,11 @@ import { chain, iterReverse } from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TokenizerService from "./TokenizerService";
 
+import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { StreamEncodeFn, EncodeResult } from "./TokenizerService";
+import type { TextAssembly } from "./TextAssembly";
 
 export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];
@@ -26,10 +28,11 @@ export type SplitterFn = (text: TextFragment) => Iterable<TextFragment>;
  */
 export interface TrimProvider extends Record<TrimType, SplitterFn> {
   /**
-   * Typically performs the conversion of a `string` into a {@link TextFragment}
-   * as needed, but can also handle other pre-trimming string processing.
+   * Typically performs the conversion of a {@link TextAssembly} into an
+   * iterable of {@link TextFragment} to be trimmed, as needed, but can
+   * also handle other pre-trimming processing on those fragments.
    */
-  preProcess: (text: TextOrFragment) => Iterable<TextFragment>;
+  preProcess: (assembly: TextAssembly) => Iterable<TextFragment>;
   /**
    * Whether this provider iterates fragments in reverse, from the end of
    * the input string towards the beginning.
@@ -67,8 +70,8 @@ export default usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
   const { mergeFragments } = splitterService;
 
-  const basicPreProcess = (text: TextOrFragment) =>
-    [splitterService.asFragment(text)];
+  // Generally, we just work off the assembly's content.
+  const basicPreProcess = (assembly: TextAssembly) => assembly.content;
 
   // For `doNotTrim`, we do not trim...  So, yield an empty iterable.
   const noop = (): Iterable<TextFragment> => [];
@@ -127,7 +130,7 @@ export default usModule((require, exports) => {
         // Iterating in reverse, the newline will come before the comment.
         // We'll just hold on to the newline fragment until we know a
         // comment isn't following it.
-        let newLineFragment: TextFragment | undefined = undefined;
+        let newLineFragment: UndefOr<TextFragment> = undefined;
         for (const frag of basic.trimTop.newline(text)) {
           if (frag.content === "\n") {
             // Emit the previous newline fragment if we have one.
@@ -152,7 +155,7 @@ export default usModule((require, exports) => {
     }),
     doNotTrim: {
       ...basic.doNotTrim,
-      preProcess: (text) => chain(basic.doNotTrim.preProcess(text))
+      preProcess: (assembly) => chain(basic.doNotTrim.preProcess(assembly))
         .map((frag) => removeComments.trimBottom.newline(frag))
         .flatten()
         .value()
