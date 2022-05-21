@@ -212,8 +212,9 @@ export default usModule((require, exports) => {
   const toAssemblyResult =
     (assembly: TextAssembly, type: TextCursor["type"]) =>
     (theMatch: TextResult): AssemblyResult => {
-      const selection = toSelection(theMatch, assembly, type);
-      return Object.freeze({ ...theMatch, selection });
+      return Object.freeze(Object.assign(Object.create(theMatch), {
+        selection: toSelection(theMatch, assembly, type)
+      }));
     };
 
   /**
