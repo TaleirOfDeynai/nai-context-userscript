@@ -1,9 +1,9 @@
+import userScriptConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isArray } from "@utils/is";
 import { assert, assertExists } from "@utils/assert";
 import { chain, first, toImmutable } from "@utils/iterables";
-import userScriptConfig from "../config";
 import $TextSplitterService from "./TextSplitterService";
 
 import type { UndefOr } from "@utils/utility-types";

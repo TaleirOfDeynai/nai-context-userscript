@@ -1,6 +1,6 @@
+import userScriptConfig from "@config";
 import * as rx from "./rx";
 import * as rxop from "./rxop";
-import userScriptConfig from "../config";
 
 interface LoggerMessage {
   origin: string;

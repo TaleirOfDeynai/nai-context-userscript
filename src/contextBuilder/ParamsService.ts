@@ -1,6 +1,6 @@
+import userScriptConfig from "@config";
 import { usModule } from "@utils/usModule";
 import TokenizerHelpers from "@nai/TokenizerHelpers";
-import userScriptConfig from "../config";
 import $TokenizerService from "./TokenizerService";
 
 import type { StoryContent, StoryState } from "@nai/EventModule";
