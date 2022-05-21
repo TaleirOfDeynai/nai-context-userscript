@@ -58,7 +58,7 @@ const story = {
    * This is probably somewhat of a heisenbug waiting to happen.
    */
   standardizeHandling: true
-};
+} as const;
 
 /** Configuration options affecting lorebook features. */
 const lorebook = {

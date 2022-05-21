@@ -53,6 +53,7 @@ export interface TrimResult extends EncodeResult {
 }
 
 export interface Trimmer extends AsyncIterable<TrimResult> {
+  provider: TrimProvider;
   origin: TextAssembly;
 };
 
@@ -61,6 +62,7 @@ export interface ReplayTrimResult extends EncodeResult {
 }
 
 export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
+  provider: TrimProvider;
   origin: TextAssembly;
 };
 
@@ -198,7 +200,7 @@ export default usModule((require, exports) => {
         sequencers,
         config.preserveEnds ? "ends" : "none"
       )),
-      { origin: assembly }
+      { origin: assembly, provider }
     );
   }
 

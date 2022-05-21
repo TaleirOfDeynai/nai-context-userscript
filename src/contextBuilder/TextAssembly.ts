@@ -650,6 +650,26 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
+     * Generates a version of this assembly that has no prefix or suffix.
+     * 
+     * It still has the same source, so cursors for that source will still
+     * work as expected.
+     */
+    asOnlyContent(): TextAssembly {
+      // No need if we don't have a prefix or suffix.
+      if (!this.#isAffixed) return this;
+
+      // Replace the suffix and prefix with zero-length fragments.
+      const { prefix, suffix } = this;
+      return new TextAssembly(
+        !prefix.content ? prefix : createFragment("", 0, prefix),
+        this.#content,
+        !suffix.content ? suffix : createFragment("", 0, suffix),
+        this.#isContiguous, this.source
+      );
+    }
+
+    /**
      * Determines what block the given `cursor` belongs to.  If the cursor
      * has a source that differs from this assembly, it will return `"unrelated"`
      * to indicate the cursor is unsuitable for this assembly.

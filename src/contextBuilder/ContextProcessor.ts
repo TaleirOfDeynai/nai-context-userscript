@@ -64,7 +64,7 @@ export default usModule((require, exports) => {
     storyContent: StoryContent,
     storyState: StoryState,
     givenTokenLimit: number,
-    givenLength?: number,
+    givenStoryLength?: number,
     removeComments?: boolean,
     tokenCodec?: TokenCodec
   ) {
@@ -72,13 +72,14 @@ export default usModule((require, exports) => {
       storyContent,
       storyState,
       givenTokenLimit,
+      givenStoryLength,
       removeComments,
       tokenCodec
     );
 
     // Defer getting the story text until after we've setup the pipeline.
     const deferredStoryText = rx
-      .defer(() => getStoryText(contextParams, givenLength))
+      .defer(() => getStoryText(contextParams, givenStoryLength))
       .pipe(rxop.share());
 
     // Figure out our sources for context content.
