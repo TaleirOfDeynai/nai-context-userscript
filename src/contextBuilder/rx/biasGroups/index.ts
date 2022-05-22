@@ -2,8 +2,8 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
-import BiasLore from "./lore";
-import BiasCategory from "./category";
+import $BiasLore from "./lore";
+import $BiasCategory from "./category";
 
 import type { StoryContent } from "@nai/EventModule";
 import type { ActivationPhaseResult } from "../activation";
@@ -20,8 +20,8 @@ const logger = createLogger("Bias Groups Phase");
 
 export default usModule((require, exports) => {
   const biasGroups = {
-    lore: BiasLore(require).createStream,
-    category: BiasCategory(require).createStream
+    lore: $BiasLore(require).createStream,
+    category: $BiasCategory(require).createStream
   };
 
   function biasGroupPhase(

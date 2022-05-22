@@ -35,7 +35,7 @@ class ContextModule extends ModuleDef<IContextModule> {
   moduleId = 72969;
   expectedExports = 9;
   mapping = {
-    "SI": ["ContextContent", "function"],
+    "SI": ["ContextField", "function"],
     "vU": ["TRIM_TYPES", "object"]
   } as const;
 };

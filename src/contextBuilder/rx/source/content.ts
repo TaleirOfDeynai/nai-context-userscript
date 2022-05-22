@@ -1,19 +1,20 @@
 import * as rx from "@utils/rx";
+import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import ContextModule from "@nai/ContextModule";
-import ContextSource from "../../ContextSource";
+import $ContextSource from "../../ContextSource";
+import $ContextContent from "../../ContextContent";
 
-import type { ContextField } from "@nai/ContextModule";
-import type { StoryContent } from "@nai/EventModule";
+import type { ContextParams } from "contextBuilder/ParamsService";
+import type { ContextContent } from "../../ContextContent";
 
 /**
  * Handles the conversion of content blocks into an observable.
  */
 export default usModule((require, exports) => {
-  const { ContextContent } = require(ContextModule);
-  const contextSource = ContextSource(require);
+  const { ContextContent } = $ContextContent(require);
+  const contextSource = $ContextSource(require);
 
-  const toContextSource = (content: ContextField, index: number) => {
+  const toContextSource = (content: ContextContent, index: number) => {
     // THese are expected to come in an assumed order.
     switch (index) {
       case 0: return contextSource.create(content, "story");
@@ -23,12 +24,17 @@ export default usModule((require, exports) => {
     }
   };
 
-  const createStream = (storyText: string) => (storyContent: StoryContent) => {
+  const createStream = (contextParams: ContextParams) => {
+    const { context } = contextParams.storyContent;
     const contextChunks = [
-      new ContextContent(storyContent.storyContextConfig, storyText),
-      ...storyContent.context
+      ContextContent.forStory(contextParams),
+      ...context.map((f) => ContextContent.forField(f, contextParams))
     ];
-    return rx.of(...contextChunks.map(toContextSource))
+
+    return rx.from(contextChunks).pipe(
+      rxop.mergeAll(),
+      rxop.map(toContextSource)
+    );
   };
 
   return Object.assign(exports, {

@@ -1,8 +1,7 @@
-
+import conforms from "lodash-es/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isBoolean, isObject } from "@utils/is";
 import { categories } from "../_shared";
 
 import type { Categories } from "@nai/Lorebook";
@@ -18,23 +17,23 @@ export interface DisabledSource extends ContextSource {
 };
 
 export default usModule((_require, exports) => {
-  const isEnabled = <T extends ContextSource<any>>(source: T): boolean => {
-    const { entry } = source;
-    // If it isn't an object, it's default disabled.
-    if (!isObject(entry)) return false;
-    // If it lacks the `enabled` property, it's default enabled.
-    if (!("enabled" in entry)) return true;
-    // Unless it isn't well-formed.
-    if (!isBoolean(entry.enabled)) return false;
-    return entry.enabled;
-  };
+  const isEnabled = conforms({
+    entry: conforms({
+      fieldConfig: (c: { enabled?: boolean }) => {
+        // Enabled by default if it lacks the `enabled` property.
+        if (!("enabled" in c)) return true;
+        // Otherwise, it must be exactly `true`.
+        return c.enabled === true;
+      }
+    })
+  });
 
   const checkCategory = (allCategories: Map<string, Categories.Category>) =>
     (source: ContextSource<any>): boolean => {
       // The entry must have a category to even be disabled through it.
       if (!categories.isCategorized(source)) return true;
 
-      const category = allCategories.get(source.entry.category);
+      const category = allCategories.get(source.entry.fieldConfig.category);
       // We'll accept only an explicit `false` to disable it.
       return category?.enabled !== false;
     };

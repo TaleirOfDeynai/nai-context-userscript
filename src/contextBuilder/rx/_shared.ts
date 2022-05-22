@@ -1,5 +1,7 @@
-import { isObject, isString } from "@utils/is";
+import conforms from "lodash-es/conforms";
+import { isString } from "@utils/is";
 
+import type { TypePredicate } from "@utils/is";
 import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry, PhraseBiasConfig } from "@nai/Lorebook";
 import type { ActivationSource, ActivatedSource, RejectedSource } from "./activation";
@@ -24,13 +26,14 @@ type CategorizedSource = ContextSource<CategorizedField>;
 
 export const categories = {
   /** Checks to see if the entry of `source` has a `category` field. */
-  isCategorized: (source: ContextSource<any>): source is CategorizedSource => {
-    const { entry } = source;
-    if (!isObject(entry)) return false;
-    if (!("category" in entry)) return false;
-    if (!isString(entry.category)) return false;
-    return Boolean(entry.category);
-  }
+  isCategorized: conforms({
+    entry: conforms({
+      fieldConfig: conforms({
+        // Need a non-empty string to qualify.
+        category: (v) => isString(v) && Boolean(v)
+      })
+    })
+  }) as TypePredicate<CategorizedSource>
 };
 
 // Phrase bias stuff.

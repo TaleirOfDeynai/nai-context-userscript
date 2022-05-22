@@ -21,14 +21,16 @@ import $TextSplitterService from "./TextSplitterService";
 import $TextAssembly from "./TextAssembly";
 
 import type { Maybe, UndefOr } from "@utils/utility-types";
+import type { IContextField } from "@nai/ContextModule";
 import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherFn, MatchResult as TextResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
 import type { TextAssembly, TextCursor, TextSelection } from "./TextAssembly";
+import type { ContextContent } from "./ContextContent";
 
-export type WithKeys = { keys: string[] };
-export type Matchable = Iterable<string> | WithKeys;
+export type KeyedContent = ContextContent<IContextField & { keys: string[] }>;
+export type Matchable = Iterable<string> | KeyedContent;
 
 export interface AssemblyResult extends TextResult {
   readonly selection: TextSelection;
@@ -36,7 +38,7 @@ export interface AssemblyResult extends TextResult {
 
 export type TextResultMap = Map<string, readonly TextResult[]>;
 export type AssemblyResultMap = Map<string, readonly AssemblyResult[]>;
-export type EntryResultMap<T extends WithKeys> = Map<T, AssemblyResultMap>;
+export type EntryResultMap<T extends KeyedContent> = Map<T, AssemblyResultMap>;
 
 const logger = createLogger("SearchService");
 
@@ -158,8 +160,12 @@ export default usModule((require, exports) => {
 
   /** Makes sure we have an iterable of strings from something matchable. */
   function getKeys(v: Matchable): Iterable<string> {
-    if (isIterable(v)) return v;
-    if ("keys" in v) return v.keys;
+    checks: {
+      if (isIterable(v)) return v;
+      if (!("fieldConfig" in v)) break checks;
+      if (!("keys" in v.fieldConfig)) break checks;
+      return v.fieldConfig.keys;
+    }
     return [];
   };
   
@@ -275,7 +281,7 @@ export default usModule((require, exports) => {
    * a little faster than calling {@link search search()} with each entry
    * individually as the matchers can be batched.
    */
-  function searchForLore<T extends WithKeys>(
+  function searchForLore<T extends KeyedContent>(
     /** The text-like thing to search. */
     assembly: TextAssembly,
     /** The entries to include in the search. */
@@ -296,7 +302,7 @@ export default usModule((require, exports) => {
     const entryResults: EntryResultMap<T> = new Map();
     for (const entry of entries) {
       const entryResult: AssemblyResultMap = new Map();
-      for (const key of entry.keys) {
+      for (const key of entry.fieldConfig.keys) {
         const result = keyResults.get(key);
         if (!result?.length) continue;
         entryResult.set(key, result);
@@ -420,7 +426,7 @@ export default usModule((require, exports) => {
       return splitterService.createFragment(content, textToSearch.length - content.length);
     });
     
-    const results = searchText(textFragment, entry);
+    const results = searchText(textFragment, entry.keys);
 
     if (quickCheck) {
       const bestKey = findLowestInOrder(results, entry.keys);

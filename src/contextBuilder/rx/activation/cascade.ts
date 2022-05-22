@@ -1,25 +1,25 @@
+import conforms from "lodash-es/conforms";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isArray, isObject } from "@utils/is";
+import { isArray } from "@utils/is";
 import { createLogger } from "@utils/logging";
 import $SearchService from "../../SearchService";
-import $TextAssembly from "../../TextAssembly";
 
+import type { TypePredicate } from "@utils/is";
 import type { Observable as Obs } from "@utils/rx";
 import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry } from "@nai/Lorebook";
+import type { ExtendField } from "../../ContextSource";
 import type { AssemblyResultMap } from "../../SearchService";
 import type { EnabledSource } from "../source";
 import type { ActivationState } from ".";
 
-interface CascadingField extends IContextField {
+type CascadingSource = ExtendField<EnabledSource, {
   keys: LoreEntry["keys"];
   nonStoryActivatable: LoreEntry["nonStoryActivatable"];
-}
-
-type CascadingState = ActivationState<EnabledSource & {
-  entry: CascadingField
 }>;
+
+type CascadingState = ActivationState<CascadingSource>;
 
 const logger = createLogger("activation/cascade");
 
@@ -47,17 +47,19 @@ export interface CascadeActivation {
  */
 export default usModule((require, exports) => {
   const { searchForLore } = $SearchService(require);
-  const { TextAssembly } = $TextAssembly(require);
 
-  const isCascading = (state: ActivationState<any>): state is CascadingState => {
-    const { entry } = state.source;
-    if (!isObject(entry)) return false;
-    if (!("nonStoryActivatable" in entry)) return false;
-    if (!entry.nonStoryActivatable) return false;
-    if (!("keys" in entry)) return false;
-    if (!isArray(entry.keys)) return false;
-    return entry.keys.length > 0;
-  };
+  const isCascading = conforms({
+    source: conforms({
+      entry: conforms({
+        fieldConfig: conforms({
+          // Need a non-empty array to qualify.
+          keys: (v) => isArray(v) && Boolean(v.length),
+          // Cascading is active when `true`.
+          nonStoryActivatable: (v) => v === true
+        })
+      })
+    })
+  }) as TypePredicate<CascadingState>;
 
   const checkActivation = (sources: Obs<ActivationState>) =>
     (directActivations: Obs<ActivationState>): Obs<ActivationState> => sources.pipe(
@@ -87,12 +89,11 @@ export default usModule((require, exports) => {
   
           // Check the keys for all cascading sources against the entry's
           // assembled text.
-          // TODO: A text assembly should exist before this point.
-          const assembly = TextAssembly.fromSource(
-            activated.entry.text,
-            activated.entry.contextConfig
+          const searchResults = searchForLore(
+            activated.entry.searchedText,
+            [...entryToState.keys()],
+            true
           );
-          const searchResults = searchForLore(assembly, [...entryToState.keys()], true);
           for (const [entry, results] of searchResults) {
             if (!results.size) continue;
 

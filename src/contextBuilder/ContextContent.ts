@@ -3,6 +3,7 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isNumber } from "@utils/is";
 import EventModule from "@nai/EventModule";
+import ContextModule from "@nai/ContextModule";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TrimmingService, { TokenizedAssembly } from "./TrimmingService";
 import $TextAssembly, { TextAssembly } from "./TextAssembly";
@@ -41,6 +42,7 @@ const reComment = /^##/m;
 
 const theModule = usModule((require, exports) => {
   const eventModule = require(EventModule);
+  const { ContextField } = require(ContextModule);
   const providers = $TrimmingProviders(require);
 
   const { createTrimmer, execTrimTokens, trimByLength } = $TrimmingService(require);
@@ -213,14 +215,14 @@ const theModule = usModule((require, exports) => {
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
 
       return new ContextContent(
-        { text: searchText.fullText, contextConfig },
+        new ContextField(contextConfig, searchText.fullText),
         searchText,
         trimmer,
         contextParams
       );
     }
 
-    #field: T;
+    #field: Readonly<T>;
     #fieldConfig: Omit<T, "text" | "contextConfig">;
     #contextConfig: ContextConfig;
     #trimmer: Trimmer | ReplayTrimmer;
@@ -239,6 +241,16 @@ const theModule = usModule((require, exports) => {
     #currentBudget: number;
     /** Current trim results of the current budget applied. */
     #currentResult: UndefOr<InFlightTrimming>;
+
+    /**
+     * The original field used as the source.
+     * 
+     * This is available for convenience, but you should favor `fieldConfig`
+     * in most cases.  Under no circumstances should this object be mutated.
+     */
+    get field(): Readonly<T> {
+      return this.#field;
+    }
 
     /** The raw text from the source. */
     get text(): string {
@@ -335,4 +347,10 @@ const theModule = usModule((require, exports) => {
 });
 
 export default theModule;
-export type ContextContent = InstanceType<ReturnType<typeof theModule>["ContextContent"]>;
+
+// Do some magic with instantiation expressions to extract the class.
+declare namespace WitchCraft {
+  export const ContextContentCtor: ReturnType<typeof theModule>["ContextContent"];
+}
+export type ContextContent<T extends IContextField = IContextField>
+  = InstanceType<typeof WitchCraft.ContextContentCtor<T>>;
