@@ -12,7 +12,7 @@ export interface ITokenizerHelpers {
 }
 
 class TokenizerHelpers extends ModuleDef<ITokenizerHelpers> {
-  moduleId = 31259;
+  moduleId = 86930;
   expectedExports = 3;
   mapping = {
     "ID": ["getTokenizerType", "function"]
