@@ -2,7 +2,7 @@ import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
 import { assertExists } from "@utils/assert";
-import { chain, iterReverse } from "@utils/iterables";
+import { iterReverse, flatMap } from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TokenizerService from "./TokenizerService";
 
@@ -50,7 +50,7 @@ export interface TextSequencer {
   /** Encoder to use with this sequencer. */
   encode: StreamEncodeFn;
   /** Gets the text fragment to use with the next sequencer. */
-  prepareInnerChunk: (current: EncodeResult, last?: Readonly<EncodeResult>) => TextFragment;
+  prepareInnerChunk: (current: EncodeResult, last?: EncodeResult) => readonly TextFragment[];
   /** The iteration direction of {@link TextSequencer.splitUp splitUp}. */
   reversed: boolean;
 }
@@ -68,7 +68,6 @@ const BUFFER_SIZE = Object.freeze([10, 5, 5] as const);
 export default usModule((require, exports) => {
   const tokenizerService = $TokenizerService(require);
   const splitterService = $TextSplitterService(require);
-  const { mergeFragments } = splitterService;
 
   // Generally, we just work off the assembly's content.
   const basicPreProcess = (assembly: TextAssembly) => assembly.content;
@@ -155,10 +154,10 @@ export default usModule((require, exports) => {
     }),
     doNotTrim: {
       ...basic.doNotTrim,
-      preProcess: (assembly) => chain(basic.doNotTrim.preProcess(assembly))
-        .map((frag) => removeComments.trimBottom.newline(frag))
-        .flatten()
-        .value()
+      preProcess: (assembly) => flatMap(
+        basic.doNotTrim.preProcess(assembly),
+        removeComments.trimBottom.newline
+      )
     }
   });
 
@@ -188,26 +187,26 @@ export default usModule((require, exports) => {
   ): TextSequencer => {
     const encode: TextSequencer["encode"] = dew(() => {
       if (reversed) return (codec, toEncode, options) => {
-        options = Object.assign({}, { bufferSize }, options);
+        options = { bufferSize, ...options };
         return tokenizerService.prependEncoder(codec, toEncode, options);
       };
 
       return (codec, toEncode, options) => {
-        options = Object.assign({}, { bufferSize }, options);
+        options = { bufferSize, ...options };
         return tokenizerService.appendEncoder(codec, toEncode, options);
       };
     });
 
     const prepareInnerChunk: TextSequencer["prepareInnerChunk"] = dew(() => {
       if (reversed) return (current, last) => {
-        if (!last) return mergeFragments(current.fragments);
+        if (!last) return current.fragments;
         const diff = current.fragments.length - last.fragments.length;
-        return mergeFragments(current.fragments.slice(0, diff));
+        return current.fragments.slice(0, diff).reverse();
       };
       return (current, last) => {
-        if (!last) return mergeFragments(current.fragments);
+        if (!last) return current.fragments;
         const diff = current.fragments.length - last.fragments.length;
-        return mergeFragments(current.fragments.slice(-diff));
+        return current.fragments.slice(-diff);
       };
     });
 

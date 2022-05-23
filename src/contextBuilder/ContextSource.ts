@@ -57,7 +57,7 @@ export default usModule((require, exports) => {
   const create = <TField extends IContextField, TType extends SourceType>(
     entry: ContextContent<TField>,
     type: TType,
-    identifier = toIdentifier(entry, type)
+    identifier = toIdentifier(entry.field, type)
   ): ContextSource<TField, TType> => {
     return {
       uniqueId: uuid.v4(),

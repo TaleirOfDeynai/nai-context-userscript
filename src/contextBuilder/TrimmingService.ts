@@ -1,18 +1,16 @@
 import { dew } from "@utils/dew";
-import { isFunction } from "@utils/is";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
-import { chain, journey, buffer } from "@utils/iterables";
-import { toReplay, ReplaySource } from "@utils/asyncIterables";
+import { journey, buffer, flatMap, flatten } from "@utils/iterables";
+import { toReplay } from "@utils/asyncIterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TextAssembly from "./TextAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReplayWrapper } from "@utils/asyncIterables";
-import type { ContextConfig } from "@nai/Lorebook";
 import type { EncodeResult } from "./TokenizerService";
-import type { TextFragment, TextOrFragment } from "./TextSplitterService";
+import type { TextFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
 import type { ContextParams } from "./ParamsService";
@@ -35,9 +33,6 @@ export interface TrimOptions {
    * Setting this to `true` will ensure these fragments are not lost.
    */
   preserveEnds: boolean;
-
-  prefix: ContextConfig["prefix"];
-  suffix: ContextConfig["suffix"];
 }
 
 export interface TokenizedAssembly extends TextAssembly {
@@ -66,14 +61,6 @@ export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
   origin: TextAssembly;
 };
 
-/**
- * Basically a compatibility identity function for {@link toReplay}.
- * If a zero-arity async generator function is given, it calls it and
- * returns the async iterable.
- */
-const noReplay = <T>(source: ReplaySource<T>): AsyncIterable<T> =>
-  isFunction(source) ? source() : source;
-
 const EMPTY = async function*() {};
 
 export default usModule((require, exports) => {
@@ -84,9 +71,13 @@ export default usModule((require, exports) => {
   const optionDefaults: TrimOptions = {
     provider: "doNotTrim",
     maximumTrimType: "token",
-    preserveEnds: true,
-    prefix: "",
-    suffix: ""
+    preserveEnds: true
+  };
+
+  const makeTrimResult = (curResult: EncodeResult, split: TrimResult["split"]): TrimResult => {
+    let instance = Object.create(curResult);
+    instance = Object.assign(instance, { split });
+    return Object.freeze(instance);
   };
 
   // I'm not going to beat around the bush.  This will be quite ugly and
@@ -135,71 +126,56 @@ export default usModule((require, exports) => {
 
     const config = { ...optionDefaults, ...options };
     const provider = providers.asProvider(config.provider);
-    const fragments = provider.preProcess(assembly);
     const sequencers = providers.getSequencersFrom(provider, config.maximumTrimType);
-    const { prefix, suffix } = config;
-    const wrapperFn = doReplay ? toReplay : noReplay;
 
     const nextSplit = (
       content: Iterable<TextFragment>,
       sequencers: TextSequencer[],
       preserveMode: "initial" | "ends" | "none",
-      seedResult?: Readonly<EncodeResult>
+      seedResult?: EncodeResult
     ) => {
       if (sequencers.length === 0) return EMPTY;
 
       const [sequencer, ...restSequencers] = sequencers;
 
-      return async function*() {
+      return async function*(): AsyncIterable<TrimResult> {
         const fragments = dew(() => {
-          const splitFrags = chain(content)
-            .map(sequencer.splitUp)
-            .flatten();
+          const splitFrags = flatMap(content, sequencer.splitUp);
           switch (preserveMode) {
-            case "ends": return splitFrags.value();
-            case "initial": return splitFrags
-              .thru((iter) => buffer(iter, hasWords, false))
-              .flatten()
-              .value();
-            default: return splitFrags
-              .thru((iter) => journey(iter, hasWords))
-              .value();
+            case "ends": return splitFrags;
+            case "initial": return flatten(buffer(splitFrags, hasWords, false));
+            default: return journey(splitFrags, hasWords);
           }
         });
 
         const encoding = sequencer.encode(tokenCodec, fragments, {
-          prefix, suffix, seedResult
+          prefix: assembly.prefix.content,
+          suffix: assembly.suffix.content,
+          seedResult
         });
 
         let lastResult = seedResult;
         for await (const curResult of encoding) {
-          // `lastResult` is a mutable variable.  Copy the reference into a
-          // block-scoped constant.
-          const capturedLastResult = lastResult;
-          yield Object.freeze(Object.assign(curResult, {
-            split() {
-              const nextChunk = sequencer.prepareInnerChunk(curResult, capturedLastResult);
-
-              return wrapperFn(nextSplit(
-                [nextChunk],
-                restSequencers,
-                // Use "initial" mode for recursive calls instead of "none".
-                preserveMode === "ends" ? "ends" : "initial",
-                capturedLastResult
-              ));
-            }
-          }));
+          const innerSplit = nextSplit(
+            sequencer.prepareInnerChunk(curResult, lastResult),
+            restSequencers,
+            // Use "initial" mode for recursive calls instead of "none".
+            preserveMode === "ends" ? "ends" : "initial",
+            lastResult
+          );
+          yield makeTrimResult(curResult, doReplay ? toReplay(innerSplit) : innerSplit);
           lastResult = curResult;
         }
       };
     }
 
+    const outerSplit = nextSplit(
+      provider.preProcess(assembly),
+      sequencers,
+      config.preserveEnds ? "ends" : "none"
+    );
     return Object.assign(
-      wrapperFn(nextSplit(
-        fragments,
-        sequencers,
-        config.preserveEnds ? "ends" : "none"
-      )),
+      doReplay ? toReplay(outerSplit) : outerSplit(),
       { origin: assembly, provider }
     );
   }
@@ -232,16 +208,24 @@ export default usModule((require, exports) => {
     tokenBudget = Math.max(0, tokenBudget);
 
     /** The current iterator; we'll change this when we split. */
-    let iterator: AsyncIterable<TrimResult> = trimmer;
+    let iterable: UndefOr<AsyncIterable<TrimResult>> = trimmer;
     /** The last in-budget result. */
     let lastResult: UndefOr<TrimResult> = undefined;
 
-    for await (const curResult of iterator) {
-      if (curResult.tokens.length <= tokenBudget) lastResult = curResult;
-      // We've busted the budget.  We can simply attempt to split into
-      // the current result.  If it yields something, this loop may
-      // continue.  If not, we'll end it here.
-      else iterator = curResult.split();
+    trimLoop: while (iterable) {
+      for await (const curResult of iterable) {
+        if (curResult.tokens.length <= tokenBudget) {
+          lastResult = curResult;
+          continue;
+        }
+        // We've busted the budget.  We can simply attempt to split into
+        // the current result.  If it yields something, this loop may
+        // continue.  If not, we'll end it here.
+        iterable = curResult.split();
+        continue trimLoop;
+      }
+      // If we get here, everything in the iterable fit in the budget.
+      iterable = undefined;
     }
 
     return !lastResult ? undefined : tokenResultFrom(
@@ -290,18 +274,11 @@ export default usModule((require, exports) => {
     const [sequencer, ...restSequencers] = sequencers;
 
     const fragments = dew(() => {
-      const splitFrags = chain(content)
-        .map(sequencer.splitUp)
-        .flatten();
+      const splitFrags = flatMap(content, sequencer.splitUp);
       switch (preserveMode) {
-        case "ends": return splitFrags.value();
-        case "initial": return splitFrags
-          .thru((iter) => buffer(iter, hasWords, false))
-          .flatten()
-          .value();
-        default: return splitFrags
-          .thru((iter) => journey(iter, hasWords))
-          .value();
+        case "ends": return splitFrags;
+        case "initial": return flatten(buffer(splitFrags, hasWords, false));
+        default: return journey(splitFrags, hasWords);
       }
     });
 

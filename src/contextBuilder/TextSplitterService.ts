@@ -244,7 +244,7 @@ export default usModule((require, exports) => {
     // the last, presumably partial, line is encountered.  At this point,
     // we go back to the offset of the last line yielded and grab a new
     // chunk from there.
-    while(curChunk.offset > 0) {
+    while(curChunk.offset > inputFrag.offset) {
       let lastOffset: number | null = null;
 
       // We're going to use `curChunk.content` directly so that when we
@@ -254,15 +254,18 @@ export default usModule((require, exports) => {
         // Don't yield the first line; it may be a partial line.
         if (line.offset === 0) break;
         lastOffset = line.offset;
-        yield resultFrom(line.content, curChunk.offset + line.offset, inputFrag);
+        yield resultFrom(line.content, line.offset, curChunk);
       }
 
       // Grab the next chunk ending at the last known good line.
-      const nextEndIndex = curChunk.offset + assertExists(
+      // Remember: `lastOffset` needs to be corrected.
+      const nextOffset = curChunk.offset + assertExists(
         "Expected to encounter one line not from the start of the chunk.",
         lastOffset
       );
-      curChunk = getChunkAtEnd(inputFrag, nextEndIndex);
+      // We must correct for `inputFrag` not being at offset `0`
+      // to properly obtain an index on its content.
+      curChunk = getChunkAtEnd(inputFrag, nextOffset - inputFrag.offset);
     }
 
     // If we've reached the start of the string, just yield the remaining

@@ -32,7 +32,7 @@ export default usModule((require, exports) => {
     ];
 
     return rx.from(contextChunks).pipe(
-      rxop.mergeAll(),
+      rxop.concatAll(),
       rxop.map(toContextSource)
     );
   };

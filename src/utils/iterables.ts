@@ -1,4 +1,6 @@
 import { isString, isIterable, isArray, TypePredicate } from "./is";
+import { assert } from "./assert";
+
 import type { PredicateFn } from "./functions";
 import type { AnyValueOf, Maybe, UndefOr } from "./utility-types";
 
@@ -8,7 +10,7 @@ export type KVP<K = string | number, V = any> = readonly [K, V];
 /** The primitive data-types. */
 export type Primitives = number | string | boolean | Function | {} | null | undefined;
 
-export type Flattenable<T>
+export type Flattenable<T = unknown>
   = T extends string ? string
   : T extends Iterable<infer TEl> ? TEl
   : T;
@@ -167,14 +169,17 @@ export const flatMap = function*<T, U>(
  * Flattens the given iterable.  If the iterable contains strings, which
  * are themselves iterable, they will be yielded as-is, without flattening them.
  */
-export const flatten = function*<T extends Flattenable<any>>(
+export const flatten = function*<T>(
   iterable: Iterable<T>
 ): Iterable<Flattenable<T>> {
+  // This is almost certainly an error.
+  assert("Flattening strings is not allowed.", !isString(iterable));
+
   for (const value of iterable) {
-    // @ts-ignore - We pass out non-iterables, as they are.
-    if (!isIterable(value)) yield value;
     // @ts-ignore - We don't flatten strings.
-    else if (isString(value)) yield value;
+    if (isString(value)) yield value;
+    // @ts-ignore - We pass out non-iterables, as they are.
+    else if (!isIterable(value)) yield value;
     // And now, do a flatten.
     else yield* value;
   }

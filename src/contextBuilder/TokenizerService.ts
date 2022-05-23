@@ -165,7 +165,7 @@ export default usModule((require, exports) => {
       // And anything afterwards is now considered verified.
       safeHouse = [...theTokens.slice(bufferSize), ...safeHouse];
       encoded = fragments;
-      yield result;
+      yield Object.freeze(result);
     }
   }
 
@@ -234,7 +234,7 @@ export default usModule((require, exports) => {
       // And anything before that is now considered verified.
       safeHouse = [...safeHouse, ...theTokens.slice(0, -bufferSize)];
       encoded = fragments;
-      yield result;
+      yield Object.freeze(result);
     }
   }
 

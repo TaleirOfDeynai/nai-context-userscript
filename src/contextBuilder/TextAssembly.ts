@@ -205,7 +205,7 @@ const theModule = usModule((require, exports) => {
       this.#suffix = suffix;
 
       this.#source = source;
-      this.#isAffixed = Boolean(prefix.content.length + suffix.content.length);
+      this.#isAffixed = Boolean(prefix.content || suffix.content);
       this.#isContiguous = isContiguous;
     }
 
@@ -296,7 +296,9 @@ const theModule = usModule((require, exports) => {
 
       // Make sure we actually have the source assembly.
       const { source } = originAssembly;
-      const { prefix, suffix } = source;
+      // Use the given instance's prefix and suffix, though.  It may now
+      // differ from the source due to splitting and the like.
+      const { prefix, suffix } = originAssembly;
 
       const localFrags = chain(fragments)
         // Just make sure the prefix and suffix fragments are not included.
