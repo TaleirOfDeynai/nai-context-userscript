@@ -5,6 +5,8 @@ import { iterReverse, countBy } from "@utils/iterables";
 import { isArray, isString } from "@utils/is";
 import AppConstants from "@nai/AppConstants";
 
+import type { UndefOr } from "@utils/utility-types";
+
 /** Represents a fragment of some larger body of text. */
 export interface TextFragment {
   readonly content: string;
@@ -107,8 +109,10 @@ export default usModule((require, exports) => {
 
   /** Builds a {@link TextFragment} given some inputs. */
   const resultFrom = (content: string, offset: number, source?: TextOrFragment): TextFragment => {
-    if (!source || isString(source)) return { content, offset };
-    return { content, offset: source.offset + offset };
+    const result
+      = !source || isString(source) ? { content, offset }
+      : { content, offset: source.offset + offset };
+    return Object.freeze(result);
   };
 
   /** Standardizes on text fragments for processing. */
@@ -135,6 +139,49 @@ export default usModule((require, exports) => {
     const content = parts.map(asContent).join("");
     const [{ offset }] = parts;
     return { content, offset };
+  };
+
+  /**
+   * Checks if the given collection of fragments is contiguous; this means
+   * the collection has no gaps and all fragments are not out-of-order.
+   * 
+   * Returns `false` if `fragments` was empty.
+   */
+  const isContiguous = (fragments: Iterable<TextFragment>): boolean => {
+    let lastFrag: UndefOr<TextFragment> = undefined;
+    for (const curFrag of fragments) {
+      if (lastFrag) {
+        const expectedOffset = lastFrag.offset + lastFrag.content.length;
+        if (curFrag.offset !== expectedOffset) return false;
+      }
+      lastFrag = curFrag;
+    }
+    // Return `false` if `fragments` was empty.
+    return Boolean(lastFrag);
+  };
+
+  /**
+   * Splits a text fragment at a specific offset.  The offset should be
+   * relative to the source text and within the bounds of the fragment.
+   */
+  const splitFragmentAt = (
+    fragment: TextFragment,
+    cutOffset: number
+  ): [TextFragment, TextFragment] => {
+    const { offset, content } = fragment;
+    assert(
+      "Expected cut offset to be in bounds of the fragment.",
+      cutOffset >= offset && cutOffset <= offset + content.length
+    );
+
+    // Get the relative position of the offset.
+    const position = cutOffset - offset;
+    const before = content.slice(0, position);
+    const after = content.slice(position);
+    return [
+      resultFrom(before, 0, fragment),
+      resultFrom(after, before.length, fragment)
+    ];
   };
   
   /**
@@ -197,7 +244,7 @@ export default usModule((require, exports) => {
     // the last, presumably partial, line is encountered.  At this point,
     // we go back to the offset of the last line yielded and grab a new
     // chunk from there.
-    while(curChunk.offset > 0) {
+    while(curChunk.offset > inputFrag.offset) {
       let lastOffset: number | null = null;
 
       // We're going to use `curChunk.content` directly so that when we
@@ -207,15 +254,18 @@ export default usModule((require, exports) => {
         // Don't yield the first line; it may be a partial line.
         if (line.offset === 0) break;
         lastOffset = line.offset;
-        yield resultFrom(line.content, curChunk.offset + line.offset, inputFrag);
+        yield resultFrom(line.content, line.offset, curChunk);
       }
 
       // Grab the next chunk ending at the last known good line.
-      const nextEndIndex = curChunk.offset + assertExists(
+      // Remember: `lastOffset` needs to be corrected.
+      const nextOffset = curChunk.offset + assertExists(
         "Expected to encounter one line not from the start of the chunk.",
         lastOffset
       );
-      curChunk = getChunkAtEnd(inputFrag, nextEndIndex);
+      // We must correct for `inputFrag` not being at offset `0`
+      // to properly obtain an index on its content.
+      curChunk = getChunkAtEnd(inputFrag, nextOffset - inputFrag.offset);
     }
 
     // If we've reached the start of the string, just yield the remaining
@@ -335,8 +385,10 @@ export default usModule((require, exports) => {
     byWord,
     hasWords,
     createFragment: resultFrom,
-    mergeFragments,
     asFragment,
-    asContent
+    asContent,
+    mergeFragments,
+    isContiguous,
+    splitFragmentAt
   });
 });

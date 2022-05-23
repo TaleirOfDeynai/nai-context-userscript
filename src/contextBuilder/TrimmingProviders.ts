@@ -1,13 +1,16 @@
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
-import { iterReverse } from "@utils/iterables";
-import TextSplitterService from "./TextSplitterService";
-import TokenizerService from "./TokenizerService";
+import { assertExists } from "@utils/assert";
+import { iterReverse, flatMap } from "@utils/iterables";
+import $TextSplitterService from "./TextSplitterService";
+import $TokenizerService from "./TokenizerService";
+
+import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { StreamEncodeFn, EncodeResult } from "./TokenizerService";
-import { assert, assertExists } from "@utils/assert";
+import type { TextAssembly } from "./TextAssembly";
 
 export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];
@@ -25,10 +28,11 @@ export type SplitterFn = (text: TextFragment) => Iterable<TextFragment>;
  */
 export interface TrimProvider extends Record<TrimType, SplitterFn> {
   /**
-   * Typically performs the conversion of a `string` into a {@link TextFragment}
-   * as needed, but can also handle other pre-trimming string processing.
+   * Typically performs the conversion of a {@link TextAssembly} into an
+   * iterable of {@link TextFragment} to be trimmed, as needed, but can
+   * also handle other pre-trimming processing on those fragments.
    */
-  preProcess: (text: TextOrFragment) => TextFragment;
+  preProcess: (assembly: TextAssembly) => Iterable<TextFragment>;
   /**
    * Whether this provider iterates fragments in reverse, from the end of
    * the input string towards the beginning.
@@ -36,12 +40,6 @@ export interface TrimProvider extends Record<TrimType, SplitterFn> {
    * This is typically `true` for `trimTop`.
    */
   reversed: boolean;
-  /**
-   * Whether this provider cannot perform sequencing.
-   * 
-   * This is typically `true` for `doNotTrim`.
-   */
-  noSequencing: boolean;
 }
 
 type CommonProviders = Record<TrimDirection, TrimProvider>;
@@ -52,7 +50,7 @@ export interface TextSequencer {
   /** Encoder to use with this sequencer. */
   encode: StreamEncodeFn;
   /** Gets the text fragment to use with the next sequencer. */
-  prepareInnerChunk: (current: EncodeResult, last?: Readonly<EncodeResult>) => TextFragment;
+  prepareInnerChunk: (current: EncodeResult, last?: EncodeResult) => readonly TextFragment[];
   /** The iteration direction of {@link TextSequencer.splitUp splitUp}. */
   reversed: boolean;
 }
@@ -68,9 +66,11 @@ const BUFFER_SIZE = Object.freeze([10, 5, 5] as const);
  * those odd special cases.
  */
 export default usModule((require, exports) => {
-  const tokenizerService = TokenizerService(require);
-  const splitterService = TextSplitterService(require);
-  const { mergeFragments } = splitterService;
+  const tokenizerService = $TokenizerService(require);
+  const splitterService = $TextSplitterService(require);
+
+  // Generally, we just work off the assembly's content.
+  const basicPreProcess = (assembly: TextAssembly) => assembly.content;
 
   // For `doNotTrim`, we do not trim...  So, yield an empty iterable.
   const noop = (): Iterable<TextFragment> => [];
@@ -78,28 +78,26 @@ export default usModule((require, exports) => {
   /** Providers for basic trimming. */
   const basic: CommonProviders = Object.freeze({
     trimBottom: Object.freeze({
-      preProcess: splitterService.asFragment,
+      preProcess: basicPreProcess,
       newline: splitterService.byLine,
       sentence: splitterService.bySentence,
       token: splitterService.byWord,
-      reversed: false,
-      noSequencing: false
+      reversed: false
     }),
     trimTop: Object.freeze({
-      preProcess: splitterService.asFragment,
+      preProcess: basicPreProcess,
       newline: splitterService.byLineFromEnd,
       sentence: (text) => iterReverse(splitterService.bySentence(text)),
       token: (text) => iterReverse(splitterService.byWord(text)),
-      reversed: true,
-      noSequencing: false
+      reversed: true
     }),
     doNotTrim: Object.freeze({
-      preProcess: splitterService.asFragment,
-      newline: noop,
+      preProcess: basicPreProcess,
+      // Do no actual splitting; just return an array with a single element.
+      newline: (inputText: TextFragment) => [inputText],
       sentence: noop,
       token: noop,
-      reversed: false,
-      noSequencing: true
+      reversed: false
     })
   });
 
@@ -131,7 +129,7 @@ export default usModule((require, exports) => {
         // Iterating in reverse, the newline will come before the comment.
         // We'll just hold on to the newline fragment until we know a
         // comment isn't following it.
-        let newLineFragment: TextFragment | undefined = undefined;
+        let newLineFragment: UndefOr<TextFragment> = undefined;
         for (const frag of basic.trimTop.newline(text)) {
           if (frag.content === "\n") {
             // Emit the previous newline fragment if we have one.
@@ -156,14 +154,10 @@ export default usModule((require, exports) => {
     }),
     doNotTrim: {
       ...basic.doNotTrim,
-      preProcess: (text) => {
-        // We could have just used a regular-expression that removes the
-        // comment lines with `String.replace`, but this will preserve
-        // the resulting fragment's initial offset correctly.
-        const frag = basic.doNotTrim.preProcess(text);
-        const withoutComments = removeComments.trimBottom.newline(frag);
-        return mergeFragments([...withoutComments]);
-      }
+      preProcess: (assembly) => flatMap(
+        basic.doNotTrim.preProcess(assembly),
+        removeComments.trimBottom.newline
+      )
     }
   });
 
@@ -193,26 +187,26 @@ export default usModule((require, exports) => {
   ): TextSequencer => {
     const encode: TextSequencer["encode"] = dew(() => {
       if (reversed) return (codec, toEncode, options) => {
-        options = Object.assign({}, { bufferSize }, options);
+        options = { bufferSize, ...options };
         return tokenizerService.prependEncoder(codec, toEncode, options);
       };
 
       return (codec, toEncode, options) => {
-        options = Object.assign({}, { bufferSize }, options);
+        options = { bufferSize, ...options };
         return tokenizerService.appendEncoder(codec, toEncode, options);
       };
     });
 
     const prepareInnerChunk: TextSequencer["prepareInnerChunk"] = dew(() => {
       if (reversed) return (current, last) => {
-        if (!last) return mergeFragments(current.fragments);
+        if (!last) return current.fragments;
         const diff = current.fragments.length - last.fragments.length;
-        return mergeFragments(current.fragments.slice(0, diff));
+        return current.fragments.slice(0, diff).reverse();
       };
       return (current, last) => {
-        if (!last) return mergeFragments(current.fragments);
+        if (!last) return current.fragments;
         const diff = current.fragments.length - last.fragments.length;
-        return mergeFragments(current.fragments.slice(-diff));
+        return current.fragments.slice(-diff);
       };
     });
 
@@ -234,8 +228,6 @@ export default usModule((require, exports) => {
     maximumTrimType: TrimType
   ): TextSequencer[] => {
     const p = asProvider(provider);
-    assert("Expected provider to support sequencing.", !p.noSequencing)
-
     const order = dew(() => {
       switch (maximumTrimType) {
         case "token": return TRIM_ORDER;

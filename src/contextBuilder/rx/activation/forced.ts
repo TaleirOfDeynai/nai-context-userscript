@@ -1,6 +1,7 @@
+import conforms from "lodash-es/conforms";
+import matches from "lodash-es/matches";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isBoolean, isObject } from "@utils/is";
 import ContextBuilder from "@nai/ContextBuilder";
 
 import type { Observable } from "@utils/rx";
@@ -19,16 +20,18 @@ export default usModule((require, exports) => {
 
   const forcedTypes = new Set<SourceType>(["story", "memory", "an", "unknown"]);
 
-  const isForceActivated = (entry: any): boolean => {
-    if (!isObject(entry)) return false;
-    if (!("forceActivation" in entry)) return false;
-    if (!isBoolean(entry.forceActivation)) return false;
-    return entry.forceActivation;
-  };
+  const isForceActivated = conforms({
+    entry: conforms({
+      fieldConfig: matches({
+        // Obviously, must be true.
+        forceActivation: true
+      })
+    })
+  });
 
   const checkSource = (source: ContextSource<any>) => {
     if (forcedTypes.has(source.type)) return REASONS.Default;
-    if (isForceActivated(source.entry)) return REASONS.ActivationForced;
+    if (isForceActivated(source)) return REASONS.ActivationForced;
     return undefined;
   };
 

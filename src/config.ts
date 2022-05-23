@@ -2,6 +2,64 @@ import type { LoreEntryConfig as LEC } from "@nai/Lorebook";
 import type { ContextConfig as CC } from "@nai/Lorebook";
 import type { LorebookConfig as LC } from "@nai/Lorebook";
 
+/** Configuration options affecting comment removal. */
+const comments = {
+  /**
+   * The context builder receives a flag to enable or disable the
+   * removal of comments.  This flag defaults to `true`, but I
+   * don't exactly know when NovelAI would explicitly provide
+   * `false`.
+   * 
+   * If you end up seeing comments appear in your context, try enabling
+   * this to force comment removal on.
+   */
+  alwaysRemove: false,
+  /**
+   * Vanilla NovelAI only removes comments for the story text, and
+   * then always before it could be used by keywords.
+   * 
+   * If this is set to `true`, comments will work for all entries
+   * and in the same way.
+   */
+  standardizeHandling: true,
+  /**
+   * Vanilla NovelAI removes comments before keyword searching is
+   * performed.  If lorebook keywords could match text in comments,
+   * they could be used to gain more control over cascade activation
+   * by matching unusual text that you wouldn't want inserted into
+   * the story.
+   * 
+   * If this is set to `true`, comments will be retained during the
+   * activation phase and removed during the insertion phase.
+   * 
+   * Note that this won't work well with key-relative insertion,
+   * since the key-relative entries need to be able to find a keyword
+   * match in the partially assembled context; if it was in a removed
+   * comment, that will be impossible.
+   */
+  searchComments: true
+} as const;
+
+/** Configuration options affecting the story entry. */
+const story = {
+  /**
+   * Vanilla NovelAI includes the prefix and suffix of entries
+   * for keyword searches during cascade activation, but during
+   * story activation, the prefix and suffix are not included.
+   * 
+   * If this is set to `true`, the story entry will be treated like
+   * any other entry and its prefix and suffix will be searched.
+   * 
+   * Note: this is a little more complicated, since NovelAI
+   * (accidentally?) includes the story in cascade activation, so in
+   * the end, cascading entries would have activated off its prefix
+   * and suffix if they failed to activate off the story text alone.
+   * 
+   * This is probably somewhat of a heisenbug waiting to happen.
+   */
+  standardizeHandling: true
+} as const;
+
 /** Configuration options affecting lorebook features. */
 const lorebook = {
   /**
@@ -211,6 +269,10 @@ const postProcess = {
 const config = {
   /** Enables debug logging for the user-script. */
   debugLogging: true,
+  /** Configuration options affecting comment removal. */
+  comments,
+  /** Configuration options affecting the story entry. */
+  story,
   /** Configuration options affecting lorebook features. */
   lorebook,
   /** Configuration options relating to sub-context construction. */

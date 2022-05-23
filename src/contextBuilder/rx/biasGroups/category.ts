@@ -1,10 +1,12 @@
+import conforms from "lodash-es/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isArray, isObject } from "@utils/is";
+import { isArray } from "@utils/is";
 import { chain } from "@utils/iterables";
 import { categories, biasGroups } from "../_shared";
 
+import type { TypePredicate } from "@utils/is";
 import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { PhraseBiasConfig, Categories } from "@nai/Lorebook";
@@ -19,12 +21,9 @@ type BiasedCategory = Categories.Category & {
  * Checks each {@link ContextSource} for lore bias group inclusions.
  */
 export default usModule((_require, exports) => {
-  const isBiasedCategory = (category: Categories.Category): category is BiasedCategory => {
-    if (!isObject(category)) return false;
-    if (!("categoryBiasGroups" in category)) return false;
-    if (!isArray(category.categoryBiasGroups)) return false;
-    return category.categoryBiasGroups.length > 0;
-  };
+  const isBiasedCategory = conforms({
+    categoryBiasGroups: (v) => isArray(v) && Boolean(v.length)
+  }) as TypePredicate<BiasedCategory>;
 
   const createStream = (
     /** The story contents, to source the categories from. */
@@ -51,7 +50,7 @@ export default usModule((_require, exports) => {
           // Activated categories: use the `categoryMap` to filter out and
           // map to known/existing category instance.
           shared.pipe(
-            rxop.collect((source) => categoryMap.get(source.entry.category)),
+            rxop.collect((source) => categoryMap.get(source.entry.fieldConfig.category)),
             rxop.map(({ name, categoryBiasGroups }) => ({
               identifier: `C:${name}`,
               groups: chain(categoryBiasGroups)
@@ -64,7 +63,10 @@ export default usModule((_require, exports) => {
           // any categories that are associated with an activated source.
           // What is left are our inactive categories.
           shared.pipe(
-            rxop.reduce((a, c) => (a.delete(c.entry.category), a), new Map(categoryMap)),
+            rxop.reduce(
+              (a, c) => (a.delete(c.entry.fieldConfig.category), a),
+              new Map(categoryMap)
+            ),
             rxop.mergeMap((catMap) => catMap.values()),
             rxop.map(({ name, categoryBiasGroups }) => ({
               identifier: `C:${name}`,

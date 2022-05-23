@@ -41,12 +41,10 @@ export namespace Virtual {
 
 export interface ITokenizerCodec {
   "PT": typeof Virtual.GlobalEncoder;
-  "Px": unknown;
-  "vB": unknown;
 }
 
 class TokenizerCodec extends ModuleDef<ITokenizerCodec> {
-  moduleId = 38808;
+  moduleId = 10195;
   expectedExports = 3;
   mapping = {
     "PT": ["GlobalEncoder", "function"]

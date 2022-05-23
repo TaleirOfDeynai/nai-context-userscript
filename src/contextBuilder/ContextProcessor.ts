@@ -3,98 +3,41 @@ import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
-import ContextBuilder from "@nai/ContextBuilder";
-import EventModule, { StoryContent, StoryState} from "@nai/EventModule";
-import AppConstants from "@nai/AppConstants";
-import TokenizerHelpers from "@nai/TokenizerHelpers";
-import ContextModule from "@nai/ContextModule";
-import TextSplitterService from "./TextSplitterService";
-import TokenizerService from "./TokenizerService";
-import TrimmingProviders from "./TrimmingProviders";
-import TrimmingService from "./TrimmingService";
-import ReactiveProcessing from "./rx";
+import $ParamsService from "./ParamsService";
+import $ReactiveProcessing from "./rx";
+
 import type { TokenCodec } from "@nai/TokenizerCodec";
+import type { StoryContent, StoryState } from "@nai/EventModule";
 
 const logger = createLogger("ContextProcessor");
 
 export default usModule((require, exports) => {
-  const contextBuilder = require(ContextBuilder);
-  const eventModule = require(EventModule);
-  const appConstants = require(AppConstants);
-  const tokenizerHelpers = require(TokenizerHelpers);
-  const contextModule = require(ContextModule);
-  const splitter = TextSplitterService(require);
-  const tokenizer = TokenizerService(require);
-  const trimProviders = TrimmingProviders(require);
-  const { trimByLength, trimByTokens } = TrimmingService(require);
-  const processing = ReactiveProcessing(require);
-
-  async function getStoryText(
-    storyState: StoryState,
-    tokenCodec: TokenCodec,
-    tokenLimit: number,
-    storyLength?: number,
-    removeComments: boolean = true
-  ): Promise<string> {
-    const storyConfig = storyState.storyContent.storyContextConfig;
-    const storyText = storyState.storyContent.story.getText();
-
-    const sourceText = dew(() => {
-      const ev = new eventModule.PreContextEvent(storyText);
-      const handled = storyState.handleEvent(ev);
-      return handled.event.contextText;
-    });
-
-    const dir = storyConfig.trimDirection;
-    const provider
-      = removeComments ? trimProviders.removeComments[dir]
-      : trimProviders.basic[dir];
-
-    const trimOptions = {
-      provider,
-      maximumTrimType: storyConfig.maximumTrimType,
-      preserveEnds: true
-    };
-
-    if (storyLength) {
-      const result = trimByLength(sourceText, storyLength, trimOptions);
-      return result?.content ?? "";
-    }
-    else {
-      const result = await trimByTokens(sourceText, tokenLimit, tokenCodec, trimOptions);
-      return result?.fragment.content ?? "";
-    }
-  }
+  const { makeParams } = $ParamsService(require);
+  const processing = $ReactiveProcessing(require);
 
   async function processContext(
     storyContent: StoryContent,
     storyState: StoryState,
     givenTokenLimit: number,
-    givenLength?: number,
-    removeComments: boolean = true,
+    givenStoryLength?: number,
+    removeComments?: boolean,
     tokenCodec?: TokenCodec
   ) {
-    const maxTokens = givenTokenLimit - (storyContent.settings.prefix === "vanilla" ? 0 : 20);
-    const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
-    const resolvedCodec = tokenizer.codecFor(tokenizerType, tokenCodec);
-
-    // Defer getting the story text until after we've setup the pipeline.
-    const deferredStoryText = rx
-      .defer(() => getStoryText(
-        storyState, resolvedCodec,
-        maxTokens, givenLength,
-        removeComments
-      ))
-      .pipe(rxop.share());
+    const contextParams = makeParams(
+      storyContent,
+      storyState,
+      givenTokenLimit,
+      givenStoryLength,
+      removeComments,
+      tokenCodec
+    );
 
     // Figure out our sources for context content.
-    const sourceResults = processing.source.phaseRunner(
-      storyContent, deferredStoryText
-    );
+    const sourceResults = processing.source.phaseRunner(contextParams);
 
     // Figure out what to do with all this content.
     const activationResults = processing.activation.phaseRunner(
-      storyContent, deferredStoryText, sourceResults
+      storyContent, sourceResults
     );
 
     // Grab the triggered bias groups as content activates.

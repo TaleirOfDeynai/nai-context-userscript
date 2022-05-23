@@ -2,10 +2,10 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
-import ActForced, { ForcedActivation } from "./forced";
-import ActKeyed, { KeyedActivation } from "./keyed";
-import ActEphemeral, { EphemeralActivation } from "./ephemeral";
-import ActCascade, { CascadeActivation } from "./cascade";
+import $ActForced, { ForcedActivation } from "./forced";
+import $ActKeyed, { KeyedActivation } from "./keyed";
+import $ActEphemeral, { EphemeralActivation } from "./ephemeral";
+import $ActCascade, { CascadeActivation } from "./cascade";
 
 import type { ConstrainedMap } from "@utils/utility-types";
 import type { StoryContent } from "@nai/EventModule";
@@ -69,18 +69,17 @@ const logger = createLogger("Activation Phase");
 
 export default usModule((require, exports) => {
   const activation = {
-    cascade: ActCascade(require).checkActivation,
-    ephemeral: ActEphemeral(require).checkActivation,
-    forced: ActForced(require).checkActivation,
-    keyed: ActKeyed(require).checkActivation
+    cascade: $ActCascade(require).checkActivation,
+    ephemeral: $ActEphemeral(require).checkActivation,
+    forced: $ActForced(require).checkActivation,
+    keyed: $ActKeyed(require).checkActivation
   };
 
   function activationPhase(
     storyContent: StoryContent,
-    deferredStoryText: rx.Observable<string>,
     sourceResults: SourcePhaseResult
   ): ActivationPhaseResult {
-    const { enabledSources, disabledSources } = sourceResults;
+    const { storySource, enabledSources, disabledSources } = sourceResults;
 
     const activationStates = enabledSources.pipe(
       rxop.map((source): ActivationState => ({ source, activations: new Map() })),
@@ -92,7 +91,7 @@ export default usModule((require, exports) => {
       activationStates.pipe(activation.forced),
       activationStates.pipe(activation.ephemeral(storyContent)),
       // Still cheating to get as much done while waiting on the story.
-      deferredStoryText.pipe(
+      storySource.pipe(
         rxop.map(activation.keyed),
         rxop.mergeMap((keyedActivator) => keyedActivator(activationStates))
       )

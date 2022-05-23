@@ -5,12 +5,12 @@ import EphemeralHelpers from "@nai/EphemeralHelpers";
 import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { EphemeralEntry } from "@nai/EphemeralHelpers";
+import type { ExtendField } from "../../ContextSource";
 import type { EnabledSource } from "../source";
 import type { ActivationState } from ".";
 
-type EphemeralState = ActivationState<EnabledSource & {
-  entry: EphemeralEntry
-}>;
+type EphemeralSource = ExtendField<EnabledSource, EphemeralEntry>;
+type EphemeralState = ActivationState<EphemeralSource>;
 
 export type EphemeralActivation = true;
 
@@ -26,7 +26,7 @@ export default usModule((require, exports) => {
     const { step } = storyContent.story;
     return (states: Obs<ActivationState>): Obs<ActivationState> => states.pipe(
       rxop.filter(isEphemeral),
-      rxop.filter(({ source: { entry } }) => helpers.checkActivation(entry, step)),
+      rxop.filter(({ source: { entry } }) => helpers.checkActivation(entry.field, step)),
       rxop.tap((state) => state.activations.set("ephemeral", true))
     );
   };

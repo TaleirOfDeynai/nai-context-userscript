@@ -1,6 +1,6 @@
+import userScriptConfig from "@config";
 import * as rx from "./rx";
 import * as rxop from "./rxop";
-import config from "../config";
 
 interface LoggerMessage {
   origin: string;
@@ -41,23 +41,23 @@ class Logger {
   }
 
   info = (...data: any[]) => {
-    if (!config.debugLogging) return;
+    if (!userScriptConfig.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   warn = (...data: any[]) => {
-    if (!config.debugLogging) return;
+    if (!userScriptConfig.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   error = (...data: any[]) => {
-    if (!config.debugLogging) return;
+    if (!userScriptConfig.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   dir = (...data: Parameters<Console["dir"]>) => {
-    if (!config.debugLogging) return;
+    if (!userScriptConfig.debugLogging) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   mark = (name: string) => {
-    if (!config.debugLogging) return;
+    if (!userScriptConfig.debugLogging) return;
     performance.mark(`[${this.#origin}] ${name}`);
   };
 
@@ -69,7 +69,7 @@ class Logger {
     /** The name of this measurement. */
     name: string
   ): StopWatch {
-    if (!config.debugLogging) return { start: rx.noop, stop: rx.noop };
+    if (!userScriptConfig.debugLogging) return { start: rx.noop, stop: rx.noop };
 
     const NAME = `[${this.#origin}] ${name}`;
     const START = `[${this.#origin}] START ${name}`;
@@ -105,7 +105,7 @@ class Logger {
     /** A zero-arity function to call after measurement has begun. */
     task: () => Promise<T>
   ): Promise<T> {
-    if (!config.debugLogging) return await task();
+    if (!userScriptConfig.debugLogging) return await task();
 
     const stopWatch = this.stopWatch(name);
     stopWatch.start();
@@ -117,7 +117,7 @@ class Logger {
   measureStream<T>(
     name: string
   ): MeasureStreamOperator<T> {
-    if (!config.debugLogging) {
+    if (!userScriptConfig.debugLogging) {
       return Object.assign((source) => source, {
         markItems: () => (source) => source
       });

@@ -3,13 +3,16 @@ import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isFunction, isObject } from "@utils/is";
+import { defer } from "@utils/functions";
 import { chain, buffer } from "@utils/iterables";
-import TokenizerCodec from "@nai/TokenizerCodec";
-import TextSplitterService from "./TextSplitterService";
+import $TokenizerCodec from "@nai/TokenizerCodec";
+import $TextSplitterService from "./TextSplitterService";
+
+import type { Deferred } from "@utils/functions";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextFragment } from "./TextSplitterService";
-import { defer, Deferred } from "@utils/functions";
+
 
 export interface SyncTokenCodec {
   encode(text: string): number[];
@@ -20,8 +23,8 @@ export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
 export type TokenCodec = AsyncTokenCodec;
 
 export interface EncodeResult {
-  fragments: readonly TextFragment[];
-  tokens: readonly number[];
+  readonly fragments: readonly TextFragment[];
+  readonly tokens: readonly number[];
 }
 
 export interface StreamEncodeOptions {
@@ -30,7 +33,7 @@ export interface StreamEncodeOptions {
   /** A string to be appended to each intermediate result. */
   suffix?: string;
   /** A previous result to continue from. */
-  seedResult?: Readonly<EncodeResult>;
+  seedResult?: EncodeResult;
   /** How many tokens to set aside as unverified between encodings. */
   bufferSize?: number;
 }
@@ -53,8 +56,8 @@ export interface StreamEncodeFn {
 const UNSAFE_TOKEN_BUFFER = 10;
 
 export default usModule((require, exports) => {
-  const tokenizerCodec = require(TokenizerCodec);
-  const textSplitter = TextSplitterService(require);
+  const tokenizerCodec = require($TokenizerCodec);
+  const textSplitter = $TextSplitterService(require);
 
   // NovelAI's token codecs have a bit of a problem that makes handling
   // them efficiently challenging: they only work discretely.  You give
@@ -162,7 +165,7 @@ export default usModule((require, exports) => {
       // And anything afterwards is now considered verified.
       safeHouse = [...theTokens.slice(bufferSize), ...safeHouse];
       encoded = fragments;
-      yield result;
+      yield Object.freeze(result);
     }
   }
 
@@ -231,7 +234,7 @@ export default usModule((require, exports) => {
       // And anything before that is now considered verified.
       safeHouse = [...safeHouse, ...theTokens.slice(0, -bufferSize)];
       encoded = fragments;
-      yield result;
+      yield Object.freeze(result);
     }
   }
 

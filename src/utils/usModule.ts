@@ -12,7 +12,9 @@ type UserScriptModule<T extends {}> =
  * You are required to return the `exports` object, so use {@link Object.assign}
  * to assign your exported values to it.
  */
-export function usModule<T>(moduleFactory: UserScriptModuleFactory<T>): UserScriptModule<T> {
+export function usModule<T extends {}>(
+  moduleFactory: UserScriptModuleFactory<T>
+): UserScriptModule<T> {
   const exports = {} as any;
   let begunInit = false;
   return (wrappedRequire) => {

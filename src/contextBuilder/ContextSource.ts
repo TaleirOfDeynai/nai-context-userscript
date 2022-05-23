@@ -3,7 +3,8 @@ import { isObject, isString } from "@utils/is";
 import { assertAs } from "@utils/assert";
 import UUID from "@nai/UUID";
 
-import type * as CB from "@nai/ContextBuilder";
+import type { IContextField } from "@nai/ContextModule";
+import type { ContextContent } from "./ContextContent";
 
 export type SourceType
   = "story" | "memory" | "an"
@@ -11,14 +12,19 @@ export type SourceType
   | "unknown";
 
 export interface ContextSource<
-  TField extends CB.ContextField = CB.ContextField,
+  TField extends IContextField = IContextField,
   TType extends SourceType = SourceType
 > {
   uniqueId: string;
   identifier: string;
   type: TType;
-  entry: TField;
+  entry: ContextContent<TField>;
 }
+
+export type ExtendField<TSource extends ContextSource, TFieldEx extends {}>
+  = TSource extends ContextSource<infer TF>
+  ? TSource & { entry: ContextContent<TF & TFieldEx> }
+  : never;
 
 export default usModule((require, exports) => {
   const uuid = require(UUID);
@@ -48,10 +54,10 @@ export default usModule((require, exports) => {
     }    
   };
 
-  const create = <TField extends CB.ContextField, TType extends SourceType>(
-    entry: TField,
+  const create = <TField extends IContextField, TType extends SourceType>(
+    entry: ContextContent<TField>,
     type: TType,
-    identifier = toIdentifier(entry, type)
+    identifier = toIdentifier(entry.field, type)
   ): ContextSource<TField, TType> => {
     return {
       uniqueId: uuid.v4(),
