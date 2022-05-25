@@ -22,6 +22,25 @@ import type { ContextParams } from "./ParamsService";
 
 type InFlightTrimming = Promise<UndefOr<TokenizedAssembly>>;
 
+export interface NormalizedBudgetStats {
+  /** The configured token reservation; always an integer. */
+  readonly reservedTokens: number;
+  /** The configured token budget; always an integer. */
+  readonly tokenBudget: number;
+  /**
+   * The minimum number of tokens needed to fully satisfy the reservation.
+   * 
+   * This is actually a checked value when `reservedTokens` is greater than 0,
+   * trimming with a budget that is the minimum of `reservedTokens` and
+   * `tokenBudget` and using the token count from the trim.
+   * 
+   * The actual tokens included in the context may be larger or lower, but
+   * entries with reservations block entries without until the reservations
+   * have been fully satisfied.
+   */
+  readonly actualReservedTokens: number;
+}
+
 // Let's condense our config a bit.
 const contentConfig = dew(() => {
   const { standardizeHandling, searchComments } = userScriptConfig.comments;
@@ -48,14 +67,24 @@ const theModule = usModule((require, exports) => {
   const { createTrimmer, execTrimTokens, trimByLength } = $TrimmingService(require);
   const { TextAssembly } = $TextAssembly(require);
 
-  const getBudget = (config: ContextConfig, contextParams: ContextParams) => {
+  const getBudget = ({ tokenBudget }: ContextConfig, contextParams: ContextParams) => {
     // Invalid values default to `contextSize`.
-    if (!isNumber(config.tokenBudget)) return contextParams.contextSize;
-    if (config.tokenBudget <= 0) return contextParams.contextSize;
+    if (!isNumber(tokenBudget)) return contextParams.contextSize;
+    if (tokenBudget <= 0) return contextParams.contextSize;
     // 1 or more is converted into an integer, if needed.
-    if (config.tokenBudget >= 1) return config.tokenBudget | 0;
+    if (tokenBudget >= 1) return tokenBudget | 0;
     // Values less than 1 are scaled by the context size.
-    return config.tokenBudget * contextParams.contextSize;
+    return (tokenBudget * contextParams.contextSize) | 0;
+  };
+
+  const getReservation = ({ reservedTokens}: ContextConfig, contextParams: ContextParams) => {
+    // Invalid values default to `0`.
+    if (!isNumber(reservedTokens)) return 0;
+    if (reservedTokens <= 0) return 0;
+    // 1 or more is converted into an integer, if needed.
+    if (reservedTokens >= 1) return reservedTokens | 0;
+    // Values less than 1 are scaled by the context size.
+    return (reservedTokens * contextParams.contextSize) | 0;
   };
 
   /**
@@ -173,9 +202,13 @@ const theModule = usModule((require, exports) => {
       this.#searchText = searchText;
       this.#trimmer = trimmer;
 
-      // The initial budget based on the config.
+      // Ensure the budget-related configs are integers.
       this.#initialBudget = getBudget(contextConfig, contextParams);
+      this.#reservedTokens = getReservation(contextConfig, contextParams);
       this.#currentBudget = this.#initialBudget;
+
+      // Initial state for worker promises.
+      this.#otherWorkers = new Set();
     }
 
     static async forField<T extends IContextField>(field: T, contextParams: ContextParams) {
@@ -231,14 +264,16 @@ const theModule = usModule((require, exports) => {
 
     /** Storage for the maximum token count allowed by the budget. */
     #maxTokenCount: UndefOr<number>;
-    /** Configured token reservation count. */
-    #initialReserved: number;
-    /** Actual token reservation count. */
-    #actualReserved: UndefOr<number>;
+    /** Storage for the normalized budgeting stats. */
+    #budgetStats: UndefOr<NormalizedBudgetStats>;
     /** Configured token budget. */
-    #initialBudget: number;
+    readonly #initialBudget: number;
+    /** Configured token reservation. */
+    readonly #reservedTokens: number;
     /** Current token budget; this is stateful. */
     #currentBudget: number;
+    /** Other promises end up here. */
+    #otherWorkers: Set<Promise<unknown>>;
     /** Current trim results of the current budget applied. */
     #currentResult: UndefOr<InFlightTrimming>;
 
@@ -298,6 +333,63 @@ const theModule = usModule((require, exports) => {
       return this.#contextConfig;
     }
 
+    /** Gets stats related to this content's budget. */
+    async getStats(): Promise<NormalizedBudgetStats> {
+      if (this.#budgetStats) return this.#budgetStats;
+
+      const tokenBudget = this.#initialBudget;
+      const reservedTokens = this.#reservedTokens;
+
+      checks: {
+        // Fast-path: we don't need to trim when not reserving.
+        if (reservedTokens === 0) break checks;
+
+        const trimBudget = Math.min(tokenBudget, reservedTokens);
+        const result = await this.#doWork(() => execTrimTokens(this.#trimmer, trimBudget));
+
+        // Failed to fit in the budget, so can't even reserve anything.
+        if (!result) break checks;
+
+        this.#budgetStats = {
+          reservedTokens, tokenBudget,
+          actualReservedTokens: result.tokens.length
+        };
+        return this.#budgetStats;
+      }
+      
+      // Fall-back: we have no reservation.
+      this.#budgetStats = {
+        reservedTokens, tokenBudget,
+        actualReservedTokens: 0
+      };
+      return this.#budgetStats;
+    }
+
+    /**
+     * Determines the maximum possible number of tokens that could be
+     * inserted if its full token budget were used.
+     * 
+     * This does a trim to determine the true value the first time it
+     * is called.
+     */
+    async getMaximumTokens(): Promise<number> {
+      if (isNumber(this.#maxTokenCount)) return this.#maxTokenCount;
+
+      const maxTokenBudget = this.#initialBudget;
+      const result = await dew(() => {
+        // Can we just use the current value?  This may still execute
+        // the trim, but it is also technically saving time later if we
+        // never call `rebudget`.
+        if (this.#currentBudget === maxTokenBudget) return this.trimmed;
+        // Otherwise, we need to do this one under-the-table.
+        return this.#doWork(() => execTrimTokens(this.#trimmer, maxTokenBudget));
+      });
+
+      // `undefined` means it couldn't even fit the budget, at all.
+      this.#maxTokenCount = result?.tokens.length ?? 0;
+      return this.#maxTokenCount;
+    }
+
     /**
      * Invokes the trimmer, calculating a result that fits the `newBudget`.
      * 
@@ -314,7 +406,7 @@ const theModule = usModule((require, exports) => {
         return this.#currentResult;
 
       this.#currentBudget = newBudget;
-      this.#currentResult = execTrimTokens(this.#trimmer, newBudget);
+      this.#currentResult = this.#doWork(() => execTrimTokens(this.#trimmer, newBudget));
 
       return this.#currentResult;
     }
@@ -327,17 +419,29 @@ const theModule = usModule((require, exports) => {
      * any further budget adjustments.
      */
     async finalize(): Promise<void> {
-      try {
-        let lastJob: UndefOr<InFlightTrimming> = undefined;
-        while (lastJob !== this.#currentResult) {
-          lastJob = this.#currentResult;
-          await lastJob;
+      // Promises in `#otherWorkers` get removed from the set as they complete,
+      // assuming they were added by `#doWork`, anyways.  We just need to wait
+      // for all the promises to be cleared out.
+      while (this.#otherWorkers.size > 0) {
+        // Grab a local copy of the set, just in case.
+        for (const promise of [...this.#otherWorkers]) {
+          // We don't care if it fails; just that it is done.
+          try { await promise; } catch { continue; }
         }
       }
-      finally {
-        if ("clear" in this.#trimmer)
-          this.#trimmer.clear();
-      }
+      // Now we can clear the trimmer's cache, is possible.
+      if ("clear" in this.#trimmer) this.#trimmer.clear();
+    }
+
+    /**
+     * Adds a tracked background worker task to `#otherWorkers`.  This is
+     * used by {@link ContextContent.finalize finalize} to determine when
+     * it is safe to clear the trimmer's cache.
+     */
+    #doWork<TResult>(fn: () => Promise<TResult>): Promise<TResult> {
+      const theWork = fn();
+      this.#otherWorkers.add(theWork);
+      return theWork.finally(() => this.#otherWorkers.delete(theWork));
     }
   }
 
