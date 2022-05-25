@@ -139,7 +139,8 @@ export default usModule((require, exports) => {
       logger.measureStream("In-flight Results").markItems((source) => {
         const state = source.activations.size ? "activated" : "rejected";
         return `${source.identifier} (${state})`
-      })
+      }),
+      rxop.shareReplay()
     );
 
     return {
