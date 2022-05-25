@@ -4,20 +4,15 @@ import { usModule } from "@utils/usModule";
 import { activation } from "../_shared";
 import Vanilla from "./vanilla";
 
-import type { StoryContent } from "@nai/EventModule";
-import type { ContextSource } from "../../ContextSource";
-import type { TokenCodec } from "../../TokenizerService";
-import type { ActivatedSource, ActivationPhaseResult } from "../activation";
+import type { ContextParams } from "../../ParamsService";
+import type { ActivationPhaseResult } from "../activation";
+import type { BudgetedSource } from "./_shared";
 
-export interface SelectionSource extends ActivatedSource {
-  selectionOrder: number;
-  tokenCount: Promise<number>;
-}
-
-export type SelectionObservable = rx.Observable<SelectionSource>;
+export type SelectionObservable = rx.Observable<BudgetedSource>;
 
 export interface SelectionPhaseResult {
-  readonly tokenCounts: Promise<Map<ContextSource, number>>;
+  readonly selected: Promise<Set<BudgetedSource>>;
+  readonly totalReservedTokens: rx.Observable<number>;
   readonly inFlight: SelectionObservable;
 }
 
@@ -31,35 +26,28 @@ export default usModule((require, exports) => {
    * user in the report, but it isn't really used for insertion or trimming.
    */
   function selectionPhase(
-    storyContent: StoryContent,
-    tokenCodec: TokenCodec,
+    contextParams: ContextParams,
     activationResults: ActivationPhaseResult
   ): SelectionPhaseResult {
-    const { orderByKeyLocations = false } = storyContent.lorebook.settings ?? {};
-
-    const inFlight: SelectionObservable = activationResults.inFlight.pipe(
+    const inFlight = activationResults.inFlight.pipe(
       rxop.filter(activation.isActivated),
-      selectors.vanilla(orderByKeyLocations),
-      rxop.map((source, selectionOrder) => {
-        const { contextConfig, text } = source.entry;
-        const { prefix = "", suffix = "" } = contextConfig ?? {};
-        const tokenCount = tokenCodec.encode([prefix, text, suffix].join(""))
-          .then((v) => v.length)
+      selectors.vanilla(contextParams),
+      rxop.shareReplay()
+    );
 
-        return Object.assign(source, { selectionOrder, tokenCount });
-      }),
+    const totalReservedTokens = inFlight.pipe(
+      rxop.reduce<BudgetedSource, number>((tokens, { budgetStats }) => tokens + budgetStats.reservedTokens, 0),
       rxop.shareReplay()
     );
 
     return {
-      get tokenCounts() {
+      get totalReservedTokens() {
+        return totalReservedTokens;
+      },
+      get selected() {
         return rx.firstValueFrom(inFlight.pipe(
           rxop.toArray(),
-          rxop.mergeMap(async (sources) => {
-            const promises = sources.map((s) => s.tokenCount);
-            const tokenCounts = await Promise.all(promises);
-            return new Map(tokenCounts.map((count, i) => [sources[i], count] as const));
-          })
+          rxop.map((sources) => new Set(sources))
         ));
       },
       get inFlight() {

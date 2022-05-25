@@ -5,6 +5,7 @@ import $TokenizerService from "./TokenizerService";
 
 import type { StoryContent, StoryState } from "@nai/EventModule";
 import type { TokenCodec } from "@nai/TokenizerCodec";
+import type { LorebookConfig } from "@nai/Lorebook";
 
 export interface ContextParams {
   /** The provided story content. */
@@ -20,6 +21,8 @@ export interface ContextParams {
   readonly tokenCodec: TokenCodec;
   /** Whether comment removal was requested. */
   readonly removeComments: boolean;
+  /** Corresponds to the same value of the lorebook config. */
+  readonly orderByKeyLocations: LorebookConfig["orderByKeyLocations"];
 }
 
 export default usModule((require, exports) => {
@@ -38,6 +41,7 @@ export default usModule((require, exports) => {
     const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
     const tokenCodec = tokenizer.codecFor(tokenizerType, givenCodec);
     const storyLength = givenStoryLength ?? 0;
+    const orderByKeyLocations = storyContent.lorebook?.settings?.orderByKeyLocations === true;
 
     // Since I'm not sure when NovelAI would NOT request comments
     // be removed, you can just force it using the config.
@@ -49,7 +53,8 @@ export default usModule((require, exports) => {
       storyLength,
       contextSize,
       tokenCodec,
-      removeComments
+      removeComments,
+      orderByKeyLocations
     });
   }
 

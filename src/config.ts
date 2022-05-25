@@ -1,6 +1,5 @@
-import type { LoreEntryConfig as LEC } from "@nai/Lorebook";
-import type { ContextConfig as CC } from "@nai/Lorebook";
 import type { LorebookConfig as LC } from "@nai/Lorebook";
+import type { SorterKey } from "./contextBuilder/rx/selection/_sorters";
 
 /** Configuration options affecting comment removal. */
 const comments = {
@@ -94,6 +93,55 @@ const lorebook = {
    * having to concern themselves with token reservations.
    */
   keyRelativeReservations: false
+} as const;
+
+/** Configuration options relating to the selection phase, in general. */
+const selection = {
+  /**
+   * Defines how to sort entries into formal insertion order.
+   * 
+   * Due to all the concurrency in this user-script, entries quickly get
+   * rearranged and shuffled, sometimes in non-deterministic ways.  In
+   * order to restore determinism, the entries get sorted prior to the
+   * insertion phase.
+   * 
+   * This array allows you to configure how the entries are to be sorted
+   * back into a stable order.  The order you provide sorter keys in is
+   * the order of priority, so if `"budgetPriority"` comes before
+   * `"reservation"`, when two entries are equal by their budget priority,
+   * the tie will then be broken by sorting on whether the entry has a
+   * reservation or not.
+   * 
+   * The allowed keys are found {@link SorterKey here}.
+   * 
+   * To have vanilla style ordering, you should structure as so:
+   * - `"budgetPriority"`
+   * - `"reservation"`
+   * - ...then any other sorters you'd like to apply.
+   * 
+   * The context builder will still work, regardless of what you throw
+   * at it, but it won't work as expected unless you follow the above.
+   * 
+   * Note: the `"storyKeyOrder"` sorter mimics a secret vanilla feature
+   * and is only used when {@link LC.orderByKeyLocations orderByKeyLocations}
+   * is enabled in the lorebook config.  This currently can only be done
+   * by exporting the lorebook, adding the setting, and re-importing it.
+   * 
+   * For proper NovelAI behavior, you should make sure this sorter is
+   * included in the array as well.
+   * 
+   * Note: the sorters of `"naturalByType"` and `"naturalByPosition"` are
+   * special and will be ignored if used here.  These are the fail-safe
+   * sorters and help to make this user-script behave as NovelAI does.
+   */
+  ordering: [
+    "budgetPriority",
+    "reservation",
+    "activationEphemeral",
+    "activationForced",
+    "storyKeyOrder",
+    "cascadeOrder"
+  ] as SorterKey[]
 } as const;
 
 /** Configuration options relating to sub-context construction. */
@@ -275,6 +323,8 @@ const config = {
   story,
   /** Configuration options affecting lorebook features. */
   lorebook,
+  /** Configuration options relating to selection. */
+  selection,
   /** Configuration options relating to sub-context construction. */
   subContext,
   /** Configuration options relating to weighted-random selection. */
