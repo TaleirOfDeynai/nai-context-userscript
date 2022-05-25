@@ -1,6 +1,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { dew } from "@utils/dew";
 import $ContextSource from "../../ContextSource";
 import $ContextContent from "../../ContextContent";
 
@@ -25,16 +26,16 @@ export default usModule((require, exports) => {
   };
 
   const createStream = (contextParams: ContextParams) => {
-    const { context } = contextParams.storyContent;
-    const contextChunks = [
-      ContextContent.forStory(contextParams),
-      ...context.map((f) => ContextContent.forField(f, contextParams))
-    ];
+    const contextChunks = dew(() => {
+      const { context } = contextParams.storyContent;
+      const chunks = [
+        ContextContent.forStory(contextParams),
+        ...context.map((f) => ContextContent.forField(f, contextParams))
+      ];
+      return chunks.map(async (content, i) => toContextSource(await content, i));
+    });
 
-    return rx.from(contextChunks).pipe(
-      rxop.concatAll(),
-      rxop.map(toContextSource)
-    );
+    return rx.from(contextChunks).pipe(rxop.mergeAll());
   };
 
   return Object.assign(exports, {
