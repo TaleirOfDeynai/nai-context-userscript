@@ -1,6 +1,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { createLogger } from "@utils/logging";
 import { activation } from "../_shared";
 import Vanilla from "./vanilla";
 
@@ -12,9 +13,12 @@ export type SelectionObservable = rx.Observable<BudgetedSource>;
 
 export interface SelectionPhaseResult {
   readonly selected: Promise<Set<BudgetedSource>>;
-  readonly totalReservedTokens: rx.Observable<number>;
+  readonly unselected: Promise<Set<BudgetedSource>>;
+  readonly totalReservedTokens: Promise<number>;
   readonly inFlight: SelectionObservable;
 }
+
+const logger = createLogger("Selection Phase");
 
 export default usModule((require, exports) => {
   const selectors = {
@@ -29,29 +33,40 @@ export default usModule((require, exports) => {
     contextParams: ContextParams,
     activationResults: ActivationPhaseResult
   ): SelectionPhaseResult {
-    const inFlight = activationResults.inFlight.pipe(
+    const inFlightSelected = activationResults.inFlight.pipe(
       rxop.filter(activation.isActivated),
       selectors.vanilla(contextParams),
+      logger.measureStream("In-flight Selected"),
       rxop.shareReplay()
     );
 
-    const totalReservedTokens = inFlight.pipe(
-      rxop.reduce<BudgetedSource, number>((tokens, { budgetStats }) => tokens + budgetStats.reservedTokens, 0),
+    const inFlightUnselected = activationResults.inFlight.pipe(
+      rxop.filter(activation.isActivated),
+      rxop.rejectedBy(inFlightSelected, (source) => source.uniqueId),
+      logger.measureStream("In-flight Unselected"),
       rxop.shareReplay()
     );
 
     return {
       get totalReservedTokens() {
-        return totalReservedTokens;
+        return rx.firstValueFrom(inFlightSelected.pipe(
+          rxop.reduce<BudgetedSource, number>((tokens, { budgetStats }) => tokens + budgetStats.actualReservedTokens, 0)
+        ));
       },
       get selected() {
-        return rx.firstValueFrom(inFlight.pipe(
+        return rx.firstValueFrom(inFlightSelected.pipe(
+          rxop.toArray(),
+          rxop.map((sources) => new Set(sources))
+        ));
+      },
+      get unselected() {
+        return rx.firstValueFrom(inFlightUnselected.pipe(
           rxop.toArray(),
           rxop.map((sources) => new Set(sources))
         ));
       },
       get inFlight() {
-        return inFlight;
+        return inFlightSelected;
       }
     };
   };

@@ -45,13 +45,18 @@ export default usModule((require, exports) => {
       storyContent, activationResults
     );
 
+    const selectionResults = processing.selection.phaseRunner(
+      contextParams, activationResults
+    );
+
     // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
     //   tokenizerType, maxTokens,
     //   preContextText: await inFlightStoryText
     // });
 
-    const [activated, rejected, disabled, biasGroups] = await Promise.all([
-      activationResults.activated,
+    const [selected, unselected, rejected, disabled, biasGroups] = await Promise.all([
+      selectionResults.selected,
+      selectionResults.unselected,
       activationResults.rejected,
       activationResults.disabled,
       biasGroupResults.biasGroups
@@ -59,8 +64,12 @@ export default usModule((require, exports) => {
 
     for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
     for (const s of rejected) logger.info(`Rejected: ${s.identifier}`, s);
-    for (const s of activated) logger.info(`Activated: ${s.identifier}`, s);
+    for (const s of unselected) logger.info(`Unselected: ${s.identifier}`, s);
+    for (const s of selected) logger.info(`Selected: ${s.identifier}`, s);
     for (const bg of biasGroups) logger.info(`Bias Group: ${bg.identifier}`, bg);
+
+    const reserved = await selectionResults.totalReservedTokens;
+    logger.info(`Total reserved tokens: ${reserved} out of ${contextParams.contextSize}`);
   }
 
   return Object.assign(exports, {
