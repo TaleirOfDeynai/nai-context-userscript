@@ -22,7 +22,7 @@ export default usModule((require, exports) => {
   const biasGroups = {
     lore: $BiasLore(require).createStream,
     category: $BiasCategory(require).createStream
-  };
+  } as const;
 
   function biasGroupPhase(
     storyContent: StoryContent,

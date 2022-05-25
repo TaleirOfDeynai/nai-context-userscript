@@ -73,7 +73,7 @@ export default usModule((require, exports) => {
     ephemeral: $ActEphemeral(require).checkActivation,
     forced: $ActForced(require).checkActivation,
     keyed: $ActKeyed(require).checkActivation
-  };
+  } as const;
 
   function activationPhase(
     storyContent: StoryContent,

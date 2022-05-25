@@ -23,7 +23,7 @@ const logger = createLogger("Selection Phase");
 export default usModule((require, exports) => {
   const selectors = {
     vanilla: Vanilla(require).createStream
-  };
+  } as const;
 
   /**
    * This will be used at the end to provide `actualReservedTokens` to the
