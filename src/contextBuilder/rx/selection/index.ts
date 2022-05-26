@@ -6,6 +6,7 @@ import { activation } from "../_shared";
 import Vanilla from "./vanilla";
 
 import type { ContextParams } from "../../ParamsService";
+import type { SourcePhaseResult } from "../source";
 import type { ActivationPhaseResult } from "../activation";
 import type { BudgetedSource } from "./_shared";
 
@@ -31,11 +32,14 @@ export default usModule((require, exports) => {
    */
   function selectionPhase(
     contextParams: ContextParams,
+    sourceResults: SourcePhaseResult,
     activationResults: ActivationPhaseResult
   ): SelectionPhaseResult {
+    const { storySource } = sourceResults;
+
     const inFlightSelected = activationResults.inFlight.pipe(
       rxop.filter(activation.isActivated),
-      selectors.vanilla(contextParams),
+      selectors.vanilla(contextParams, storySource),
       logger.measureStream("In-flight Selected"),
       rxop.shareReplay()
     );

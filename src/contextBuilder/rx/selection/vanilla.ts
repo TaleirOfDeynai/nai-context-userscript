@@ -7,21 +7,27 @@ import { chain } from "@utils/iterables";
 import { asBudgeted } from "./_shared";
 import Sorters from "./_sorters";
 
+import type { LoreEntryConfig } from "@nai/Lorebook";
 import type { ContextParams } from "../../ParamsService";
+import type { ContextSource, ExtendField } from "../../ContextSource";
+import type { StorySource } from "../source";
 import type { ActivatedSource } from "../activation";
 import type { BudgetedSource } from "./_shared";
 import type { SorterKey } from "./_sorters";
 
+type RangedSource = ExtendField<ActivatedSource, {
+  searchRange: LoreEntryConfig["searchRange"]
+}>;
+
 export default usModule((require, exports) => {
   /**
    * Sorts all inputs and emits them in order of their formalized insertion
-   * priority.  This will also kick off a background task to calculate each
-   * emitted element's base token count.
-   * 
-   * This will be used at the end to provide `actualReservedTokens` to the
-   * user in the report, but it isn't really used for insertion or trimming.
+   * priority.  This will also calculate each emitted element's budget stats.
    */
-  const makeSelectorStream = (contextParams: ContextParams) => {
+  const makeSelectorStream = (
+    contextParams: ContextParams,
+    storySource: rx.Observable<StorySource>
+  ) => {
     /** Sorting functions we're going to use. */
     const chosenSorters = chain(userScriptConfig.selection.ordering)
       // Force the natural sorters to be the last ones.
@@ -40,7 +46,55 @@ export default usModule((require, exports) => {
       return 0;
     };
 
-    return (sources: rx.Observable<ActivatedSource>) => sources.pipe(
+    const hasSearchRange = (source: ContextSource): source is RangedSource =>
+      "searchRange" in source.entry.fieldConfig;
+
+    return (sources: rx.Observable<ActivatedSource>) => storySource.pipe(
+      rxop.exhaustMap((s) => {
+        const { maxOffset } = s.entry.searchedText.stats;
+
+        return sources.pipe(
+          // Activation does not take search range into account.  We'll do
+          // that here.
+          rxop.collect((source) => {
+            // If it has no search range, we can't check this and select the
+            // source by default.
+            if (!hasSearchRange(source)) return source;
+
+            // NovelAI does apply search range to the cascade, but this
+            // user-script is opting not to bother.  Reasoning is, the cascade
+            // is defining relationships between two static entries.  The
+            // location of the matched keyword is not really relevant.
+
+            // Search range only seems useful as yet another obtuse way to
+            // control entry priority, by giving the user the ability to author
+            // entries that can activate against more or less text; allotting
+            // more text to match against increases the chances of activation.
+
+            // Therefore, this is only relevant to the dynamic story text.
+            // We'll check this if a story keyword match was the only method
+            // of activation.
+            const keyed = source.activations.get("keyed");
+            if (!keyed || source.activations.size > 1) return source;
+  
+            const { searchRange } = source.entry.fieldConfig;
+            const minRange = maxOffset - searchRange;
+            const selections = chain(keyed.values())
+              .flatten()
+              .map((r) => r.selection)
+              .value();
+  
+            // At least one selection must have both its cursors in range.
+            for (const [l, r] of selections) {
+              if (l.offset < minRange) continue;
+              if (r.offset < minRange) continue;
+              return source;
+            }
+            
+            return undefined;
+          })
+        )
+      }),
       rxop.mergeMap(asBudgeted),
       rxop.toArray(),
       rxop.mergeMap((arr) => arr.sort(sortingFn))

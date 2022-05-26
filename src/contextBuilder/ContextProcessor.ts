@@ -46,7 +46,7 @@ export default usModule((require, exports) => {
     );
 
     const selectionResults = processing.selection.phaseRunner(
-      contextParams, activationResults
+      contextParams, sourceResults, activationResults
     );
 
     // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
