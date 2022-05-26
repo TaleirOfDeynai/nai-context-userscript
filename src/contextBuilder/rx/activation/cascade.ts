@@ -27,14 +27,25 @@ export interface CascadeActivation {
   /**
    * Describes how many degrees of separation a cascade activation is from
    * a direct activation.
-   * - A first-order activation was triggered by a direct activation.
-   * - A second-order activation was triggered by a first-order activation.
-   * - A third-order activation was triggered by a second-order activation.
+   * - A first-degree activation was triggered by a direct activation.
+   * - A second-degree activation was triggered by a first-degree activation.
+   * - A third-degree activation was triggered by a second-degree activation.
    * - And so on...
    * 
    * This value will always be greater than zero.
    */
-  order: number;
+  initialDegree: number;
+  /**
+   * Describes the deepest degree of activation this entry was triggered by.
+   * 
+   * Where {@link initialDegree} is about the first entry that it matched
+   * during the cascade, `finalDegree` is about how deep into the cascade
+   * its last match was found.
+   * 
+   * This will equal {@link initialDegree} if it never found a match in a
+   * deeper cascade than its initial match.
+   */
+  finalDegree: number;
   /**
    * A record of the matches from each activated entry that this entry
    * found a keyword match within.
@@ -83,9 +94,9 @@ export default usModule((require, exports) => {
           const entryToState = new Map(entryKvps);
           // Do not cascade off yourself.
           entryToState.delete(activated.entry as any);
-          // The cascade's order determines how many degrees of separation a
+          // The cascade's degree determines how many degrees of separation a
           // cascade activation is from a direct activation.
-          const order = (activatedState.activations.get("cascade")?.order ?? 0) + 1;
+          const curDegree = (activatedState.activations.get("cascade")?.initialDegree ?? 0) + 1;
   
           // Check the keys for all cascading sources against the entry's
           // assembled text.
@@ -101,9 +112,16 @@ export default usModule((require, exports) => {
             const firstActivation = state.activations.size === 0;
 
             // Pull the activation data for an upsert.
-            const data = state.activations.get("cascade") ?? { order, matches: new Map() };
+            const data = state.activations.get("cascade") ?? {
+              initialDegree: curDegree,
+              finalDegree: curDegree,
+              matches: new Map()
+            };
             data.matches.set(activated.entry, results);
             state.activations.set("cascade", data);
+
+            // Update the final degree based on the current degree.
+            data.finalDegree = Math.max(curDegree, data.finalDegree);
 
             // If this was the first time this activated, yield it.
             if (firstActivation) yield state;

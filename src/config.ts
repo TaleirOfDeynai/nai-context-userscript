@@ -123,9 +123,11 @@ const selection = {
    * at it, but it won't work as expected unless you follow the above.
    * 
    * Note: the `"storyKeyOrder"` sorter mimics a secret vanilla feature
-   * and is only used when {@link LC.orderByKeyLocations orderByKeyLocations}
-   * is enabled in the lorebook config.  This currently can only be done
-   * by exporting the lorebook, adding the setting, and re-importing it.
+   * when {@link LC.orderByKeyLocations orderByKeyLocations} is enabled
+   * in the lorebook config, which will order entries by the position
+   * of the latest keyword match in the story.  This currently can only
+   * be enabled by exporting the lorebook, adding the setting, and
+   * re-importing it.
    * 
    * For proper NovelAI behavior, you should make sure this sorter is
    * included in the array as well.
@@ -139,8 +141,10 @@ const selection = {
     "reservation",
     "activationEphemeral",
     "activationForced",
+    "activationStory",
     "storyKeyOrder",
-    "cascadeOrder"
+    "cascadeFinalDegree",
+    "cascadeInitDegree"
   ] as SorterKey[]
 } as const;
 

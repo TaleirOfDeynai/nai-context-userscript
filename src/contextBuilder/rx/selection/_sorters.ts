@@ -42,15 +42,32 @@ const sorters = {
     if (aForced) return -1;
     return 1;
   },
+  /** Sorts sources that were story-activated first. */
+  activationStory: () => (a: BudgetedSource, b: BudgetedSource) => {
+    const aKeyed = a.activations.has("keyed");
+    const bKeyed = b.activations.has("keyed");
+    if (aKeyed === bKeyed) return 0;
+    if (aKeyed) return -1;
+    return 1;
+  },
+  /** Sorts sources that were NOT story-activated first. */
+  activationNonStory: () => (a: BudgetedSource, b: BudgetedSource) => {
+    const aKeyed = a.activations.has("keyed");
+    const bKeyed = b.activations.has("keyed");
+    if (aKeyed === bKeyed) return 0;
+    if (aKeyed) return 1;
+    return -1;
+  },
   /**
-   * Sorts sources that activated by a keyword match in the story:
-   * - Over those that did not.
+   * Sorts sources that were story-activated:
+   * - Before those that were not.
    * - In the order of where the match was found, later in the story first.
    * 
    * This is a secret NovelAI feature and is controlled by
    * `orderByKeyLocations` in the lorebook config.
    */
   storyKeyOrder: ({ orderByKeyLocations }: ContextParams, require) => {
+    // Only sort when the feature is enabled.
     if (!orderByKeyLocations) return () => 0;
 
     const { findHighestIndex } = $SearchService(require);
@@ -71,17 +88,44 @@ const sorters = {
   },
   /**
    * Sorts sources that activated by cascade:
-   * - Over those that did not.
-   * - By the order of the cascade, earlier first.
+   * - Before those that did not.
+   * - By the initial degree of the cascade, ascending.
+   * 
+   * The initial degree of the cascade is how many other entries had
+   * to activate by cascade before this entry could activate.
+   * 
+   * This will order entries so any entries that an entry initially matched
+   * come before that entry.
    */
-  cascadeOrder: () => (a: BudgetedSource, b: BudgetedSource) => {
+  cascadeInitDegree: () => (a: BudgetedSource, b: BudgetedSource) => {
     const aCascade = a.activations.get("cascade");
     const bCascade = b.activations.get("cascade");
     if (!aCascade && !bCascade) return 0;
     if (!aCascade) return 1;
     if (!bCascade) return -1;
-    // Prefer the one with the lowest order.
-    return aCascade.order - bCascade.order;
+    // Prefer the one with the lowest degree.
+    return aCascade.initialDegree - bCascade.initialDegree;
+  },
+  /**
+   * Sorts sources that activated by cascade:
+   * - Before those that did not.
+   * - By the final degree of the cascade, ascending.
+   * 
+   * The final degree of cascade is how many layers deep into the cascade
+   * we were when the last match was found.  Entries with a lower final
+   * degree could have been matched by the entry.
+   * 
+   * This will order entries so all entries that an entry matched come
+   * before that entry.
+   */
+  cascadeFinalDegree: () => (a: BudgetedSource, b: BudgetedSource) => {
+    const aCascade = a.activations.get("cascade");
+    const bCascade = b.activations.get("cascade");
+    if (!aCascade && !bCascade) return 0;
+    if (!aCascade) return 1;
+    if (!bCascade) return -1;
+    // Prefer the one with the lowest degree.
+    return aCascade.finalDegree - bCascade.finalDegree;
   },
   /**
    * Sorts sources by their underlying type.
