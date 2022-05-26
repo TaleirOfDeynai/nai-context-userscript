@@ -2,7 +2,6 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
-import { activation } from "../_shared";
 import Vanilla from "./vanilla";
 
 import type { ContextParams } from "../../ParamsService";
@@ -37,15 +36,19 @@ export default usModule((require, exports) => {
   ): SelectionPhaseResult {
     const { storySource } = sourceResults;
 
-    const inFlightSelected = activationResults.inFlight.pipe(
-      rxop.filter(activation.isActivated),
+    // We need the full activation results now.  Convert this promise
+    // of a set of activated entries into a new stream.  Use `defer`
+    // so the promise doesn't make the activation phase hot.
+    const activatedSources = rx.defer(() => activationResults.activated)
+      .pipe(rxop.mergeAll());
+
+    const inFlightSelected = activatedSources.pipe(
       selectors.vanilla(contextParams, storySource),
       logger.measureStream("In-flight Selected"),
       rxop.shareReplay()
     );
 
-    const inFlightUnselected = activationResults.inFlight.pipe(
-      rxop.filter(activation.isActivated),
+    const inFlightUnselected = activatedSources.pipe(
       rxop.rejectedBy(inFlightSelected, (source) => source.uniqueId),
       logger.measureStream("In-flight Unselected"),
       rxop.shareReplay()
