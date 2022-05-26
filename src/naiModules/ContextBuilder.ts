@@ -136,7 +136,7 @@ export interface IContextBuilder {
 }
 
 class ContextBuilder extends ModuleDef<IContextBuilder> {
-  moduleId = 93412;
+  moduleId = 64224;
   expectedExports = 6;
   mapping = {
     "AB": ["REASONS", "object"],
