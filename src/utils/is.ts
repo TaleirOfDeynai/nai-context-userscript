@@ -1,11 +1,15 @@
 import { dew } from "./dew";
 
+type MaybeIterable<T> = T extends Iterable<any> ? T : never;
+type MaybeElement<T> = T extends Iterable<infer U> ? U : never;
+
 declare global {
   interface ArrayConstructor {
     // Makes the standard `isArray` slightly more intelligent when it's
     // starting from some kind of iterable.
-    isArray<T>(value: Iterable<T>): value is T[];
-    isArray(value: any): value is any[];
+    isArray<T>(arg: Iterable<T>): arg is T[];
+    // @ts-ignore - And this one deals with union types.
+    isArray<T extends MaybeIterable<any>>(arg: T): arg is MaybeElement<T>[];
   }
 }
 
