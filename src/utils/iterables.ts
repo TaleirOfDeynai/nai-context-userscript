@@ -341,7 +341,7 @@ export const skipRight = function*<T>(
   }
 };
 
-/** Yields all items except the very last bunch that all fail the `predicateFn`. */
+/** Yields all items except the very last bunch after `predicateFn` fails. */
 export const skipRightUntil = function*<T extends Iterable<any>>(
   iter: T,
   predicateFn: PredicateFn<ElementOf<T>>
