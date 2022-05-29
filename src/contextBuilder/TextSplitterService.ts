@@ -107,8 +107,22 @@ export default usModule((require, exports) => {
   const chunkSize = require(AppConstants).contextSize;
   assert("Expected chunk size greater than 0.", !!chunkSize && chunkSize > 0);
 
-  /** Builds a {@link TextFragment} given some inputs. */
-  const resultFrom = (content: string, offset: number, source?: TextOrFragment): TextFragment => {
+  /**
+   * Builds a {@link TextFragment} given some inputs.
+   * 
+   * A `source` may be given if this fragment was derived from another
+   * string or fragment.  If its a {@link TextFragment}, then its
+   * {@link TextFragment.offset offset} will be applied to the given
+   * `offset` for you.
+   */
+  const createFragment = (
+    /** The content of the fragment. */
+    content: string,
+    /** The offset of the fragment within the source fragment/string. */
+    offset: number,
+    /** The source fragment/string, if `content` came from it. */
+    source?: TextOrFragment
+  ): TextFragment => {
     const result
       = !source || isString(source) ? { content, offset }
       : { content, offset: source.offset + offset };
@@ -117,7 +131,7 @@ export default usModule((require, exports) => {
 
   /** Standardizes on text fragments for processing. */
   const asFragment = (inputText: TextOrFragment): TextFragment =>
-    isString(inputText) ? resultFrom(inputText, 0) : inputText;
+    isString(inputText) ? createFragment(inputText, 0) : inputText;
   
   /** Pulls the content text from a string or fragment. */
   const asContent = (inputText: TextOrFragment): string =>
@@ -165,7 +179,9 @@ export default usModule((require, exports) => {
    * relative to the source text and within the bounds of the fragment.
    */
   const splitFragmentAt = (
+    /** The fragment to split. */
     fragment: TextFragment,
+    /** The offset of the cut. */
     cutOffset: number
   ): [TextFragment, TextFragment] => {
     const { offset, content } = fragment;
@@ -179,8 +195,8 @@ export default usModule((require, exports) => {
     const before = content.slice(0, position);
     const after = content.slice(position);
     return [
-      resultFrom(before, 0, fragment),
-      resultFrom(after, before.length, fragment)
+      createFragment(before, 0, fragment),
+      createFragment(after, before.length, fragment)
     ];
   };
   
@@ -198,7 +214,7 @@ export default usModule((require, exports) => {
       const [content] = match;
       const offset = assertExists("Expected match index to exist.", match.index);
       assert("Expected match contents to be non-empty.", content.length > 0);
-      yield resultFrom(content, offset, inputFrag);
+      yield createFragment(content, offset, inputFrag);
     }
   }
 
@@ -211,7 +227,7 @@ export default usModule((require, exports) => {
     inputFrag: TextFragment,
     endIndex: number = inputFrag.content.length
   ): TextFragment {
-    if (!inputFrag.content.length) return resultFrom("", 0, inputFrag);
+    if (!inputFrag.content.length) return createFragment("", 0, inputFrag);
     // The caller should have aborted instead of calling this.
     assert("End index must be non-zero.", endIndex > 0);
 
@@ -225,7 +241,7 @@ export default usModule((require, exports) => {
       chunk = content.slice(startIndex, endIndex);
     }
 
-    return resultFrom(chunk, startIndex, inputFrag);
+    return createFragment(chunk, startIndex, inputFrag);
   }
 
   /**
@@ -254,7 +270,7 @@ export default usModule((require, exports) => {
         // Don't yield the first line; it may be a partial line.
         if (line.offset === 0) break;
         lastOffset = line.offset;
-        yield resultFrom(line.content, line.offset, curChunk);
+        yield createFragment(line.content, line.offset, curChunk);
       }
 
       // Grab the next chunk ending at the last known good line.
@@ -326,18 +342,18 @@ export default usModule((require, exports) => {
         }
 
         if (punctuation) {
-          if (!lastBody) yield resultFrom(punctuation, index, fragment);
+          if (!lastBody) yield createFragment(punctuation, index, fragment);
           else {
-            yield resultFrom(`${lastBody.content}${punctuation}`, lastBody.offset);
+            yield createFragment(`${lastBody.content}${punctuation}`, lastBody.offset);
             lastBody = null;
           }
         }
         else if (whitespace) {
-          yield resultFrom(whitespace, index, fragment);
+          yield createFragment(whitespace, index, fragment);
         }
         else if (body) {
           // Hold on to this body until we've seen the next match.
-          lastBody = resultFrom(body, index, fragment);
+          lastBody = createFragment(body, index, fragment);
         }
       }
 
@@ -360,7 +376,7 @@ export default usModule((require, exports) => {
       const length = content.length;
       const index = assertExists("Expected match index to exist.", match.index);
       assert("Expected match contents to be non-empty.", length > 0);
-      yield resultFrom(content, index, inputFrag);
+      yield createFragment(content, index, inputFrag);
     }
   }
 
@@ -384,7 +400,7 @@ export default usModule((require, exports) => {
     bySentence,
     byWord,
     hasWords,
-    createFragment: resultFrom,
+    createFragment,
     asFragment,
     asContent,
     mergeFragments,
