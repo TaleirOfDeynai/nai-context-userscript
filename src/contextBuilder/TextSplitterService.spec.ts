@@ -4,13 +4,11 @@ import { collection as phrasesEnglish } from "@spec/phrases-english";
 import { collection as phrasesSpanish } from "@spec/phrases-spanish";
 import { collection as phrasesJapanese } from "@spec/phrases-japanese";
 import { collection as phrasesArabic } from "@spec/phrases-arabic";
+import * as helpers from "@spec/helpers-splitter";
 
-import _zip from "lodash-es/zip";
-import { chain, reduceIter, interweave, last } from "@utils/iterables";
+import { chain, interweave } from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
 import AppConstants from "@nai/AppConstants";
-
-import type { TextFragment } from "./TextSplitterService";
 
 const fakeRequire: any = (module: any) => {
   switch (module) {
@@ -26,20 +24,10 @@ const fakeRequire: any = (module: any) => {
 
 const textSplitter = $TextSplitterService(fakeRequire);
 
-/** Builds the expected sequence. */
-const toExpectSeq = (sourceFrag: TextFragment, sourceSections: string[]) => reduceIter(
-  sourceSections, [],
-  (acc: TextFragment[], section: string) => {
-    const prev = last(acc);
-    if (!prev) return [textSplitter.createFragment(section, 0, sourceFrag)];
-    const { offset, content } = prev;
-    const nextOffset = (offset + content.length) - sourceFrag.offset;
-    return [...acc, textSplitter.createFragment(section, nextOffset, sourceFrag)];
-  }
-);
+// We'll be using these a lot.
+const { mockFragment, toExpectSeq } = helpers;
 
-// This will be used throughout the tests; if this fails, everything
-// else will pretty much fail.
+// But we still need to test the real-deal.
 describe("createFragment", () => {
   const { createFragment } = textSplitter;
 
@@ -60,9 +48,9 @@ describe("createFragment", () => {
 });
 
 describe("asFragment", () => {
-  const { createFragment, asFragment } = textSplitter;
+  const { asFragment } = textSplitter;
 
-  const existingFrag = createFragment("I'm an existing fragment.", 100);
+  const existingFrag = mockFragment("I'm an existing fragment.", 100);
 
   it("should convert strings to fragments with 0 offset", () => {
     expect(asFragment(quickString)).toEqual({ content: quickString, offset: 0 });
@@ -74,10 +62,10 @@ describe("asFragment", () => {
 });
 
 describe("asContent", () => {
-  const { createFragment, asContent } = textSplitter;
+  const { asContent } = textSplitter;
 
   const testStr = "Test String";
-  const testFrag = createFragment("Test Fragment", 10);
+  const testFrag = mockFragment("Test Fragment", 10);
 
   it("should work with strings", () => {
     expect(asContent(testStr)).toBe(testStr);
@@ -89,25 +77,25 @@ describe("asContent", () => {
 });
 
 describe("isContiguous", () => {
-  const { createFragment, isContiguous } = textSplitter;
+  const { isContiguous } = textSplitter;
 
   const inOrder = [
-    createFragment("1", 11),
-    createFragment("2", 12),
-    createFragment("3", 13)
+    mockFragment("1", 11),
+    mockFragment("2", 12),
+    mockFragment("3", 13)
   ];
 
   const outOfOrder = [
-    createFragment("2", 12),
-    createFragment("1", 11),
-    createFragment("3", 13)
+    mockFragment("2", 12),
+    mockFragment("1", 11),
+    mockFragment("3", 13)
   ];
 
   const withGaps = [
-    createFragment("1", 11),
-    createFragment("2", 12),
-    createFragment("4", 14),
-    createFragment("5", 15)
+    mockFragment("1", 11),
+    mockFragment("2", 12),
+    mockFragment("4", 14),
+    mockFragment("5", 15)
   ];
 
   it("should pass the in-order case", () => {
@@ -124,9 +112,9 @@ describe("isContiguous", () => {
 });
 
 describe("splitFragmentAt", () => {
-  const { createFragment, splitFragmentAt } = textSplitter;
+  const { splitFragmentAt } = textSplitter;
 
-  const theFragment = createFragment(quickString, 20);
+  const theFragment = mockFragment(quickString, 20);
 
   it("should split at the start, reusing the fragment", () => {
     const [l, r] = splitFragmentAt(theFragment, 20);
@@ -158,32 +146,32 @@ describe("splitFragmentAt", () => {
 });
 
 describe("byLine", () => {
-  const { createFragment, byLine } = textSplitter;
+  const { byLine } = textSplitter;
 
-  const manyLines = createFragment("First\nSecond\nThird", 10);
-  const manyEmptyLines = createFragment("First\n\nSecond\n\n\nThird", 10);
-  const singleLine = createFragment(quickString, 10);
+  const manyLines = mockFragment("First\nSecond\nThird", 10);
+  const manyEmptyLines = mockFragment("First\n\nSecond\n\n\nThird", 10);
+  const singleLine = mockFragment(quickString, 10);
 
   it("should split into a sequence of newline characters and text", () => {
     expect([...byLine(manyLines)]).toEqual([
-      createFragment("First", 10),
-      createFragment("\n", 15),
-      createFragment("Second", 16),
-      createFragment("\n", 22),
-      createFragment("Third", 23)
+      mockFragment("First", 10),
+      mockFragment("\n", 15),
+      mockFragment("Second", 16),
+      mockFragment("\n", 22),
+      mockFragment("Third", 23)
     ]);
   });
 
   it("should work when there's multiple newlines in a row", () => {
     expect([...byLine(manyEmptyLines)]).toEqual([
-      createFragment("First", 10),
-      createFragment("\n", 15),
-      createFragment("\n", 16),
-      createFragment("Second", 17),
-      createFragment("\n", 23),
-      createFragment("\n", 24),
-      createFragment("\n", 25),
-      createFragment("Third", 26)
+      mockFragment("First", 10),
+      mockFragment("\n", 15),
+      mockFragment("\n", 16),
+      mockFragment("Second", 17),
+      mockFragment("\n", 23),
+      mockFragment("\n", 24),
+      mockFragment("\n", 25),
+      mockFragment("Third", 26)
     ]);
   });
 
@@ -193,66 +181,66 @@ describe("byLine", () => {
 });
 
 describe("byLineFromEnd", () => {
-  const { createFragment, byLineFromEnd } = textSplitter;
+  const { byLineFromEnd } = textSplitter;
 
   describe("with lines shorter than the chunk size", () => {
-    const shortLines = createFragment("First\nSecond\nThird", 10);
-    const shortEmptyLines = createFragment("First\n\nSecond\n\n\nThird", 10);
+    const shortLines = mockFragment("First\nSecond\nThird", 10);
+    const shortEmptyLines = mockFragment("First\n\nSecond\n\n\nThird", 10);
 
     it("should split into a reversed sequence of newline characters and text", () => {
       expect([...byLineFromEnd(shortLines)]).toEqual([
-        createFragment("First", 10),
-        createFragment("\n", 15),
-        createFragment("Second", 16),
-        createFragment("\n", 22),
-        createFragment("Third", 23)
+        mockFragment("First", 10),
+        mockFragment("\n", 15),
+        mockFragment("Second", 16),
+        mockFragment("\n", 22),
+        mockFragment("Third", 23)
       ].reverse());
     });
 
     it("should work when there's multiple newlines in a row", () => {
       expect([...byLineFromEnd(shortEmptyLines)]).toEqual([
-        createFragment("First", 10),
-        createFragment("\n", 15),
-        createFragment("\n", 16),
-        createFragment("Second", 17),
-        createFragment("\n", 23),
-        createFragment("\n", 24),
-        createFragment("\n", 25),
-        createFragment("Third", 26)
+        mockFragment("First", 10),
+        mockFragment("\n", 15),
+        mockFragment("\n", 16),
+        mockFragment("Second", 17),
+        mockFragment("\n", 23),
+        mockFragment("\n", 24),
+        mockFragment("\n", 25),
+        mockFragment("Third", 26)
       ].reverse());
     });
   });
 
   describe("with lines longer than the chunk size", () => {
-    const longLines = createFragment("First\nSecond & Third\nFourth & Fifth", 10);
-    const longEmptyLines = createFragment("First\n\nSecond & Third\n\n\nFourth & Fifth", 10);
+    const longLines = mockFragment("First\nSecond & Third\nFourth & Fifth", 10);
+    const longEmptyLines = mockFragment("First\n\nSecond & Third\n\n\nFourth & Fifth", 10);
 
     it("should split into a reversed sequence of newline characters and text", () => {
       expect([...byLineFromEnd(longLines)]).toEqual([
-        createFragment("First", 10),
-        createFragment("\n", 15),
-        createFragment("Second & Third", 16),
-        createFragment("\n", 30),
-        createFragment("Fourth & Fifth", 31)
+        mockFragment("First", 10),
+        mockFragment("\n", 15),
+        mockFragment("Second & Third", 16),
+        mockFragment("\n", 30),
+        mockFragment("Fourth & Fifth", 31)
       ].reverse());
     });
 
     it("should work when there's multiple newlines in a row", () => {
       expect([...byLineFromEnd(longEmptyLines)]).toEqual([
-        createFragment("First", 10),
-        createFragment("\n", 15),
-        createFragment("\n", 16),
-        createFragment("Second & Third", 17),
-        createFragment("\n", 31),
-        createFragment("\n", 32),
-        createFragment("\n", 33),
-        createFragment("Fourth & Fifth", 34)
+        mockFragment("First", 10),
+        mockFragment("\n", 15),
+        mockFragment("\n", 16),
+        mockFragment("Second & Third", 17),
+        mockFragment("\n", 31),
+        mockFragment("\n", 32),
+        mockFragment("\n", 33),
+        mockFragment("Fourth & Fifth", 34)
       ].reverse());
     });
   });
 
   describe("with a single line", () => {
-    const singleLine = createFragment(quickString, 10);
+    const singleLine = mockFragment(quickString, 10);
 
     it("should not split", () => {
       expect([...byLineFromEnd(singleLine)]).toEqual([singleLine]);
@@ -261,68 +249,17 @@ describe("byLineFromEnd", () => {
 });
 
 describe("bySentence", () => {
-  const { createFragment, bySentence } = textSplitter;
-
-  /**
-   * Constructs a sequence that will ensure the punctuation at
-   * the end of each sentence is positioned to split at the
-   * middle of the assembled string.
-   * 
-   * Input: `["Foo.", "Bar!"]`
-   * Output: `["Foo.", "Bar!", "Foo."]`
-   * 
-   * When joined: `"Foo. Bar! Foo."`
-   */
-  const forSingleLine = (collection: readonly string[]) => {
-    // Loop back around so each punctuation is used to split.
-    return [...collection, collection[0]];
-  };
-
-  /**
-   * Creates pairs of sentences from the collection, ensuring each
-   * sentence is in the front position once, where it is expected
-   * to split.
-   * 
-   * The pairs themselves may be joined into a single line with
-   * `" "` and the those single lines joined into a corpus of
-   * lines with `"\n"`.
-   * 
-   * Input: `["Foo.", "Bar!"]`
-   * Output: `[["Foo.", "Bar!"], ["Bar!", "Foo."]]`
-   * 
-   * When joined: `"Foo. Bar!\nBar! Foo."`
-   */
-  const forManyLines = (collection: readonly string[]) => {
-    // This pattern will position each sentence so that each sentence
-    // is split by its punctuation once.
-    const [firstEl, ...restEls] = collection;
-    return _zip(collection, [...restEls, firstEl]) as string[][];
-  };
-
-  describe("sanity checks of test helpers", () => {
-    const input = Object.freeze(["Foo.", "Bar!"]);
-
-    it("forSingleLine", () => {
-      expect(forSingleLine(input)).toEqual(["Foo.", "Bar!", "Foo."]);
-    });
-
-    it("forManyLines", () => {
-      expect(forManyLines(input)).toEqual([
-        ["Foo.", "Bar!"],
-        ["Bar!", "Foo."]
-      ]);
-    });
-  });
+  const { bySentence } = textSplitter;
 
   const testPhrases = (collection: readonly string[]) => {
     describe("with a single line", () => {
-      const theSentences = forSingleLine(collection);
+      const theSentences = helpers.forSingleLine(collection);
 
       const assembled = chain(theSentences)
         .thru((sentences) => interweave(" ", sentences))
         .toArray();
 
-      const singleLine = createFragment(assembled.join(""), 10);
+      const singleLine = mockFragment(assembled.join(""), 10);
 
       it("should split into sentences and the whitespace between them", () => {
         expect([...bySentence(singleLine)]).toEqual(toExpectSeq(singleLine, assembled));
@@ -330,7 +267,7 @@ describe("bySentence", () => {
     });
 
     describe("with a multiple lines", () => {
-      const theLines = forManyLines(collection);
+      const theLines = helpers.forManyLines(collection);
 
       const assembled = chain(theLines)
         .map((sentences) => interweave(" ", sentences))
@@ -338,7 +275,7 @@ describe("bySentence", () => {
         .flatten()
         .toArray();
       
-      const manyLines = createFragment(assembled.join(""), 10);
+      const manyLines = mockFragment(assembled.join(""), 10);
 
       it("should split into sentences, newlines, and other whitespace", () => {
         expect([...bySentence(manyLines)]).toEqual(toExpectSeq(manyLines, assembled));
@@ -356,13 +293,13 @@ describe("bySentence", () => {
 
       it.each(leading.map((h) => [h]))("should not split on \"%s\"", (honorific) => {
         const source = `I am ${honorific} Len Pennington.`;
-        const fragment = createFragment(source, 10);
+        const fragment = mockFragment(source, 10);
         expect([...bySentence(fragment)]).toEqual([fragment]);
       });
 
       it.each(trailing.map((h) => [h]))("should not split on \"%s\"", (honorific) => {
         const source = `Len Pennington ${honorific} at your service.`;
-        const fragment = createFragment(source, 10);
+        const fragment = mockFragment(source, 10);
         expect([...bySentence(fragment)]).toEqual([fragment]);
       });
     });
@@ -375,13 +312,13 @@ describe("bySentence", () => {
           .concat("The core samples will get too hot!")
           .thru((sentences) => interweave(" ", sentences))
           .toArray();
-        const fragment = createFragment(sections.join(""), 10);
+        const fragment = mockFragment(sections.join(""), 10);
         expect([...bySentence(fragment)]).toEqual(toExpectSeq(fragment, sections));
       });
 
       it("should not split on leading dramatic ellipses", () => {
         const source = "This is the end ...of everything."
-        const fragment = createFragment(source, 10);
+        const fragment = mockFragment(source, 10);
         expect([...bySentence(fragment)]).toEqual([fragment]);
       });
 
@@ -391,7 +328,7 @@ describe("bySentence", () => {
         // Perhaps with some pre-processing, we could convert "..." to "…" and
         // back again after we're done doing the split.
         const source = "This is the end... of everything."
-        const fragment = createFragment(source, 10);
+        const fragment = mockFragment(source, 10);
         expect([...bySentence(fragment)]).toEqual([fragment]);
       });
     });
@@ -405,7 +342,7 @@ describe("bySentence", () => {
           .thru((sentences) => interweave(" ", sentences))
           .toArray();
 
-        const fragment = createFragment(sections.join(""), 10);
+        const fragment = mockFragment(sections.join(""), 10);
         expect([...bySentence(fragment)]).toEqual(toExpectSeq(fragment, sections));
       });
 
@@ -417,7 +354,7 @@ describe("bySentence", () => {
           .thru((sentences) => interweave(" ", sentences))
           .toArray();
 
-        const fragment = createFragment(sections.join(""), 10);
+        const fragment = mockFragment(sections.join(""), 10);
         expect([...bySentence(fragment)]).toEqual(toExpectSeq(fragment, sections));
       });
 
@@ -438,7 +375,7 @@ describe("bySentence", () => {
           .thru((sentences) => interweave(" ", sentences))
           .toArray();
 
-        const fragment = createFragment(sections.join(""), 10);
+        const fragment = mockFragment(sections.join(""), 10);
         expect([...bySentence(fragment)]).toEqual(toExpectSeq(fragment, sections));
       });
     });
@@ -458,17 +395,17 @@ describe("bySentence", () => {
 });
 
 describe("byWord", () => {
-  const { createFragment, byWord } = textSplitter;
+  const { byWord } = textSplitter;
 
   it("should split into words and non-words", () => {
     const sections = ["This", " ", "is", " ", "a", " ", "test", "."];
-    const fragment = createFragment(sections.join(""), 10);
+    const fragment = mockFragment(sections.join(""), 10);
     expect([...byWord(fragment)]).toEqual(toExpectSeq(fragment, sections))
   });
 
   it("should keep newlines as separate characters", () => {
     const sections = ["Foo", " ", "bar", "?", "\n", "\n", "Baz", " ", "qux", "."];
-    const fragment = createFragment(sections.join(""), 10);
+    const fragment = mockFragment(sections.join(""), 10);
     expect([...byWord(fragment)]).toEqual(toExpectSeq(fragment, sections));
   });
 
@@ -486,7 +423,7 @@ describe("byWord", () => {
      * Using the `byWord` splitter alone, you would get:
      */
     const sections = ["Look", " ", "out", "!! ", "A", " ", "gun", "!"];
-    const fragment = createFragment(sections.join(""), 10);
+    const fragment = mockFragment(sections.join(""), 10);
     expect([...byWord(fragment)]).toEqual(toExpectSeq(fragment, sections));
 
     /**
@@ -507,7 +444,7 @@ describe("byWord", () => {
 
   it("should treat contractions as a single word", () => {
     const sections = ["I'm", " ", "right", " ", "here", "."];
-    const fragment = createFragment(sections.join(""), 10);
+    const fragment = mockFragment(sections.join(""), 10);
     expect([...byWord(fragment)]).toEqual(toExpectSeq(fragment, sections));
   });
 
@@ -517,7 +454,7 @@ describe("byWord", () => {
     // Like in: He said, "Did you really think that was a 'fun' time!?"
     // It's tricky to parse that out.
     const sections = ["It", " ", "is", " ", "the", " ", "eagles'", " ", "way", "."];
-    const fragment = createFragment(sections.join(""), 10);
+    const fragment = mockFragment(sections.join(""), 10);
     expect([...byWord(fragment)]).toEqual(toExpectSeq(fragment, sections));
   });
 });
