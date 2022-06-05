@@ -1,14 +1,17 @@
 import { red, green, cyan, bold } from 'colorette'
-const loadConfigFile = require('rollup/dist/loadConfigFile')
-const path = require('path')
-const fs = require('fs')
-const http = require('http')
-const handler = require('serve-handler')
-const rollup = require('rollup')
-const metablock = require('rollup-plugin-userscript-metablock')
+import loadConfigFile from 'rollup/dist/loadConfigFile'
+import url from 'node:url'
+import path from 'node:path'
+import fs from 'node:fs'
+import http from 'node:http'
+import handler from 'serve-handler'
+import * as rollup from 'rollup'
+import metablock from 'rollup-plugin-userscript-metablock'
 
-const pkg = require('./package.json')
-const meta = require('./meta.json')
+import pkg from "./package.json" assert { type: "json" }
+import meta from "./meta.json" assert { type: "json" }
+
+const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 console.log('👀 watch & serve 🤲\n###################\n')
 
@@ -44,16 +47,20 @@ if (grants.indexOf('GM.setValue') === -1) {
 if (grants.indexOf('GM.getValue') === -1) {
   grants.push('GM.getValue')
 }
+// Just to suppress a type error.
+const untypedMeta = {
+  homepage: pkg.homepage,
+  author: pkg.author,
+  license: pkg.license,
+}
 const devMetablock = metablock({
   file: './meta.json',
   override: {
     name: pkg.name + ' [dev]',
     version: pkg.version,
     description: pkg.description,
-    homepage: pkg.homepage,
-    author: pkg.author,
-    license: pkg.license,
-    grant: grants
+    grant: grants,
+    ...untypedMeta
   }
 })
 
@@ -62,14 +69,18 @@ const outContent = typeof result === 'string' ? result : result.code
 fs.writeFileSync(devScriptOutFile, outContent)
 console.log(green(`created ${bold(devScriptOutFile)}. Please install in Tampermonkey: `) + hyperlink(`http://localhost:${port}/${devScriptInFile}`))
 
-loadConfigFile(path.resolve(__dirname, 'rollup.config.js')).then(
+loadConfigFile(path.resolve(__dirname, 'rollup.config.mjs')).then(
   async ({ options, warnings }) => {
     // Start rollup watch
     const watcher = rollup.watch(options)
 
     watcher.on('event', event => {
       if (event.code === 'BUNDLE_START') {
-        console.log(cyan(`bundles ${bold(event.input)} → ${bold(event.output.map(fullPath => path.relative(path.resolve(__dirname), fullPath)).join(', '))}...`))
+        const input
+          = event.input == null ? "(unknown)"
+          : typeof event.input === "string" ? event.input
+          : JSON.stringify(event.input)
+        console.log(cyan(`bundles ${bold(input)} → ${bold(event.output.map(fullPath => path.relative(path.resolve(__dirname), fullPath)).join(', '))}...`))
       } else if (event.code === 'BUNDLE_END') {
         console.log(green(`created ${bold(event.output.map(fullPath => path.relative(path.resolve(__dirname), fullPath)).join(', '))} in ${event.duration}ms`))
       } else if (event.code === 'ERROR') {
