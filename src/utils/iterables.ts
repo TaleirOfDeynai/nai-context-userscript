@@ -37,7 +37,7 @@ type FromPairsResult<T>
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   /** Reduces the iterable to a single value. */
-  reduce<TOut, TInit = TOut>(initialValue: TInit, reducer: ReduceFn<ElementOf<TIterIn>, TOut, TInit>): TInit | TOut;
+  reduce<TInit, TOut = TInit>(initialValue: TInit, reducer: ReduceFn<ElementOf<TIterIn>, TOut, TInit>): TInit | TOut;
   /** Transforms each element into a tuple. */
   map<TOut extends readonly Primitives[]>(xformFn: TupleTransformFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
   /** Transforms each element. */
@@ -406,7 +406,7 @@ export const filterIter = function*<T extends Iterable<any>>(
       yield value;
 };
 
-export const reduceIter = function<TIter extends Iterable<any>, TOut, TInit = TOut>(
+export const reduceIter = function<TIter extends Iterable<any>, TInit, TOut = TInit>(
   iterable: TIter,
   initialValue: TInit,
   reducer: ReduceFn<ElementOf<TIter>, TOut, TInit>

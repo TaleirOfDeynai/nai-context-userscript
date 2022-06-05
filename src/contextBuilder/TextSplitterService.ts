@@ -17,7 +17,19 @@ export type TextOrFragment = string | TextFragment;
 
 const { raw } = String;
 
-/** A raw string with all the punctuation characters we care about. */
+/**
+ * A raw string with all the punctuation characters we care about.
+ * 
+ * The characters are:
+ * - The typical english `.`, `?`, and `!`.
+ * - The `~` character, which is seeing more common use.
+ * - `\xbf` -> `¿`
+ * - `\xa1` -> `¡`
+ * - `\u061f` -> `؟`
+ * - `\u3002` -> `。`
+ * - `\uff1f` -> `？`
+ * - `\uff01` -> `！`
+ */
 const PUNCT = raw`.?!~\xbf\xa1\u061f\u3002\uff1f\uff01`;
 /** The quote characters we care about. */
 const QUOTE = `'"`;
@@ -25,7 +37,7 @@ const QUOTE = `'"`;
  * An exception case in sentence separation: english honorific abbreviations.
  * Seems a bit much, but NovelAI apparently found this necessary.
  */
-const HONORIFIC = raw`(?:dr|mr?s?|esq|jr|sn?r)\.`;
+const HONORIFIC = raw`(?:dr|mrs?|ms|esq|jr|sn?r)\.`;
 
 /** Matches something that isn't English syntax. */
 const reWordy = new RegExp(`[^${PUNCT}${QUOTE}\\s-]`);
@@ -189,6 +201,13 @@ export default usModule((require, exports) => {
       "Expected cut offset to be in bounds of the fragment.",
       cutOffset >= offset && cutOffset <= offset + content.length
     );
+
+    // Fast-path: reuse the instance if cutting at beginning.
+    if (cutOffset === offset)
+      return [createFragment("", 0, fragment), fragment];
+    // Fast-path: reuse instance if cutting at end.
+    if (cutOffset === offset + content.length)
+      return [fragment, createFragment("", content.length, fragment)];
 
     // Get the relative position of the offset.
     const position = cutOffset - offset;
