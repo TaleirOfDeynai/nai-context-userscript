@@ -10,16 +10,26 @@ import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
 // phrases.  Anything unrecognized throws an error.
 
 const encodeMap = new Map<string, number>([
-  // 0+ are kinds of whitespace.
+  // 0+ are kinds of whitespace and punctuation.
   [" ", 1],
   ["  ", 2],
   ["\t", 3],
   ["\n", 4],
+  [".", 11],
+  ["!", 12],
+  ["?", 13],
+  ["~", 14],
+  ["...", 21],
+  ["!!!", 22],
+  ["???", 23],
+  ["~~~", 24],
   // 100+ are forms of encapsulation.
   ["[", 101],
   ["]", 102],
   ["[ ", 111],
   [" ]", 112],
+  ["#", 121],
+  ["##", 122],
   // 200+ are arrangements of numbers.
   ["1", 201],
   ["2", 202],

@@ -50,6 +50,7 @@
         "@types/jest": "^27.5.1",
         "@types/react": "^17.0.27",
         "colorette": "^2.0.17",
+        "brogue": "0.7.1",
         "gpt-3-encoder": "1.1.3",
         "jest": "^28.1.0",
         "react": "^17.0.2",
