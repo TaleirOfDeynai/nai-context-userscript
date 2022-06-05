@@ -32,7 +32,7 @@
         "prepublishOnly": "npm run build:release && git add dist/release-$npm_package_version.user.js"
     },
     "dependencies": {
-        "lodash-es": "4.17.*",
+        "lodash": "4.17.*",
         "rxjs": "7.5.5",
         "rxjs-for-await": "1.0.0"
     },
@@ -46,7 +46,7 @@
         "@rollup/plugin-node-resolve": "^13.3.0",
         "@rollup/plugin-replace": "^4.0.0",
         "@rollup/plugin-typescript": "^8.3.2",
-        "@types/lodash-es": "4.17.*",
+        "@types/lodash": "4.*",
         "@types/jest": "^27.5.1",
         "@types/react": "^17.0.27",
         "colorette": "^2.0.17",

@@ -34,3 +34,9 @@ declare namespace Webpack {
 declare interface Window {
   webpackChunk_N_E: Webpack.ChunkStore;
 }
+
+// Fixing bad `conforms` module typings.
+declare module "lodash/conforms" {
+  import _ = require("lodash");
+  export = _.conforms;
+}

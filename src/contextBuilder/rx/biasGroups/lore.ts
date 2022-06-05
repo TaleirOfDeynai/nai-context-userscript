@@ -1,4 +1,4 @@
-import conforms from "lodash-es/conforms";
+import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -23,9 +23,9 @@ type BiasedSource = ContextSource<BiasedField>;
  * Checks each {@link ContextSource} for lore bias group inclusions.
  */
 export default usModule((_require, exports) => {
-  const isBiased = conforms({
-    entry: conforms({
-      fieldConfig: conforms({
+  const isBiased = _conforms({
+    entry: _conforms({
+      fieldConfig: _conforms({
         // Need a non-empty array to qualify.
         loreBiasGroups: (v) => isArray(v) && Boolean(v.length)
       })

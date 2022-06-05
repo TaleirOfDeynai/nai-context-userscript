@@ -7,8 +7,5 @@ module.exports = {
   testEnvironment: "node",
   moduleNameMapper: pathsToModuleNameMapper(compilerOptions.paths, {
     prefix: `<rootDir>/${compilerOptions.baseUrl}`
-  }),
-  transformIgnorePatterns: [
-    "/node_modules/(?!lodash-es/)"
-  ]
+  })
 };

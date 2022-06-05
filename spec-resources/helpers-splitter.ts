@@ -1,4 +1,4 @@
-import _zip from "lodash-es/zip";
+import _zip from "lodash/zip";
 import { reduceIter, last } from "@utils/iterables";
 
 import type TextSplitterModule from "@src/contextBuilder/TextSplitterService";

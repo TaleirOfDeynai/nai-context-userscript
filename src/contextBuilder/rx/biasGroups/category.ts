@@ -1,4 +1,4 @@
-import conforms from "lodash-es/conforms";
+import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -21,7 +21,7 @@ type BiasedCategory = Categories.Category & {
  * Checks each {@link ContextSource} for lore bias group inclusions.
  */
 export default usModule((_require, exports) => {
-  const isBiasedCategory = conforms({
+  const isBiasedCategory = _conforms({
     categoryBiasGroups: (v) => isArray(v) && Boolean(v.length)
   }) as TypePredicate<BiasedCategory>;
 

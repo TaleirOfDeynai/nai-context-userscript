@@ -1,4 +1,4 @@
-import conforms from "lodash-es/conforms";
+import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -17,8 +17,8 @@ export interface DisabledSource extends ContextSource {
 };
 
 export default usModule((_require, exports) => {
-  const isEnabled = conforms({
-    entry: conforms({
+  const isEnabled = _conforms({
+    entry: _conforms({
       fieldConfig: (c: { enabled?: boolean }) => {
         // Enabled by default if it lacks the `enabled` property.
         if (!("enabled" in c)) return true;

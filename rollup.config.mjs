@@ -11,7 +11,8 @@ import pkg from "./package.json" assert { type: "json" }
 
 fs.mkdir('dist/', { recursive: true }, () => null)
 
-export default {
+/** @type {import('rollup').RollupOptions} */
+const rollupConfig = {
   input: 'src/index.ts',
   output: {
     file: 'dist/bundle.user.js',
@@ -55,3 +56,5 @@ export default {
   ],
   external: id => /^react(-dom)?$/.test(id)
 }
+
+export default rollupConfig

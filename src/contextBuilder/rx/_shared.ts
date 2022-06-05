@@ -1,4 +1,4 @@
-import conforms from "lodash-es/conforms";
+import _conforms from "lodash/conforms";
 import { isString } from "@utils/is";
 
 import type { TypePredicate } from "@utils/is";
@@ -26,9 +26,9 @@ type CategorizedSource = ContextSource<CategorizedField>;
 
 export const categories = {
   /** Checks to see if the entry of `source` has a `category` field. */
-  isCategorized: conforms({
-    entry: conforms({
-      fieldConfig: conforms({
+  isCategorized: _conforms({
+    entry: _conforms({
+      fieldConfig: _conforms({
         // Need a non-empty string to qualify.
         category: (v) => isString(v) && Boolean(v)
       })
