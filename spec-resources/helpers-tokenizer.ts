@@ -79,7 +79,7 @@ export const mockCodec = {
 
     return tokens;
   },
-  async decode(tokens: number[]): Promise<string> {
+  async decode(tokens: readonly number[]): Promise<string> {
     return chain(tokens)
       .map((token) => {
         const word = decodeMap.get(token);

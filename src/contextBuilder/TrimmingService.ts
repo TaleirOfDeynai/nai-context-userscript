@@ -49,13 +49,14 @@ export interface TrimResult extends EncodeResult {
   readonly split: () => AsyncIterable<TrimResult>;
 }
 
-export interface Trimmer extends AsyncIterable<TrimResult> {
+export interface Trimmer {
+  (): AsyncIterable<TrimResult>;
   readonly provider: TrimProvider;
   readonly origin: TextAssembly;
 };
 
 export interface ReplayTrimResult extends EncodeResult {
-  readonly split: () => ReplayWrapper<ReplayTrimResult>;
+  readonly split: ReplayWrapper<ReplayTrimResult>;
 }
 
 export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
@@ -142,8 +143,8 @@ export default usModule((require, exports) => {
         yield makeTrimResult(result, EMPTY);
       };
 
-      return protoExtend(
-        doReplay ? toReplay(unSequenced) : unSequenced(),
+      return Object.assign(
+        doReplay ? toReplay(unSequenced) : unSequenced,
         { origin: assembly, provider }
       );
     }
@@ -197,8 +198,8 @@ export default usModule((require, exports) => {
       config.preserveEnds ? "ends" : "none"
     );
 
-    return protoExtend(
-      doReplay ? toReplay(outerSplit) : outerSplit(),
+    return Object.assign(
+      doReplay ? toReplay(outerSplit) : outerSplit,
       { origin: assembly, provider }
     );
   }
@@ -231,7 +232,7 @@ export default usModule((require, exports) => {
     tokenBudget = Math.max(0, tokenBudget);
 
     /** The current iterator; we'll change this when we split. */
-    let iterable: UndefOr<AsyncIterable<TrimResult>> = trimmer;
+    let iterable: UndefOr<AsyncIterable<TrimResult>> = trimmer();
     /** The last in-budget result. */
     let lastResult: UndefOr<TrimResult> = undefined;
 

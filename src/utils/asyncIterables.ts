@@ -13,7 +13,7 @@ export interface ReplayWrapper<T> extends AsyncIterable<T> {
    * from the start.  The wrapped iterable must be capable of multiple
    * iterations for this to be effective.
    */
-  clear(): void;
+  readonly clear: () => void;
 }
 
 /**
@@ -32,7 +32,7 @@ export const toReplay = <T>(
   let elements: T[] = [];
   let iterator: UndefOr<AsyncIterator<T>> = undefined;
 
-  const wrapped = async function*() {
+  async function* replayWrapped(): AsyncIterableIterator<T> {
     yield* elements;
 
     // Start up the iterator if needed.  This is done only on demand
@@ -47,9 +47,9 @@ export const toReplay = <T>(
     }
   };
 
-  return Object.assign(wrapped, {
-    [Symbol.asyncIterator]: wrapped,
-    clear() {
+  return Object.assign(replayWrapped, {
+    [Symbol.asyncIterator]: replayWrapped,
+    clear: () => {
       elements = [];
       iterator = undefined;
     }
