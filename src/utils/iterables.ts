@@ -341,7 +341,10 @@ export const skipRight = function*<T>(
   }
 };
 
-/** Yields all items except the very last bunch after `predicateFn` fails. */
+/**
+ * Yields all items up-to-and-including the last element to fail the
+ * given predicate.
+ */
 export const skipRightUntil = function*<T extends Iterable<any>>(
   iter: T,
   predicateFn: PredicateFn<ElementOf<T>>
@@ -355,7 +358,14 @@ export const skipRightUntil = function*<T extends Iterable<any>>(
     for (let i = 0; i <= cutOff; i++) yield iter[i];
   }
   else {
-    yield* skipRightUntil([...iter] as Iterable<ElementOf<T>>, predicateFn);
+    // We'll break this iterable up into chunks, separating it by which
+    // item satisfies the predicate.  Then, we'll just not yield the
+    // last chunk.
+    let holdOver: ElementOf<T>[] = [];
+    for (const items of buffer(iter, predicateFn, true)) {
+      if (holdOver.length) yield* holdOver;
+      holdOver = items;
+    }
   }
 };
 
@@ -518,8 +528,10 @@ export const journey = function*<T extends Iterable<any>>(
 }
 
 /**
- * Buffers items until an item passes the given `predicateFn`, then yields
- * those items as an array.
+ * Buffers items until an item passes the given `predicateFn`.
+ * - The item that satisfied the predicate is added to the buffer.
+ * - The buffer is yielded.
+ * - Then a new buffer is created.
  * 
  * If `finalize` is set to `false`, the final buffer will not be yielded if
  * the last item failed to pass the predicate.
@@ -535,6 +547,32 @@ export const buffer = function*<T extends Iterable<any>>(
     if (!predicateFn(item)) continue;
     yield buffer;
     buffer = [];
+  }
+  if (!finalize || !buffer.length) return;
+  yield buffer;
+};
+
+/**
+ * Buffers items until an item passes the given `predicateFn`.
+ * - The buffer is yielded.
+ * - A new buffer is created.
+ * - The item that satisfied the predicate is added to it.
+ * 
+ * If `finalize` is set to `false`, the final buffer will not be yielded if
+ * the last item failed to pass the predicate.
+ */
+export const bufferEagerly = function*<T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>,
+  finalize = true
+): Iterable<ElementOf<T>[]> {
+  let buffer: ElementOf<T>[] = [];
+  for (const item of iter) {
+    if (predicateFn(item)) {
+      if (buffer.length) yield buffer;
+      buffer = [];
+    }
+    buffer.push(item);
   }
   if (!finalize || !buffer.length) return;
   yield buffer;
