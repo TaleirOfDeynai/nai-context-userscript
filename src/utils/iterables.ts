@@ -32,7 +32,7 @@ type UnionToIntersection<T>
 type PartitionResult<T extends KVP> = KVP<T[0], T[1][]>;
 type FromPairsResult<T>
   = T extends KVP<infer K, infer V>
-    ? K extends string | number ? { [Prop in K]: V } : never
+    ? K extends string | number | symbol ? { [Prop in K]: V } : never
   : never;
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
@@ -123,7 +123,7 @@ export const countBy = <T>(iter: Iterable<T>, predicateFn: PredicateFn<T>): numb
 /**
  * Creates an object from key-value-pairs.
  */
-export const fromPairs = <T extends KVP>(
+export const fromPairs = <T extends KVP<string | number | symbol>>(
   kvps: Iterable<T>
 ): UnionToIntersection<FromPairsResult<T>> => {
   const result: any = {};
@@ -134,11 +134,12 @@ export const fromPairs = <T extends KVP>(
 /**
  * Creates an iterable that yields the key-value pairs of an object.
  */
-export const toPairs = function*<TObj extends Record<string, any>>(
-  obj: Maybe<TObj>
-): Iterable<KVP<keyof TObj, AnyValueOf<TObj>>> {
+export function toPairs(obj: null | undefined): Iterable<KVP<never, never>>;
+export function toPairs<TObj extends {}>(obj: Maybe<TObj>): Iterable<KVP<keyof TObj, AnyValueOf<TObj>>>;
+export function* toPairs(obj: any): Iterable<KVP<string | number | symbol, any>> {
   if (obj == null) return;
-  for(const key of Object.keys(obj)) yield [key, obj[key]];
+  for(const key of Object.keys(obj)) yield [key as any, obj[key]];
+  for(const sym of Object.getOwnPropertySymbols(obj)) yield [sym as any, obj[sym]];
 };
 
 /**
