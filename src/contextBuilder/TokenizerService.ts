@@ -12,6 +12,8 @@ import type { Deferred } from "@utils/functions";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextFragment } from "./TextSplitterService";
+import { assert } from "@utils/assert";
+import { UndefOr } from "@utils/utility-types";
 
 
 export interface SyncTokenCodec {
@@ -22,9 +24,29 @@ export interface SyncTokenCodec {
 export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
 export type TokenCodec = AsyncTokenCodec;
 
+export interface ResumeData {
+  readonly type: "append" | "prepend";
+  /**
+   * The number of tokens in {@link EncodeResult.tokens} considered safe.
+   * 
+   * These will be sliced off by the {@link StreamEncodeFn}, either
+   * `prependEncoder` or `appendEncoder`.
+   */
+  readonly safeCount: number;
+  /** The tokens to append or prepend to {@link EncodeResult.tokens}. */
+  readonly unsafeTokens: readonly number[];
+}
+
 export interface EncodeResult {
+  /** The fragments this result contains (excluding prefix/suffix). */
   readonly fragments: readonly TextFragment[];
+  /** The tokens, with prefix/suffix. */
   readonly tokens: readonly number[];
+  /**
+   * The data needed to resume encoding, when used as the
+   * {@link StreamEncodeOptions.seedResult seedResult}.
+   */ 
+  readonly resume: ResumeData;
 }
 
 export interface StreamEncodeOptions {
@@ -52,6 +74,15 @@ export interface StreamEncodeFn {
     options?: StreamEncodeOptions
   ): AsyncIterable<EncodeResult>
 }
+
+type ResumeTuple = [
+  /** The tokens considered unstable. */
+  wilderness: readonly number[],
+  /** The tokens considered stable. */
+  safeHouse: readonly number[],
+  /** The fragments encoded thus far. */
+  encoded: readonly TextFragment[]
+];
 
 const UNSAFE_TOKEN_BUFFER = 10;
 
@@ -95,6 +126,30 @@ export default usModule((require, exports) => {
   // to the start of the next fragment, encoding it, and then all but the
   // last 10-ish tokens from this fragment are considered safe.
 
+  const bootstrapPrepend = async (
+    codec: AsyncTokenCodec,
+    seedResult: UndefOr<EncodeResult>,
+    suffix: string
+  ): Promise<ResumeTuple> => {
+    // With a seed result, we can unpack the data.
+    if (seedResult) {
+      const { type, safeCount, unsafeTokens } = seedResult.resume;
+      assert("Seed result cannot resume a prepend.", type === "prepend");
+      return [
+        unsafeTokens,
+        // We want the last of `tokens` for a prepend.
+        seedResult.tokens.slice(-safeCount),
+        seedResult.fragments
+      ];
+    }
+
+    // If we have a suffix, we'll prime the unverified tokens with it.
+    if (suffix) return [await codec.encode(suffix), [], []];
+
+    // Otherwise, we start fresh.
+    return [[], [], []];
+  };
+
   /**
    * An encoder that takes an iterable of {@link TextFragment} and provides
    * an asynchronous iterable that will encode the next meaningful chunk of
@@ -124,17 +179,9 @@ export default usModule((require, exports) => {
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
-    // Internal state holding intermediate information.
-    let wilderness = await dew(async () => {
-      if (seedResult) return seedResult.tokens.slice(0, bufferSize);
-      if (!suffix) return [];
-      // If we have a suffix, we'll prime the unverified tokens with it.
-      return await codec.encode(suffix);
-    });
-
-    // Internal state representing stabilized inputs.
-    let safeHouse = seedResult?.tokens.slice(bufferSize) ?? [];
-    let encoded: readonly TextFragment[] = seedResult?.fragments.slice() ?? [];
+    let [wilderness, safeHouse, encoded] = await bootstrapPrepend(
+      codec, seedResult, suffix
+    );
 
     const fragmentBuffers = chain(toEncode)
       .thru((frags) => buffer(frags, textSplitter.hasWords))
@@ -147,7 +194,7 @@ export default usModule((require, exports) => {
       const fullText = [...theBuffer.map(textSplitter.asContent), boundary].join("");
       const theTokens = await codec.encode(fullText);
 
-      // Create the full result for this encoding before updating our state.
+      // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...theBuffer, ...encoded]);
       const tokens = await dew(async () => {
         // Without a prefix, this is easy.
@@ -158,16 +205,46 @@ export default usModule((require, exports) => {
         const withPrefix = await codec.encode(`${prefix}${theStart}`);
         return Object.freeze([...withPrefix, ...theTokens.slice(bufferSize), ...safeHouse]);
       });
-      const result = { fragments, tokens };
 
       // The first `bufferSize` tokens are considered unverified.
-      wilderness = theTokens.slice(0, bufferSize);
+      wilderness = Object.freeze(theTokens.slice(0, bufferSize));
       // And anything afterwards is now considered verified.
       safeHouse = [...theTokens.slice(bufferSize), ...safeHouse];
       encoded = fragments;
-      yield Object.freeze(result);
+
+      const resume = Object.freeze({
+        type: "prepend",
+        safeCount: safeHouse.length,
+        unsafeTokens: wilderness
+      });
+
+      yield Object.freeze({ fragments, tokens, resume });
     }
   }
+
+  const bootstrapAppend = async (
+    codec: AsyncTokenCodec,
+    seedResult: UndefOr<EncodeResult>,
+    prefix: string
+  ): Promise<ResumeTuple> => {
+    // With a seed result, we can unpack the data.
+    if (seedResult) {
+      const { type, safeCount, unsafeTokens } = seedResult.resume;
+      assert("Seed result cannot resume an append.", type === "append");
+      return [
+        unsafeTokens,
+        // We want the first of `tokens` for an append.
+        seedResult.tokens.slice(0, safeCount),
+        seedResult.fragments
+      ];
+    }
+
+    // If we have a prefix, we'll prime the unverified tokens with it.
+    if (prefix) return [await codec.encode(prefix), [], []];
+
+    // Otherwise, we start fresh.
+    return [[], [], []];
+  };
 
   /**
    * An encoder that takes an iterable of {@link TextFragment} and provides
@@ -194,17 +271,9 @@ export default usModule((require, exports) => {
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
-    // Internal state holding intermediate information.
-    let wilderness = await dew(async () => {
-      if (seedResult) return seedResult.tokens.slice(-bufferSize);
-      if (!prefix) return [];
-      // If we have a prefix, we'll prime the unverified tokens with it.
-      return await codec.encode(prefix);
-    });
-
-    // Internal state representing stabilized inputs.
-    let safeHouse = seedResult?.tokens.slice(0, -bufferSize) ?? [];
-    let encoded: readonly TextFragment[] = seedResult?.fragments.slice() ?? [];
+    let [wilderness, safeHouse, encoded] = await bootstrapAppend(
+      codec, seedResult, prefix
+    );
 
     const fragmentBuffers = chain(toEncode)
       .thru((frags) => buffer(frags, textSplitter.hasWords))
@@ -216,7 +285,7 @@ export default usModule((require, exports) => {
       const fullText = [boundary, ...theBuffer.map(textSplitter.asContent)].join("");
       const theTokens = await codec.encode(fullText);
 
-      // Create the full result for this encoding before updating our state.
+      // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...encoded, ...theBuffer]);
       const tokens = await dew(async () => {
         // Without a suffix, this is easy.
@@ -227,14 +296,20 @@ export default usModule((require, exports) => {
         const withSuffix = await codec.encode(`${theEnd}${suffix}`);
         return Object.freeze([...safeHouse, ...theTokens.slice(0, -bufferSize), ...withSuffix]);
       });
-      const result = { fragments, tokens };
 
       // The last `bufferSize` tokens are considered unverified.
-      wilderness = theTokens.slice(-bufferSize);
+      wilderness = Object.freeze(theTokens.slice(-bufferSize));
       // And anything before that is now considered verified.
       safeHouse = [...safeHouse, ...theTokens.slice(0, -bufferSize)];
       encoded = fragments;
-      yield Object.freeze(result);
+
+      const resume = Object.freeze({
+        type: "append",
+        safeCount: safeHouse.length,
+        unsafeTokens: wilderness
+      });
+
+      yield Object.freeze({ fragments, tokens, resume });
     }
   }
 

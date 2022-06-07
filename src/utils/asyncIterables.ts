@@ -1,5 +1,7 @@
+import * as rx from "rxjs";
 import { isFunction } from "./is";
-import { UndefOr } from "./utility-types";
+
+import type { UndefOr } from "./utility-types";
 
 export type ReplaySource<T> = AsyncIterable<T> | (() => AsyncIterable<T>);
 
@@ -53,3 +55,18 @@ export const toReplay = <T>(
     }
   });
 };
+
+/**
+ * Gets the last value from the given `source` async-iterable as
+ * a promise.  This will run the source to the end, naturally.
+ */
+export const lastValueFrom = <T>(source: AsyncIterable<T>): Promise<T> =>
+  rx.lastValueFrom(rx.from(source));
+
+/**
+ * Converts the given `source` async-iterable into a promise of
+ * an array of its yielded values.  This will run the source to
+ * the end.
+ */
+export const toArray = <T>(source: AsyncIterable<T>): Promise<T[]> =>
+  rx.lastValueFrom(rx.from(source).pipe(rx.toArray()));
