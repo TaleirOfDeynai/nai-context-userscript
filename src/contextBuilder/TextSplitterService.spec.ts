@@ -145,6 +145,139 @@ describe("splitFragmentAt", () => {
   });
 });
 
+describe("makeFragmenter", () => {
+  const { makeFragmenter } = textSplitter;
+
+  // This relies on the splitter functions, so a failure here may
+  // indicate a failure in one of the splitters.  We're also not
+  // going to check the fragment offsets, just the content.
+
+  const sections = helpers.toFragmentSeq(
+    [
+      [
+        "Section 1, line 1, sentence 1.",
+        "Section 1, line 2, sentence 1. Section 1, line 2, sentence 2."
+      ].join("\n"),
+      "\nSection 2, sentence 1. Section 2, sentence 2."
+    ],
+    10
+  );
+
+  describe("in natural order", () => {
+    it("should fragment into newline granularity", () => {
+      const result = chain(sections)
+        .thru(makeFragmenter("newline", false))
+        .map(helpers.toContent)
+        .toArray();
+      
+      expect(result).toEqual([
+        "Section 1, line 1, sentence 1.",
+        "\n",
+        "Section 1, line 2, sentence 1. Section 1, line 2, sentence 2.",
+        "\n",
+        "Section 2, sentence 1. Section 2, sentence 2."
+      ]);
+    });
+
+    it("should fragment into sentence granularity", () => {
+      const result = chain(sections)
+        .thru(makeFragmenter("sentence", false))
+        .map(helpers.toContent)
+        .toArray();
+      
+      expect(result).toEqual([
+        "Section 1, line 1, sentence 1.",
+        "\n",
+        "Section 1, line 2, sentence 1.",
+        " ",
+        "Section 1, line 2, sentence 2.",
+        "\n",
+        "Section 2, sentence 1.",
+        " ",
+        "Section 2, sentence 2."
+      ]);
+    });
+
+    it("should fragment into token granularity", () => {
+      // We're not going to check EVERYTHING, just enough to verify
+      // it's coming out in the correct positions and order.
+      const result = chain(sections)
+        .thru(makeFragmenter("token", false))
+        .map(helpers.toContent)
+        .toArray();
+      
+      const start = result.slice(0, 13);
+      expect(start).toEqual([
+        "Section", " ", "1", ", ", "line", " ", "1", ", ", "sentence", " ", "1", ".",
+        "\n"
+      ]);
+
+      const end = result.slice(-9);
+      expect(end).toEqual([
+        " ",
+        "Section", " ", "2", ", ", "sentence", " ", "2", "."
+      ]);
+    });
+  });
+
+  describe("in reversed order", () => {
+    it("should fragment into newline granularity", () => {
+      const result = chain(sections)
+        .thru(makeFragmenter("newline", true))
+        .map(helpers.toContent)
+        .toArray();
+      
+      expect(result).toEqual([
+        "Section 2, sentence 1. Section 2, sentence 2.",
+        "\n",
+        "Section 1, line 2, sentence 1. Section 1, line 2, sentence 2.",
+        "\n",
+        "Section 1, line 1, sentence 1."
+      ]);
+    });
+
+    it("should fragment into sentence granularity", () => {
+      const result = chain(sections)
+        .thru(makeFragmenter("sentence", true))
+        .map(helpers.toContent)
+        .toArray();
+      
+      expect(result).toEqual([
+        "Section 2, sentence 2.",
+        " ",
+        "Section 2, sentence 1.",
+        "\n",
+        "Section 1, line 2, sentence 2.",
+        " ",
+        "Section 1, line 2, sentence 1.",
+        "\n",
+        "Section 1, line 1, sentence 1."
+      ]);
+    });
+
+    it("should fragment into token granularity", () => {
+      // We're not going to check EVERYTHING, just enough to verify
+      // it's coming out in the correct positions and order.
+      const result = chain(sections)
+        .thru(makeFragmenter("token", true))
+        .map(helpers.toContent)
+        .toArray();
+
+      const start = result.slice(0, 9);
+      expect(start).toEqual([
+        ".", "2", " ", "sentence", ", ", "2", " ", "Section",
+        " "
+      ]);
+
+      const end = result.slice(-13);
+      expect(end).toEqual([
+        "\n",
+        ".", "1", " ", "sentence", ", ", "1", " ", "line", ", ", "1", " ", "Section"
+      ]);
+    });
+  });
+});
+
 describe("byLine", () => {
   const { byLine } = textSplitter;
 

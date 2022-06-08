@@ -6,6 +6,9 @@ import { isArray, isString } from "@utils/is";
 import AppConstants from "@nai/AppConstants";
 
 import type { UndefOr } from "@utils/utility-types";
+import type { ContextConfig } from "@nai/Lorebook";
+
+type TrimType = ContextConfig["maximumTrimType"];
 
 /** Represents a fragment of some larger body of text. */
 export interface TextFragment {
@@ -413,6 +416,70 @@ export default usModule((require, exports) => {
     return reWordy.test(isString(inputText) ? inputText : inputText.content);
   }
 
+  /**
+   * Builds an iterator that breaks up the given fragments to the desired
+   * granularity specified by `splitType` in the most efficient way possible
+   * and only as much as demanded by the consumer of the iterator.
+   * 
+   * This smooths over the minute differences in output between using:
+   * - The `byWord` splitter on its own, which will group punctuation
+   *   and not-newline whitespace into a single fragment (anything
+   *   that is not a word).
+   * - The `token` level trim-sequencer, which will split by sentence
+   *   first, separating out the not-newline white space between
+   *   sentences first, before splitting again by word, which will
+   *   separate the punctuation at the end of the sentence.
+   * 
+   * If you need the consistent behavior and laziness of a trim-sequencer
+   * without doing the trimming part, use this rather than calling the
+   * splitting functions yourself.
+   */
+  function makeFragmenter(
+    /** The granularity of the fragments desired. */
+    splitType: TrimType,
+    /** Whether to yield the fragments in reversed order. */
+    reversed: boolean = false
+  ) {
+    const TYPES = ["newline", "sentence", "token"] as const;
+    const index = TYPES.findIndex((v) => v === splitType);
+    const splitters = TYPES.slice(0, index + 1).map((v) => {
+      switch (v) {
+        case "newline": return byLine;
+        case "sentence": return bySentence;
+        case "token": return byWord;
+      }
+    });
+
+    // We're just gonna go recursive, as usual.
+    function *innerIterator(
+      frags: Iterable<TextFragment>,
+      splitFns: typeof splitters
+    ): Iterable<TextFragment> {
+      // If we're iterating towards the top of the assembly, we need
+      // to reverse the fragments we were given.
+      frags = reversed ? iterReverse(frags) : frags;
+
+      if (!splitFns.length) {
+        // if we have no functions to split, the recursion is finished.
+        // Just spit them back out (maybe in reversed order).
+        yield* frags;
+      }
+      else {
+        // Otherwise, split them up and recurse.
+        const [nextFn, ...restFns] = splitFns;
+        for (const srcFrag of frags)
+          yield* innerIterator(nextFn(srcFrag), restFns);
+      }
+    }
+
+    const fragmenter = (
+      /** The fragments to be split up. */
+      fragments: Iterable<TextFragment>
+    ) => innerIterator(fragments, splitters);
+
+    return fragmenter;
+  };
+
   return Object.assign(exports, {
     byLine,
     byLineFromEnd,
@@ -424,6 +491,7 @@ export default usModule((require, exports) => {
     asContent,
     mergeFragments,
     isContiguous,
-    splitFragmentAt
+    splitFragmentAt,
+    makeFragmenter
   });
 });

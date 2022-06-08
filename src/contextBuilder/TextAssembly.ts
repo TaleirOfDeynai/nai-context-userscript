@@ -186,49 +186,6 @@ const theModule = usModule((require, exports) => {
     return p;
   };
 
-  /**
-   * Internal function to build an iterator similar to a trimming sequencer.
-   * 
-   * It breaks up the given fragments to the desired granularity specified
-   * by `splitType` in the most efficient way possible and only as much as
-   * demanded by the consumer of the iterator.
-   */
-  const _makeFragmenter = (splitType: TrimType, dir: IterDirection) => {
-    const TYPES = ["newline", "sentence", "token"] as const;
-    const index = TYPES.findIndex((v) => v === splitType);
-    const splitters = TYPES.slice(0, index + 1).map((v) => {
-      switch (v) {
-        case "newline": return splitterService.byLine;
-        case "sentence": return splitterService.bySentence;
-        case "token": return splitterService.byWord;
-      }
-    });
-
-    // We're just gonna go recursive, as usual.
-    function *innerIterator(
-      frags: Iterable<TextFragment>,
-      splitFns: typeof splitters
-    ): Iterable<TextFragment> {
-      // If we're iterating towards the top of the assembly, we need
-      // to reverse the fragments we were given.
-      frags = dir === "toTop" ? IterOps.iterReverse(frags) : frags;
-
-      if (!splitFns.length) {
-        // if we have no functions to split, the recursion is finished.
-        // Just spit them back out (maybe in reversed order).
-        yield* frags;
-      }
-      else {
-        // Otherwise, split them up and recurse.
-        const [nextFn, ...restFns] = splitFns;
-        for (const srcFrag of frags)
-          yield* innerIterator(nextFn(srcFrag), restFns);
-      }
-    }
-
-    return (frags: Iterable<TextFragment>) => innerIterator(frags, splitters);
-  };
-
   const _insertBefore = (a: TextAssembly, f: TextFragment) =>
     makeCursor(a, f.offset);
   const _insertAfter = (a: TextAssembly, f: TextFragment) =>
@@ -729,7 +686,7 @@ const theModule = usModule((require, exports) => {
      * 
      * All fragments, including the prefix and suffix, are included.
      */
-    *fragmentsFrom(
+    fragmentsFrom(
       /**
        * A cursor or selection marking the position of the iteration.
        * 
@@ -745,32 +702,31 @@ const theModule = usModule((require, exports) => {
     ): Iterable<TextFragment> {
       if (isArray(position)) {
         const realPos = direction === "toTop" ? position[0] : position[1];
-        yield* this.fragmentsFrom(realPos, splitType, direction);
-        return;
+        return this.fragmentsFrom(realPos, splitType, direction);
       }
 
       // In case the cursor points to no existing fragment, this will move
       // it to the next nearest fragment.
       const cursor = this.findBest(position as AssemblyCursor);
 
-      // It looks odd because this used to be a `chain` and `makeFragmenter`
-      // was curried into a `thru`.  It was just more straight forward to
-      // use an anonymous generator function in the end, though.
-      const self = this;
-      yield* _makeFragmenter(splitType, direction)(dew(function* () {
+      // Determine how we need to split the fragment that contains the cursor.
+      const splitHandler = dew(() => {
         if (direction === "toTop") {
           // For the upwards direction, we want the text up-to the cursor.
-          for (const frag of self) {
-            if (isCursorInside(cursor, frag)) {
-              const [split] = splitterService.splitFragmentAt(frag, cursor.offset);
-              if (split.content) yield split;
-              return;
+          return function* handleToTop(self: TextAssembly) {
+            for (const frag of self) {
+              if (isCursorInside(cursor, frag)) {
+                const [split] = splitterService.splitFragmentAt(frag, cursor.offset);
+                if (split.content) yield split;
+                return;
+              }
+              yield frag;
             }
-            yield frag;
-          }
+          };
         }
-        else {
-          // For the downwards direction, we want the text from the cursor on.
+
+        // For the downwards direction, we want the text from the cursor on.
+        return function* handleToBottom(self: TextAssembly) {
           let emitting = false;
           for (const frag of self) {
             if (!emitting) {
@@ -783,8 +739,13 @@ const theModule = usModule((require, exports) => {
             }
             yield frag;
           }
-        }
-      }));
+        };
+      });
+
+      return chain(this)
+        .thru(splitHandler)
+        .thru(splitterService.makeFragmenter(splitType, direction === "toTop"))
+        .value();
     }
 
     /**
