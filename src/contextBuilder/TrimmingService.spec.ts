@@ -1,6 +1,6 @@
 import { jest, describe, it, expect } from "@jest/globals";
 import { beforeAll, beforeEach, afterEach } from "@jest/globals";
-import { mockFragment } from "@spec/helpers-splitter";
+import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { mockCodec } from "@spec/helpers-tokenizer";
 import { mockStory } from "@spec/mock-story";
 
@@ -91,7 +91,7 @@ const withFromDerivedSpy = () => {
  */
 const withMockStory = () => {
   const assembly = mockNewAssembly(mockStory);
-  const rawText = [...assembly].map((f) => f.content).join("");
+  const rawText = [...assembly].map(toContent).join("");
   const halfLength = Math.floor(rawText.length / 2);
   const fullLength = rawText.length + 20;
   let fullyEncoded: number[];
@@ -496,7 +496,7 @@ describe("trimByLength", () => {
       const { assembly, rawText, halfLength } = theStory;
 
       const result = await trimming.trimByLength(assembly, halfLength, { provider });
-      const fullText = Array.from(result ?? []).map((f) => f.content).join("");
+      const fullText = Array.from(result ?? []).map(toContent).join("");
       const distance = levDist.get(rawText, fullText);
       const ratio = distance / rawText.length;
 
@@ -515,7 +515,7 @@ describe("trimByLength", () => {
       const { assembly, rawText, halfLength } = theStory;
 
       const result = await trimming.trimByLength(assembly, halfLength, { provider });
-      const fullText = Array.from(result ?? []).map((f) => f.content).join("");
+      const fullText = Array.from(result ?? []).map(toContent).join("");
 
       const theStart = fullText.slice(0, 100);
       expect(Boolean(theStart && rawText.startsWith(theStart))).toBe(true);
@@ -536,7 +536,7 @@ describe("trimByLength", () => {
       const { assembly, rawText, halfLength } = theStory;
 
       const result = await trimming.trimByLength(assembly, halfLength, { provider });
-      const fullText = Array.from(result ?? []).map((f) => f.content).join("");
+      const fullText = Array.from(result ?? []).map(toContent).join("");
 
       const theStart = fullText.slice(0, 100);
       expect(Boolean(theStart && rawText.startsWith(theStart))).toBe(false);
@@ -565,7 +565,7 @@ describe("trimByLength", () => {
       const result = await trimming.trimByLength(assembly, fullLength, { provider });
       expect(result).not.toBeUndefined();
 
-      const fullText = Array.from(result ?? []).map((f) => f.content).join("");
+      const fullText = Array.from(result ?? []).map(toContent).join("");
       expect(fullText).toBe(rawText);
     });
 

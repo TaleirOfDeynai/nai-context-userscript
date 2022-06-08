@@ -1,14 +1,14 @@
 import _zip from "lodash/zip";
 import { reduceIter, last } from "@utils/iterables";
 
-import type TextSplitterModule from "@src/contextBuilder/TextSplitterService";
 import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
-
-type CreateFragmentFn = ReturnType<typeof TextSplitterModule>["createFragment"];
 
 /** Builds a {@link TextFragment} from a string. */
 export const mockFragment = (content: string, offset: number, srcFrag?: TextFragment) =>
   Object.freeze({ content, offset: offset + (srcFrag?.offset ?? 0) }) as TextFragment;
+
+/** A function to get {@link TextFragment.content} for `map` and friends. */
+export const toContent = (fragment: TextFragment) => fragment.content;
 
 /**
  * Constructs a sequence that will ensure the punctuation at

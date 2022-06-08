@@ -1,5 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
-import { mockFragment } from "@spec/helpers-splitter";
+import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { withComments } from "@spec/mock-story";
 
 import _zip from "lodash/zip";
@@ -146,7 +146,7 @@ describe("comment removal", () => {
   ): string => {
     return chain(fragments)
       .thru((iter) => flatMap(iter, providerFn))
-      .map((frag) => frag.content)
+      .map(toContent)
       .thru((iter) => reversed ? iterReverse(iter) : iter)
       .value((iter) => [...iter].join(""));
   };
@@ -238,7 +238,7 @@ describe("comment removal", () => {
     for (const theCase of simpleTests.cases) {
       it(`should ${theCase.should}`, () => {
         const assembly = mockAssembly(theCase.input);
-        const output = [...preProcess(assembly)].map((f) => f.content);
+        const output = [...preProcess(assembly)].map(toContent);
         expect(output.join("")).toBe(theCase.expected);
       });
     }
