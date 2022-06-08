@@ -1,7 +1,6 @@
 import { usModule } from "@utils/usModule";
 import { isObject, isString } from "@utils/is";
 import { assertAs } from "@utils/assert";
-import UUID from "@nai/UUID";
 
 import type { IContextField } from "@nai/ContextModule";
 import type { ContextContent } from "./ContextContent";
@@ -15,7 +14,7 @@ export interface ContextSource<
   TField extends IContextField = IContextField,
   TType extends SourceType = SourceType
 > {
-  uniqueId: string;
+  readonly uniqueId: string;
   identifier: string;
   type: TType;
   entry: ContextContent<TField>;
@@ -27,8 +26,6 @@ export type ExtendField<TSource extends ContextSource, TFieldEx extends {}>
   : never;
 
 export default usModule((require, exports) => {
-  const uuid = require(UUID);
-
   const toIdentifier = (entry: Record<any, any>, type: SourceType): string => {
     assertAs("Expected an object.", isObject, entry);
 
@@ -60,7 +57,8 @@ export default usModule((require, exports) => {
     identifier = toIdentifier(entry.field, type)
   ): ContextSource<TField, TType> => {
     return {
-      uniqueId: uuid.v4(),
+      // Just alias the UUID of the content for convenience.
+      get uniqueId() { return entry.uniqueId; },
       identifier, type, entry
     };
   };

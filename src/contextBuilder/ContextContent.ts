@@ -4,6 +4,7 @@ import { dew } from "@utils/dew";
 import { isNumber } from "@utils/is";
 import EventModule from "@nai/EventModule";
 import ContextModule from "@nai/ContextModule";
+import UUID from "@nai/UUID";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TrimmingService, { TokenizedAssembly } from "./TrimmingService";
 import $TextAssembly, { TextAssembly } from "./TextAssembly";
@@ -60,6 +61,7 @@ const contentConfig = dew(() => {
 const reComment = /^##/m;
 
 const theModule = usModule((require, exports) => {
+  const uuid = require(UUID);
   const eventModule = require(EventModule);
   const { ContextField } = require(ContextModule);
   const providers = $TrimmingProviders(require);
@@ -196,6 +198,7 @@ const theModule = usModule((require, exports) => {
       contextParams: ContextParams
     ) {
       const { text, contextConfig, ...fieldConfig } = origField;
+      this.#uniqueId = uuid.v4();
       this.#field = origField;
       this.#fieldConfig = fieldConfig;
       this.#contextConfig = contextConfig;
@@ -255,6 +258,7 @@ const theModule = usModule((require, exports) => {
       );
     }
 
+    #uniqueId: string;
     #field: Readonly<T>;
     #fieldConfig: Omit<T, "text" | "contextConfig">;
     #contextConfig: ContextConfig;
@@ -276,6 +280,11 @@ const theModule = usModule((require, exports) => {
     #otherWorkers: Set<Promise<unknown>>;
     /** Current trim results of the current budget applied. */
     #currentResult: UndefOr<InFlightTrimming>;
+
+    /** The unique ID for this content. */
+    get uniqueId(): string {
+      return this.#uniqueId;
+    }
 
     /**
      * The original field used as the source.
