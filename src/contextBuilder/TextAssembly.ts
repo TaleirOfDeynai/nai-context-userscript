@@ -83,7 +83,7 @@ const defaultOptions: Required<TextAssemblyOptions> = {
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
-  const { createFragment, isContiguous } = splitterService;
+  const { createFragment, isContiguous, hasWords } = splitterService;
 
   /** Creates a full-text cursor. */
   function makeCursor(origin: TextAssembly, offset: number, type: "fullText"): FullTextCursor;
@@ -136,23 +136,24 @@ const theModule = usModule((require, exports) => {
     return Object.freeze([left, right] as const);
   };
 
-  /** Produces some useful stats given a collection of fragments. */
-  const getStats = (fragments: Iterable<TextFragment>): AssemblyStats => {
-    // We'll be iterating multiple times, so make sure we have an
-    // iterable that can be iterated multiple times.
-    const localFrags = isArray(fragments) ? fragments : [...fragments];
-
-    const maxOffset = chain(localFrags)
+  /**
+   * Produces some useful stats given a collection of fragments.
+   * 
+   * This takes an array to force conversion to an iterable type that
+   * can definitely be iterated multiple times.
+   */
+  const getStats = (fragments: readonly TextFragment[]): AssemblyStats => {
+    const maxOffset = chain(fragments)
       .map(({ content, offset }) => content.length + offset)
       .reduce(0, Math.max);
-    const minOffset = chain(localFrags)
+    const minOffset = chain(fragments)
       .map(({ offset }) => offset)
       .reduce(maxOffset, Math.min);
     
     return {
       minOffset, maxOffset,
       impliedLength: maxOffset - minOffset,
-      concatLength: localFrags.reduce((p, v) => p + v.content.length, 0)
+      concatLength: fragments.reduce((p, v) => p + v.content.length, 0)
     };
   };
 
@@ -247,10 +248,12 @@ const theModule = usModule((require, exports) => {
         return createFragment(content, offset + prefix.length);
       });
 
+      const suffixOffset = sourceFragment.offset + sourceFragment.content.length;
+
       return new TextAssembly(
         createFragment(prefix, 0),
         toImmutable([sourceFragment]),
-        createFragment(suffix, prefix.length + sourceFragment.content.length),
+        createFragment(suffix, suffixOffset),
         true, // Can only be contiguous.
         null
       );
@@ -384,7 +387,7 @@ const theModule = usModule((require, exports) => {
 
     /** The stats for this assembly. */
     get stats(): AssemblyStats {
-      return this.#assemblyStats ??= getStats(this);
+      return this.#assemblyStats ??= getStats(Array.from(this));
     }
     #assemblyStats: UndefOr<AssemblyStats> = undefined;
 
@@ -433,11 +436,18 @@ const theModule = usModule((require, exports) => {
      * re-maps that cursor into one addressing the `prefix`, `content`,
      * or `suffix` of the assembly instead.
      * 
-     * When the cursor falls on the boundary between two blocks, it will
-     * prefer the first non-empty block found, searching in this order:
-     * - content
-     * - prefix
-     * - suffix
+     * When the cursor falls between two fragments, creating an ambiguity
+     * in which offset to use, it will use the first rule below that matches
+     * the cursor's situation:
+     * - Between prefix and suffix fragments:
+     *   - When prefix is non-empty, use the end of the prefix fragment.
+     *   - When suffix is non-empty, use the start of the suffix fragment.
+     *   - When derived, use the end of the **source's** prefix fragment.
+     *   - Otherwise, use offset 0 as a fail-safe.
+     * - Between prefix and any content fragment, use the content fragment.
+     * - Between suffix and any content fragment, use the content fragment.
+     * - Between a wordy fragment and a non-wordy fragment, use the wordy fragment.
+     * - Otherwise, whichever fragment comes first in natural order.
      */
     fromFullText(cursor: FullTextCursor): AssemblyCursor {
       assert(
@@ -454,18 +464,33 @@ const theModule = usModule((require, exports) => {
       );
       
       const { prefix, content, suffix } = this;
-      const { content: prefixContent } = prefix;
-      const initOffset = IterOps.first(content)?.offset ?? prefixContent.length;
+      const prefixLength = prefix.content.length;
+
+      const initOffset = dew(() => {
+        // If we have an initial fragment, getting an initial offset
+        // is very straight-forward.
+        const firstFrag = IterOps.first(content);
+        if (firstFrag) return firstFrag.offset;
+
+        // However, if this assembly has no content, we will still want
+        // to produce a stable answer of some sort.  Using the offset
+        // after the prefix is a good idea, but since the `prefix` can
+        // change due to `splitAt`, we should use the source assembly's
+        // prefix instead, since all derived assemblies should have the
+        // same value here.
+        const { prefix } = this.source;
+        return prefix.content.length + prefix.offset;
+      });
 
       // Fast-path: We can just map straight to `content`.
       if (!this.#isAffixed && this.#isContiguous)
         return makeCursor(this, cursor.offset + initOffset);
       
       // When the cursor is within the prefix.
-      if (cursor.offset < prefixContent.length)
+      if (cursor.offset < prefixLength)
         return makeCursor(this, cursor.offset);
 
-      const suffixThreshold = prefixContent.length + this.contentStats.concatLength;
+      const suffixThreshold = prefixLength + this.contentStats.concatLength;
 
       // When the cursor is within the suffix.
       if (cursor.offset > suffixThreshold)
@@ -477,37 +502,71 @@ const theModule = usModule((require, exports) => {
       // actually is for this instance's `fullText`), we must favor one
       // of those instead.
       if (content.length === 0) {
-        if (prefixContent) return makeCursor(this, prefixContent.length);
+        if (prefixLength) return makeCursor(this, prefixLength);
         if (suffix.content) return makeCursor(this, suffix.offset);
       }
+      else {
+        // Remove the prefix from the full-text cursor so we're inside
+        // the content block.
+        let cursorOffset = cursor.offset - prefixLength;
 
-      // Bring the cursor to the start of the content fragments.
-      let cursorOffset = (cursor.offset - prefixContent.length) + initOffset;
+        // Fast-path: For contiguous content, we can map the cursor directly
+        // to the content, now that the prefix was accounted for.
+        if (this.#isContiguous) return makeCursor(this, cursorOffset + initOffset);
+        
+        // Otherwise, we have to iterate to account for the gaps in content.
+        // When there is ambiguity between a fragment with words and a
+        // fragment without words, we will favor the one with words.
+        let lastFrag: UndefOr<TextFragment> = undefined;
+        for (const curFrag of content) {
+          const fragLength = curFrag.content.length;
 
-      // Fast-path: For contiguous content, we can map the cursor directly
-      // to the content, now that the prefix was accounted for.
-      if (this.#isContiguous) return makeCursor(this, cursorOffset);
-      
-      // Otherwise, we have to iterate to account for the gaps in content.
-      let lastFrag: UndefOr<TextFragment> = undefined;
-      for (const curFrag of content) {
-        if (lastFrag) {
-          const expectedOffset = lastFrag.offset + lastFrag.content.length;
-          // Shift the cursor based on how far off we are from the expected.
-          cursorOffset += curFrag.offset - expectedOffset;
+          // Skip empty fragments.
+          if (fragLength === 0) continue;
+
+          // Here, we're dealing with an ambiguity; the last fragment was
+          // non-wordy, so we pulled one more fragment in hopes it was wordy.
+          if (lastFrag && cursorOffset === 0) {
+            // If the current fragment is also non-wordy, break the loop
+            // to use the end of the last fragment.
+            if (!hasWords(curFrag.content)) break;
+            // Otherwise, use the start of this fragment.
+            return makeCursor(this, curFrag.offset);
+          }
+
+          // Remove this fragment from the full-text offset.  This will go
+          // negative if the offset is inside this fragment.
+          cursorOffset -= fragLength;
+
+          checks: {
+            // If it's non-zero and positive, we're not in this fragment.
+            if (cursorOffset > 0) break checks;
+            // We're at the very end of this fragment, but because this
+            // fragment has no wordy content, we want to check the next
+            // fragment to see if it is a better candidate to favor.
+            if (cursorOffset === 0 && !hasWords(curFrag.content)) break checks;
+            // Otherwise, this is our fragment.  Because we preemptively
+            // subtracted `cursorOffset` to make the checks of the loop
+            // simpler, we have to add it back to the length to get the
+            // correct offset.
+            return makeCursor(this, curFrag.offset + fragLength + cursorOffset);
+          }
+
+          // Update the last fragment.
+          lastFrag = curFrag;
         }
 
-        const rightLimits = curFrag.offset + curFrag.content.length;
-        if (cursorOffset >= curFrag.offset && cursorOffset < rightLimits)
-          return makeCursor(this, cursorOffset);
-
-        lastFrag = curFrag;
+        // It is possible we still have no last fragment; remember that
+        // we were skipping empty fragments.  But if we have one, assume
+        // we are meant to use the end of that fragment, since we were
+        // likely attempting the non-wordy disambiguation and ran out
+        // of fragments.
+        if (lastFrag) return makeCursor(this, lastFrag.offset + lastFrag.content.length);
       }
 
-      // This is being used as a bit of a fail-safe; just place the cursor
-      // at the end of the last content fragment (or 0 if we somehow don't
-      // have a last fragment).
-      return makeCursor(this, (lastFrag?.offset ?? 0) + (lastFrag?.content.length ?? 0));
+      // If we get here, this is the "completely empty assembly" fail-safe;
+      // just use the initial offset we determined.
+      return makeCursor(this, initOffset);
     }
 
     /**
@@ -805,7 +864,7 @@ const theModule = usModule((require, exports) => {
             return IterOps.mapIter(IterOps.skip(frags, 1), (f) => createFragment("", 0, f));
           }))
           // And now preserve the empty fragments and those with words.
-          .filter((f) => f.content.length === 0 || splitterService.hasWords(f))
+          .filter((f) => f.content.length === 0 || hasWords(f))
           .value();
         for (const frag of fragments) {
           if (remainder <= 0) return [remainder, frag] as const;
@@ -854,13 +913,21 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Determines what block the given `cursor` belongs to.  If the cursor
-     * has a source that differs from this assembly, it will return `"unrelated"`
-     * to indicate the cursor is unsuitable for this assembly.
+     * Determines what block the given `cursor` belongs to.  It makes the
+     * following checks in this order:
+     * - If the cursor has a source that differs from this assembly, it will
+     *   return `"unrelated"` to indicate the cursor is unsuitable for this
+     *   assembly.
+     * - If the cursor is outside of the prefix and suffix, it returns `"content"`.
+     * - If the cursor is adjacent to any content fragment, it returns `"content"`.
+     * - If the cursor is inside the prefix, it returns `"prefix"`.
+     * - If the cursor is inside the suffix, it returns `"suffix"`.
+     * - Otherwise, it returns `"content"`, assuming the content fragment
+     *   it belongs to is simply missing.
      * 
      * It does not check to see if a fragment exists in this assembly that
-     * corresponds to the cursor's position.  Use {@link TextAssembly.isFoundIn}
-     * to make that determination.
+     * corresponds to the cursor's position.  Use {@link isFoundIn} to make that
+     * determination.
      */
     positionOf(cursor: AssemblyCursor): CursorPosition {
       assert(
@@ -871,11 +938,18 @@ const theModule = usModule((require, exports) => {
       // Can't be in this assembly if it is unrelated.
       if (!this.isRelatedTo(cursor.origin)) return "unrelated";
 
-      // If it isn't in the prefix or the suffix, it is in the content.
-      // Use the source; splitting will create empty prefix/suffix.
-      const { prefix, suffix } = this.source;
-      if (isCursorInside(cursor, prefix)) return "prefix";
-      if (isCursorInside(cursor, suffix)) return "suffix";
+      const { content } = this;
+
+      if (isCursorInside(cursor, this.prefix)) {
+        if (!content.length) return "prefix";
+        if (cursor.offset !== this.contentStats.minOffset) return "prefix";
+      }
+      else if (isCursorInside(cursor, this.suffix)) {
+        if (!content.length) return "suffix";
+        if (cursor.offset !== this.contentStats.maxOffset) return "suffix";
+      }
+
+      // Acts as the fallback value as well.
       return "content";
     }
 
