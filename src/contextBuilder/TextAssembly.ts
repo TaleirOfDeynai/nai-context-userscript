@@ -737,13 +737,22 @@ const theModule = usModule((require, exports) => {
 
     /**
      * A function built to help locate positions for insertion relative to
-     * some given `selection`.
+     * some given `position`.
      * 
      * Starting from `position` on, fragments will be split using the
      * trim-type specified in `splitType` and yielded according to
      * `direction`.
      * 
-     * All fragments, including the prefix and suffix, are included.
+     * All non-empty fragments, including prefix and suffix, are included.
+     * 
+     * This method has some limitations in how if views the assembly.
+     * If, say, a single sentence was split across two fragments somehow,
+     * asking it to split it by sentence will not merge those two
+     * fragments-of-a-single-sentence into one fragment.
+     * 
+     * It takes the fragments, as they are now, and runs each through
+     * the desired splitter.  If they're already split finer than the
+     * desired splitting granularity, they will remain split that way.
      */
     fragmentsFrom(
       /**
