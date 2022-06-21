@@ -170,6 +170,12 @@ export default usModule((require, exports) => {
     return { content, offset };
   };
 
+  /** Retrieves the starting offset of a fragment. */
+  const beforeFragment = (f: TextFragment) => f.offset;
+
+  /** Retrieves the ending offset of a fragment. */
+  const afterFragment = (f: TextFragment) => f.offset + f.content.length;
+
   /**
    * Checks if the given collection of fragments is contiguous; this means
    * the collection has no gaps and all fragments are not out-of-order.
@@ -489,6 +495,8 @@ export default usModule((require, exports) => {
     createFragment,
     asFragment,
     asContent,
+    beforeFragment,
+    afterFragment,
     mergeFragments,
     isContiguous,
     splitFragmentAt,

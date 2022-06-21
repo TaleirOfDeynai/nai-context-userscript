@@ -18,7 +18,8 @@ export function mockCursor(offset: number, type: "fullText", origin?: any): Full
  */
 export function mockCursor(offset: number, type?: "assembly", origin?: any): AssemblyCursor;
 /**
- * Builds a mock {@link TextCursor}; the type is not known and not type-checked.
+ * Builds a mock {@link TextCursor}; the type is not known and not
+ * type-checked.
  * 
  * By default, `origin` is a new empty-object instance, but anything
  * may be provided, in service of the test.

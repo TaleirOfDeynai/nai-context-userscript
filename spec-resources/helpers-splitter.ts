@@ -7,6 +7,13 @@ import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
 export const mockFragment = (content: string, offset: number, srcFrag?: TextFragment) =>
   Object.freeze({ content, offset: offset + (srcFrag?.offset ?? 0) }) as TextFragment;
 
+/**
+ * Creates an empty fragment.  When given a fragment, creates it with
+ * the same offset.  Otherwise, defaults to an offset of `0`.
+ */
+export const getEmptyFrag = (frag?: TextFragment) =>
+  !frag ? mockFragment("", 0) : mockFragment("", 0, frag);
+
 /** A function to get {@link TextFragment.content} for `map` and friends. */
 export const toContent = (fragment: TextFragment) => fragment.content;
 

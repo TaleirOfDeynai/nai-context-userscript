@@ -321,6 +321,8 @@ const postProcess = {
 const config = {
   /** Enables debug logging for the user-script. */
   debugLogging: true,
+  /** Similar to the above, but an override for tests. */
+  testLogging: globalThis?.process?.env?.["NODE_ENV"] === "test",
   /** Configuration options affecting comment removal. */
   comments,
   /** Configuration options affecting the story entry. */

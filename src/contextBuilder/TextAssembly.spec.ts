@@ -1,13 +1,17 @@
 import { jest, describe, it, expect } from "@jest/globals";
 import { mockStory } from "@spec/mock-story";
-import { mockFragment, toFragmentSeq, toContent } from "@spec/helpers-splitter";
-import { mockCursor, afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
+import { mockFragment, getEmptyFrag, toFragmentSeq, toContent } from "@spec/helpers-splitter";
+import { mockCursor } from "@spec/helpers-assembly";
+import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
 
 import { dew } from "@utils/dew";
+import { assert } from "@utils/assert";
+import { isArray } from "@utils/is";
 import { chain, first, last } from "@utils/iterables";
 import $TextAssembly from "./TextAssembly";
 import AppConstants from "@nai/AppConstants";
 
+import type { SpyInstance } from "jest-mock";
 import type { TextAssembly, TextCursor } from "./TextAssembly";
 import type { TextFragment } from "./TextSplitterService";
 import type { MatchResult } from "./MatcherService";
@@ -148,6 +152,7 @@ describe("getStats", () => {
     ];
 
     const result = getStats(fragments);
+
     expect(result).toEqual({
       minOffset: 10,
       maxOffset: 16,
@@ -163,6 +168,7 @@ describe("getStats", () => {
     ];
 
     const result = getStats(fragments);
+
     expect(result).toEqual({
       minOffset: 10,
       maxOffset: 23,
@@ -178,11 +184,34 @@ describe("getStats", () => {
     ];
 
     const result = getStats(fragments);
+
     expect(result).toEqual({
       minOffset: 10,
       maxOffset: 23,
       impliedLength: 13,
       concatLength: 6
+    });
+  });
+
+  it("should assume `0` offset when fragments is empty", () => {
+    const result = getStats([]);
+
+    expect(result).toEqual({
+      minOffset: 0,
+      maxOffset: 0,
+      impliedLength: 0,
+      concatLength: 0
+    });
+  });
+
+  it("should use `emptyOffset` param when fragments is empty", () => {
+    const result = getStats([], 15);
+
+    expect(result).toEqual({
+      minOffset: 15,
+      maxOffset: 15,
+      impliedLength: 0,
+      concatLength: 0
     });
   });
 });
@@ -270,24 +299,51 @@ describe("TextAssembly", () => {
   const offsetFrags = generateData(3);
 
   describe("construction", () => {
-    it.failing("should FAIL if given a `source` that is not a source assembly", () => {
-      new TextAssembly(
-        mockFragment("", 0),
-        [mockFragment("", 0)],
-        mockFragment("", 0),
-        true,
-        { isSource: false } as TextAssembly
-      );
+    it("should throw if given a `source` that is not a source assembly", () => {
+      const trial = () => {
+        const prefixFrag = mockFragment("", 0);
+        const contentFrag = mockFragment("This is content.", afterFrag(prefixFrag));
+        const suffixFrag = mockFragment("", afterFrag(contentFrag));
+        return new TextAssembly(
+          prefixFrag, [contentFrag], suffixFrag,
+          true,
+          { isSource: false } as TextAssembly
+        );
+      };
+
+      expect(trial).toThrow("Expected `source` to be a source assembly.");
     });
 
-    it.failing("should throw if given a `prefix` that is not at offset `0`", () => {
-      new TextAssembly(
-        mockFragment("", 10),
-        [mockFragment("", 10)],
-        mockFragment("", 10),
-        true,
-        null
-      );
+    it("should throw if given a `prefix` that is not at offset `0`", () => {
+      const trial = () => {
+        const prefixFrag = mockFragment("", 10);
+        const contentFrag = mockFragment("This is content.", afterFrag(prefixFrag));
+        const suffixFrag = mockFragment("", afterFrag(contentFrag));
+        return new TextAssembly(
+          prefixFrag, [contentFrag], suffixFrag,
+          true,
+          null
+        );
+      };
+
+      expect(trial).toThrow("Expected prefix's offset to be 0.");
+    });
+
+    // This only happens when debug logging or running in a test environment.
+    it("should throw if `content` contains any empty fragments", () => {
+      const trial = () => {
+        const prefixFrag = mockFragment("", 0);
+        const firstFrag = mockFragment("", afterFrag(prefixFrag));
+        const secondFrag = mockFragment("This is content.", afterFrag(firstFrag));
+        const suffixFrag = mockFragment("", afterFrag(secondFrag));
+        return new TextAssembly(
+          prefixFrag, [firstFrag, secondFrag], suffixFrag,
+          true,
+          null
+        );
+      };
+
+      expect(trial).toThrow("Expected content to contain only non-empty fragments.");
     });
   });
 
@@ -420,12 +476,12 @@ describe("TextAssembly", () => {
           // An internal sanity check.  If we're expecting the given assembly
           // to be related (since it should be derived from the given origin),
           // then it better be!
-          
+
           const foreignAssembly = initAssembly({
             ...offsetFrags,
             content: []
           });
-          
+
           const unrelatedAssembly = initAssembly({
             ...offsetFrags,
             content: offsetFrags.content.slice(0, 3),
@@ -539,7 +595,7 @@ describe("TextAssembly", () => {
       });
     });
 
-    describe("source property", () => {
+    describe("source", () => {
       it("should return `this` if it is a source assembly", () => {
         expect(sourceAssembly.source).toBe(sourceAssembly);
       });
@@ -548,13 +604,60 @@ describe("TextAssembly", () => {
         expect(childAssembly.source).toBe(sourceAssembly);
       });
     });
+
+    describe("stats", () => {
+      it("should use all fragments to build stats", () => {
+        const allFrags = [offsetFrags.prefix, ...offsetFrags.content, offsetFrags.suffix];
+        const totalLength = allFrags.map(toContent).reduce((a, c) => a + c.length, 0);
+        const minOffset = beforeFrag(offsetFrags.prefix);
+        const maxOffset = afterFrag(offsetFrags.suffix);
+
+        expect(sourceAssembly.stats).toEqual({
+          minOffset, maxOffset,
+          impliedLength: maxOffset - minOffset,
+          concatLength: totalLength
+        });
+      });
+
+      it("should reuse `contentStats` when un-affixed", () => {
+        const assemblyData = generateData(15, NO_AFFIX);
+        const testAssembly = initAssembly(assemblyData);
+
+        expect(testAssembly.stats).toBe(testAssembly.contentStats);
+      });
+    });
+
+    describe("contentStats", () => {
+      it("should use only the content fragments to build stats", () => {
+        const { content } = offsetFrags;
+        const totalLength = content.map(toContent).reduce((a, c) => a + c.length, 0);
+
+        expect(sourceAssembly.contentStats).toEqual({
+          minOffset: beforeFrag(first(content)),
+          maxOffset: afterFrag(last(content)),
+          impliedLength: totalLength,
+          concatLength: totalLength
+        });
+      });
+
+      it("should offset after the prefix when empty", () => {
+        const emptyAssembly = initAssembly({ ...offsetFrags, content: [] });
+
+        expect(emptyAssembly.contentStats).toEqual({
+          minOffset: afterFrag(offsetFrags.prefix),
+          maxOffset: afterFrag(offsetFrags.prefix),
+          impliedLength: 0,
+          concatLength: 0
+        });
+      });
+    });
   });
 
   describe("iterator", () => {
     it.todo("should iterate through all fragments (no affixing)");
     it.todo("should iterate through all fragments (with affixing)");
 
-    it.todo("should skip all empty fragments");
+    it.todo("should skip empty prefix and suffix fragments");
   });
 
   describe("cursor/selection methods", () => {
@@ -1103,11 +1206,10 @@ describe("TextAssembly", () => {
     });
 
     describe("findBest", () => {
-      // This always repositions to the nearest existing fragment
-      // in the `content` array, regardless of any pattern in its
-      // ordering.  The assembly won't search for patterns in the
-      // ordering of `content` and so won't consider where missing
-      // content would be located if they were present.
+      // This always repositions to the nearest existing fragment,
+      // regardless of any pattern in its ordering.  The assembly
+      // won't consider where missing content would be located if
+      // they were present.
 
       const runCommonTests = (
         testAssembly: TextAssembly,
@@ -1190,7 +1292,7 @@ describe("TextAssembly", () => {
           offsetFrags.content[4]
         );
 
-        it("should reposition to nearest content when possible (in content gap)", () => {
+        it("should reposition to nearest fragment when possible (in content gap)", () => {
           const expectedOffset = afterFrag(offsetFrags.content[1]);
 
           const offset = insideFrag(offsetFrags.content[2]);
@@ -1218,7 +1320,7 @@ describe("TextAssembly", () => {
           offsetFrags.content[4]
         );
 
-        it("should reposition to nearest content when possible (in content gap)", () => {
+        it("should reposition to nearest fragment when possible (in content gap)", () => {
           const expectedOffset = beforeFrag(offsetFrags.content[3]);
 
           const offset = insideFrag(offsetFrags.content[2]);
@@ -1226,6 +1328,123 @@ describe("TextAssembly", () => {
           const result = testAssembly.findBest(cursor);
 
           expect(result).toEqual(mockCursor(expectedOffset, "assembly", testAssembly));
+        });
+      });
+
+      describe("when preferring content", () => {
+        // Normally, it will try to find any fragment, including the
+        // prefix and suffix.  However, when told to prefer the
+        // content fragments, it will always try to locate the next
+        // nearest position adjacent to a content fragment.
+
+        // It will even take a prefix/suffix cursor and try to locate
+        // an appropriate content fragment, even if the cursor's
+        // fragment exists.
+
+        describe("concerning the prefix", () => {
+          it("should move a prefix cursor to the start of content", () => {
+            const testAssembly = initAssembly(offsetFrags);
+
+            const offset = insideFrag(offsetFrags.prefix);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(beforeFrag(first(offsetFrags.content)));
+          });
+
+          it("should favor content even when prefix is closer in gap", () => {
+            const testAssembly = initAssembly(offsetFrags);
+
+            const offset = afterFrag(offsetFrags.prefix) + 1;
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(beforeFrag(first(offsetFrags.content)));
+          });
+
+          it("should favor prefix when content is empty", () => {
+            const testAssembly = initAssembly({ ...offsetFrags, content: [] });
+
+            const offset = insideFrag(first(offsetFrags.content));
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(afterFrag(offsetFrags.prefix));
+          });
+
+          it("should use the source's prefix when content is empty", () => {
+            const sourceAssembly = initAssembly(offsetFrags);
+            const childAssembly = initAssembly({
+              ...offsetFrags,
+              content: [],
+              prefix: getEmptyFrag(offsetFrags.prefix),
+              source: sourceAssembly
+            });
+
+            const offset = afterFrag(offsetFrags.prefix);
+            const cursor = mockCursor(offset, "assembly", sourceAssembly);
+
+            // Sanity check the cursor; will we do a shift?
+            expect(childAssembly.isFoundIn(cursor)).toBe(false);
+
+            const result = childAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(afterFrag(sourceAssembly.prefix));
+            expect(result.offset).not.toBe(afterFrag(childAssembly.prefix));
+          });
+        });
+
+        describe("concerning the suffix", () => {
+          it("should move a suffix cursor to the end of content", () => {
+            const testAssembly = initAssembly(offsetFrags);
+
+            const offset = insideFrag(offsetFrags.suffix);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(afterFrag(last(offsetFrags.content)));
+          });
+
+          it("should favor content even when suffix is closer in gap", () => {
+            const testAssembly = initAssembly(offsetFrags);
+
+            const offset = beforeFrag(offsetFrags.suffix) - 1;
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(afterFrag(last(offsetFrags.content)));
+          });
+
+          it("should favor suffix when content is empty", () => {
+            const testAssembly = initAssembly({ ...offsetFrags, content: [] });
+
+            const offset = insideFrag(last(offsetFrags.content));
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(beforeFrag(offsetFrags.suffix));
+          });
+
+          it("should use the source's suffix when content is empty", () => {
+            const sourceAssembly = initAssembly(offsetFrags);
+            const childAssembly = initAssembly({
+              ...offsetFrags,
+              content: [],
+              suffix: getEmptyFrag(offsetFrags.suffix),
+              source: sourceAssembly
+            });
+
+            const offset = afterFrag(offsetFrags.suffix);
+            const cursor = mockCursor(offset, "assembly", sourceAssembly);
+
+            // Sanity check the cursor; will we do a shift?
+            expect(childAssembly.isFoundIn(cursor)).toBe(false);
+
+            const result = childAssembly.findBest(cursor, true);
+
+            expect(result.offset).toBe(afterFrag(sourceAssembly.suffix));
+            expect(result.offset).not.toBe(afterFrag(childAssembly.suffix));
+          });
         });
       });
     });
@@ -1293,18 +1512,47 @@ describe("TextAssembly", () => {
       });
 
       it("should favor prefix when content is empty and ambiguous with suffix", () => {
-        const prefix = mockFragment("PREFIX\n", 0);
-        const suffix = mockFragment("\nSUFFIX", prefix.content.length);
-        const testAssembly = initAssembly({ prefix, suffix, content: [] });
+        const assemblyData = generateData(0, { ...NO_AFFIX, content: [] });
+        const testAssembly = initAssembly(assemblyData);
 
         // Just to assert that the ambiguity is present for the test.
-        const offset = afterFrag(prefix);
-        expect(offset).toBe(suffix.offset);
+        const offset = afterFrag(assemblyData.prefix);
+        expect(offset).toBe(beforeFrag(assemblyData.suffix));
 
         const cursor = mockCursor(offset, "assembly", testAssembly);
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("prefix");
+      });
+
+      it("should check against the source's `prefix`", () => {
+        const sourceAssembly = initAssembly(offsetFrags);
+        const childAssembly = initAssembly({
+          ...offsetFrags,
+          prefix: getEmptyFrag(offsetFrags.prefix),
+          source: sourceAssembly
+        });
+
+        const offset = insideFrag(offsetFrags.prefix);
+        const cursor = mockCursor(offset, "assembly", childAssembly);
+        const result = childAssembly.positionOf(cursor);
+
+        expect(result).toBe("prefix");
+      });
+
+      it("should check against the source's `suffix`", () => {
+        const sourceAssembly = initAssembly(offsetFrags);
+        const childAssembly = initAssembly({
+          ...offsetFrags,
+          suffix: getEmptyFrag(offsetFrags.suffix),
+          source: sourceAssembly
+        });
+
+        const offset = insideFrag(offsetFrags.suffix);
+        const cursor = mockCursor(offset, "assembly", childAssembly);
+        const result = childAssembly.positionOf(cursor);
+
+        expect(result).toBe("suffix");
       });
     });
   });
@@ -1327,7 +1575,7 @@ describe("TextAssembly", () => {
       describe("basic functionality", () => {
         // For these first tests, I'm only going to check the content.
         // The offsets are more or less already handled by the tests
-        // for `makeFragmenter`.
+        // for the trimming providers.
 
         it("should split into fragments of the desired granularity (newline)", () => {
           const cursor = mockCursor(0, "assembly", mergedAssembly);
@@ -1393,33 +1641,26 @@ describe("TextAssembly", () => {
       });
 
       describe("when cursor is inside a fragment", () => {
-        // Now we actually get into the meat of this method and are no
-        // longer just (sort of) redundantly testing `makeFragmenter`.
-
         const expectedSplit = toFragmentSeq([
           "PREFIX", "\n",
           "This is the first fragment.", "\n",
-          // We're going to be splitting the second sentence up.
-          "This is the",
-          // The sentence splitter will separate out this leading space.
-          // A sentence starts at the first non-whitespace character.
-          " ",
-          "second fragment.", "  ",
+          "This is the second fragment.", "  ",
           "This is the third fragment.", "\n",
           "SUFFIX"
         ], 0);
 
-        const splitOffset = afterFrag(expectedSplit[4]);
+        // We're going to be starting at the "second fragment".
+        const startOffset = insideFrag(expectedSplit[4]);
 
-        it("should start at the cursor (to bottom)", () => {
-          const cursor = mockCursor(splitOffset, "assembly", mergedAssembly);
+        it("should start at the fragment containing the cursor (to bottom)", () => {
+          const cursor = mockCursor(startOffset, "assembly", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "sentence", "toBottom")];
 
-          expect(result).toEqual(expectedSplit.slice(5));
+          expect(result).toEqual(expectedSplit.slice(4));
         });
 
-        it("should start at the cursor (to top)", () => {
-          const cursor = mockCursor(splitOffset, "assembly", mergedAssembly);
+        it("should start at the fragment containing the cursor (to top)", () => {
+          const cursor = mockCursor(startOffset, "assembly", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "sentence", "toTop")];
 
           expect(result).toEqual(expectedSplit.slice(0, 5).reverse());
@@ -1435,16 +1676,16 @@ describe("TextAssembly", () => {
         // but that's not straight-forward to make happen.  Still, the
         // fragments should be identical, by their contents.
 
-        it("should not split any fragments (to bottom)", () => {
+        it("should start at earliest fragment (to bottom)", () => {
           const offset = afterFrag(splitAssembly.content[2]);
           const cursor = mockCursor(offset, "assembly", splitAssembly);
           const result = [...splitAssembly.fragmentsFrom(cursor, "sentence", "toBottom")];
 
-          expect(first(result)).toEqual(splitAssembly.content[3]);
+          expect(first(result)).toEqual(splitAssembly.content[2]);
         });
 
-        it("should not split any fragments (to top)", () => {
-          const offset = afterFrag(splitAssembly.content[2]);
+        it("should start at latest fragment (to top)", () => {
+          const offset = beforeFrag(splitAssembly.content[2]);
           const cursor = mockCursor(offset, "assembly", splitAssembly);
           const result = [...splitAssembly.fragmentsFrom(cursor, "sentence", "toTop")];
 
@@ -1454,24 +1695,27 @@ describe("TextAssembly", () => {
       });
 
       describe("when using a selection", () => {
-        // This selects: "is the second".
+        const expectedSplit = toFragmentSeq([
+          "PREFIX", "\n",
+          "This is the first fragment.", "\n",
+          "This is the second fragment.", "  ",
+          "This is the third fragment.", "\n",
+          "SUFFIX"
+        ], 0);
+
         const selection = [
-          mockCursor(40, "assembly", mergedAssembly),
-          mockCursor(53, "assembly", mergedAssembly)
+          mockCursor(insideFrag(expectedSplit[4]), "assembly", mergedAssembly),
+          mockCursor(insideFrag(expectedSplit[6]), "assembly", mergedAssembly),
         ] as const;
 
         it("should use the second cursor when iterating to bottom", () => {
           const result = mergedAssembly.fragmentsFrom(selection, "sentence", "toBottom");
-
-          // Like before, sentences start at the first character.
-          expect(first(result)).toEqual(mockFragment(" ", 53));
+          expect(first(result)).toEqual(expectedSplit[6]);
         });
 
         it("should use the first cursor when iterating to top", () => {
           const result = mergedAssembly.fragmentsFrom(selection, "sentence", "toTop");
-
-          // And again, iterating in reverse, so `first`.
-          expect(first(result)).toEqual(mockFragment("This ", 35));
+          expect(first(result)).toEqual(expectedSplit[4]);
         });
       });
 
@@ -1501,21 +1745,718 @@ describe("TextAssembly", () => {
     });
 
     describe("locateInsertion", () => {
+      // Most of the heavy lifting is done by `fragmentsFrom`, which is
+      // already tested.  Since this is more about what this method does
+      // with the fragments it gets back from `fragmentsFrom`, we're
+      // just going to use simulated fragments and test its own internal
+      // behavior.
 
+      const simulated = dew(() => {
+        const rawFrags = toFragmentSeq([
+          "PREFIX", "\n",
+          "Fragment 1.", "\n",
+          "Fragment 2.", " ",
+          "Fragment 3.", "\n",
+          "Fragment 4.", "\n",
+          "Fragment 5.", " ",
+          "Fragment 6.", " ",
+          "Fragment 7.",
+          "\n", "SUFFIX"
+        ], 0);
+
+        const prefixFrags = rawFrags.slice(0, 2);
+        const suffixFrags = rawFrags.slice(-2);
+        const contentFrags = rawFrags.slice(2, -2);
+
+        const data = generateData(0, {
+          prefix: prefixFrags.map(toContent).join(""),
+          content: [contentFrags.map(toContent).join("")],
+          suffix: suffixFrags.map(toContent).join("")
+        });
+
+        return {
+          rawFrags,
+          prefixFrags, contentFrags, suffixFrags,
+          data
+        };
+      });
+
+      // Just to make sure that the simulated data is what we expect.
+      describe("sanity checks for simulated data", () => {
+        it("should have correct prefix", () => {
+          expect(simulated.data.prefix).toEqual({
+            content: simulated.prefixFrags.map(toContent).join(""),
+            offset: first(simulated.prefixFrags)?.offset
+          });
+        });
+
+        it("should have correct suffix", () => {
+          expect(simulated.data.suffix).toEqual({
+            content: simulated.suffixFrags.map(toContent).join(""),
+            offset: first(simulated.suffixFrags)?.offset
+          });
+        });
+
+        it("should have correct content", () => {
+          expect(simulated.data.content).toEqual([{
+            content: simulated.contentFrags.map(toContent).join(""),
+            offset: first(simulated.contentFrags)?.offset
+          }]);
+        });
+      });
+
+      const withSimulatedData = () => {
+        // Just using it.  Don't care.
+        const { isCursorInside } = assembly;
+
+        let testAssembly: TextAssembly;
+        let spy: SpyInstance<TextAssembly["fragmentsFrom"]>;
+
+        beforeEach(() => {
+          testAssembly = initAssembly(simulated.data);
+          spy = jest.spyOn(testAssembly, "fragmentsFrom")
+            .mockImplementation(function* (pos, _st, dir) {
+              assert("Expected a cursor.", !isArray(pos));
+              const srcFrags = dew(() => {
+                if (dir === "toBottom") return simulated.rawFrags;
+                return [...simulated.rawFrags].reverse();
+              });
+              const index = srcFrags.findIndex((f) => isCursorInside(pos as any, f));
+              assert("Expected to find a fragment.", index > 0);
+              yield* srcFrags.slice(index);
+            });
+        });
+
+        return {
+          get testAssembly() { return testAssembly; },
+          get spy() { return spy; }
+        };
+      };
+
+      describe("basic functionality", () => {
+        const theSpied = withSimulatedData();
+
+        // In NovelAI, this would be `insertionPosition === 0`.
+        describe("with offset of 0 (to bottom)", () => {
+          // A function since `testAssembly` is only set during a test.
+          const getExpectedResult = (testAssembly: TextAssembly) => ({
+            type: "inside",
+            cursor: mockCursor(
+              afterFrag(simulated.rawFrags[8]),
+              "assembly",
+              testAssembly
+            )
+          });
+
+          it("should position result cursor at end of fragment", () => {
+            const { testAssembly, spy } = theSpied;
+
+            const offset = insideFrag(simulated.rawFrags[8]);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 0);
+
+            expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
+            expect(result).toEqual(getExpectedResult(testAssembly));
+          });
+
+          it("should work with input cursor at the end of the fragment", () => {
+            const { testAssembly, spy } = theSpied;
+
+            const offset = afterFrag(simulated.rawFrags[8]);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 0);
+
+            expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
+            expect(result).toEqual(getExpectedResult(testAssembly));
+          });
+        });
+
+        // In NovelAI, this would be `insertionPosition === -1`.
+        describe("with offset of 0 (to top)", () => {
+          // A function since `testAssembly` is only set during a test.
+          const getExpectedResult = (testAssembly: TextAssembly) => ({
+            type: "inside",
+            cursor: mockCursor(
+              beforeFrag(simulated.rawFrags[8]),
+              "assembly",
+              testAssembly
+            )
+          });
+
+          it("should position result cursor at start of fragment", () => {
+            const { testAssembly, spy } = theSpied;
+
+            const offset = insideFrag(simulated.rawFrags[8]);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 0);
+
+            expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
+            expect(result).toEqual(getExpectedResult(testAssembly));
+          });
+
+          it("should work with input cursor at the start of the fragment", () => {
+            const { testAssembly, spy } = theSpied;
+
+            const offset = beforeFrag(simulated.rawFrags[8]);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 0);
+
+            expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
+            expect(result).toEqual(getExpectedResult(testAssembly));
+          });
+        });
+
+        describe("with non-zero offsets", () => {
+          it("should position result cursor after multiple elements", () => {
+            const { testAssembly, spy } = theSpied;
+
+            const offset = insideFrag(simulated.rawFrags[8]);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
+
+            expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
+            expect(result).toEqual({
+              type: "inside",
+              cursor: mockCursor(
+                // After the fragment with text: "Fragment 6."
+                afterFrag(simulated.rawFrags[12]),
+                "assembly",
+                testAssembly
+              )
+            });
+          });
+
+          it("should position result cursor before multiple elements", () => {
+            const { testAssembly, spy } = theSpied;
+
+            const offset = insideFrag(simulated.rawFrags[8]);
+            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
+
+            expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
+            expect(result).toEqual({
+              type: "inside",
+              cursor: mockCursor(
+                // Before the fragment with text: "Fragment 2."
+                beforeFrag(simulated.rawFrags[4]),
+                "assembly",
+                testAssembly
+              )
+            });
+          });
+        });
+      });
+
+      // A unique situation that can come up with the `newline` insertion type.
+      describe("unusual circumstance: multiple newlines", () => {
+        const rawFrags = toFragmentSeq([
+          "Fragment 1.", "  ", "Fragment 2.",
+          "\n", "\n",
+          "Fragment 3.", "  ", "Fragment 4."
+        ], 0);
+
+        const assemblyData = generateData(0, {
+          ...NO_AFFIX,
+          content: [rawFrags.map(toContent).join("")]
+        });
+
+        let testAssembly: TextAssembly;
+        let spy: SpyInstance<TextAssembly["fragmentsFrom"]>;
+
+        beforeEach(() => {
+          testAssembly = initAssembly(assemblyData);
+          spy = jest.spyOn(testAssembly, "fragmentsFrom")
+            .mockImplementation(function* (_p, _st, dir) {
+              if (dir === "toBottom") yield* rawFrags;
+              else yield* rawFrags.slice().reverse();
+            });
+        });
+
+        it("should position cursor between two empty newline characters (to bottom)", () => {
+          // Cursor not currently important; making it correctly anyways.
+          const offset = beforeFrag(first(rawFrags));
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
+
+          expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
+          expect(result).toEqual({
+            type: "inside",
+            cursor: mockCursor(
+              // After the first "\n" and before the second "\n".
+              afterFrag(rawFrags[3]),
+              "assembly",
+              testAssembly
+            )
+          });
+        });
+
+        it("should position cursor between two empty newline characters (to top)", () => {
+          // Cursor not currently important; making it correctly anyways.
+          const offset = afterFrag(last(rawFrags));
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
+
+          expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
+          expect(result).toEqual({
+            type: "inside",
+            cursor: mockCursor(
+              // After the first "\n" and before the second "\n".
+              afterFrag(rawFrags[3]),
+              "assembly",
+              testAssembly
+            )
+          });
+        });
+      });
+
+      describe("unusual circumstance: empty assembly", () => {
+        const assemblyData = generateData(0, { ...NO_AFFIX, content: [] });
+
+        let testAssembly: TextAssembly;
+        let spy: SpyInstance<TextAssembly["fragmentsFrom"]>;
+
+        beforeEach(() => {
+          testAssembly = initAssembly(assemblyData);
+          spy = jest.spyOn(testAssembly, "fragmentsFrom")
+            .mockImplementation(() => []);
+        });
+
+        const getResult = (dir: "toTop" | "toBottom", offset: number) => {
+          const cursor = mockCursor(0, "assembly", testAssembly);
+          return testAssembly.locateInsertion(cursor, "newline", dir, offset);
+        };
+
+        it("should return the original offset as the remainder", () => {
+          expect(getResult("toBottom", 2)).toEqual({ type: "toBottom", remainder: 2 });
+          expect(getResult("toBottom", 0)).toEqual({ type: "toBottom", remainder: 0 });
+          expect(getResult("toTop", 2)).toEqual({ type: "toTop", remainder: 2 });
+          expect(getResult("toTop", 0)).toEqual({ type: "toTop", remainder: 0 });
+        });
+      });
+
+      // These next two might change in the future.  I'm torn on exactly
+      // how they should work.  For now, this is likely fine.
+
+      describe("when it would try to place result cursor inside prefix", () => {
+        const theSpied = withSimulatedData();
+
+        it("should indicate `insertBefore`", () => {
+          const { testAssembly } = theSpied;
+
+          const offset = insideFrag(simulated.contentFrags[3]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
+
+          expect(result).toEqual({ type: "insertBefore" });
+        });
+      });
+
+      describe("when it would try to place result cursor inside suffix", () => {
+        const theSpied = withSimulatedData();
+
+        it("should indicate `insertAfter`", () => {
+          const { testAssembly } = theSpied;
+
+          const offset = insideFrag(simulated.contentFrags[10]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
+
+          expect(result).toEqual({ type: "insertAfter" });
+        });
+      });
+
+      describe("when the offset goes beyond the bounds of the assembly", () => {
+        const theSpied = withSimulatedData();
+
+        it("should indicate the same direction with a remainder (to bottom)", () => {
+          const { testAssembly } = theSpied;
+
+          // With `toTop` and an offset of `5`, we expect to move through
+          // fragments like this:
+          // - 0: "Fragment 6."
+          // - 1: "Fragment 7."
+          // - 2: "SUFFIX"
+          // - 3: "Next 1."
+          // - 4: "Next 2."
+          // - 5: "Next 3."
+
+          // But we can only move until we hit "Suffix".  That means there is
+          // some amount of moves that must be passed on to the next fragment.
+          // Here you can see how the `0` offset could still be significant.
+          // 0: "Next 1."
+          // 1: "Next 2."
+          // 2: "Next 2."
+
+          const offset = insideFrag(simulated.contentFrags[10]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 5);
+
+          expect(result).toEqual({ type: "toBottom", remainder: 2 });
+        });
+
+        it("should be able to continue with offset `0` (to bottom)", () => {
+          const { testAssembly } = theSpied;
+
+          const offset = insideFrag(simulated.contentFrags[10]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 3);
+
+          expect(result).toEqual({ type: "toBottom", remainder: 0 });          
+        });
+
+        it("should indicate the same direction with a remainder (to top)", () => {
+          const { testAssembly } = theSpied;
+
+          // With `toTop` and an offset of `5`, we expect to move through
+          // fragments like this:
+          // - 5: "Previous 3."
+          // - 4: "Previous 2."
+          // - 3: "Previous 1."
+          // - 2: "PREFIX"
+          // - 1: "Fragment 1."
+          // - 0: "Fragment 2."
+
+          // But we can only move until we hit "PREFIX".  That means there is
+          // some amount of moves that must be passed on to the next fragment.
+          // Here you can see how the `0` offset could still be significant.
+          // 2: "Previous 3."
+          // 1: "Previous 2."
+          // 0: "Previous 1."
+
+          const offset = insideFrag(simulated.contentFrags[3]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 5);
+
+          expect(result).toEqual({ type: "toTop", remainder: 2 });
+        });
+
+        it("should be able to continue with offset `0` (to top)", () => {
+          const { testAssembly } = theSpied;
+
+          const offset = insideFrag(simulated.contentFrags[3]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 3);
+
+          expect(result).toEqual({ type: "toTop", remainder: 0 });          
+        });
+      });
+
+      describe("when using a selection", () => {
+        const theSpied = withSimulatedData();
+
+        it("should call `fragmentsFrom` with that selection", () => {
+          const { spy, testAssembly } = theSpied;
+          spy.mockImplementation(() => [...simulated.rawFrags]);
+
+          const selection = [
+            mockCursor(beforeFrag(simulated.contentFrags[3]), "assembly", testAssembly),
+            mockCursor(afterFrag(simulated.contentFrags[3]), "assembly", testAssembly)
+          ] as const;
+          testAssembly.locateInsertion(selection, "newline", "toBottom", 1);
+
+          // We only care to know it still passed the selection.
+          expect(spy).toHaveBeenCalledWith(selection, "newline", "toBottom");
+        });
+      });
+
+      describe("exceptions", () => {
+        const theSpied = withSimulatedData();
+
+        it.failing("should FAIL if offset is negative", () => {
+          const { testAssembly } = theSpied;
+
+          const offset = insideFrag(simulated.contentFrags[3]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          testAssembly.locateInsertion(cursor, "newline", "toBottom", -1);
+        });
+      });
     });
 
     describe("isRelatedTo", () => {
-
+      it.todo("should call out to `checkRelated`");
     });
   });
 
   describe("manipulation methods", () => {
     describe("splitAt", () => {
+      const testAssembly = initAssembly(offsetFrags);
 
+      describe("failure cases", () => {
+        it("should return `undefined` if cursor is unrelated", () => {
+          const foreignAssembly = initAssembly(contiguousFrags);
+          
+          const offset = insideFrag(first(contiguousFrags.content));
+          const cursor = mockCursor(offset, "assembly", foreignAssembly);
+          const result = testAssembly.splitAt(cursor);
+
+          expect(result).toBeUndefined();
+        });
+
+        it("should return `undefined` if cursor is not within content block", () => {
+          const offset = insideFrag(offsetFrags.prefix);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.splitAt(cursor);
+
+          expect(result).toBeUndefined();
+        });
+      });
+
+      describe("basic functionality", () => {
+        // All of these are doing slice in the fragment with the text:
+        // "This is the second fragment."
+
+        it("should be able to split before a fragment", () => {
+          const offset = beforeFrag(offsetFrags.content[2]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.splitAt(cursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toBe(offsetFrags.prefix);
+          expect(result[0].content).toEqual(offsetFrags.content.slice(0, 2));
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual(offsetFrags.content.slice(2));
+          expect(result[1].suffix).toBe(offsetFrags.suffix);
+        });
+
+        it("should be able to split after a fragment", () => {
+          const offset = afterFrag(offsetFrags.content[2]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.splitAt(cursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toBe(offsetFrags.prefix);
+          expect(result[0].content).toEqual(offsetFrags.content.slice(0, 3));
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual(offsetFrags.content.slice(3));
+          expect(result[1].suffix).toBe(offsetFrags.suffix);
+        });
+
+        it("should be able to split inside a fragment", () => {
+          const sliceOffset = ("This is the").length;
+          const slicedFrag = offsetFrags.content[2];
+          const offset = beforeFrag(slicedFrag) + sliceOffset;
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          
+          const result = testAssembly.splitAt(cursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toBe(offsetFrags.prefix);
+          expect(result[0].content).toEqual([
+            ...offsetFrags.content.slice(0, 2),
+            mockFragment("This is the", 0, slicedFrag)
+          ]);
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual([
+            mockFragment(" second fragment.", sliceOffset, slicedFrag),
+            ...offsetFrags.content.slice(3)
+          ]);
+          expect(result[1].suffix).toBe(offsetFrags.suffix);
+        });
+      });
+
+      describe("concerning the prefix", () => {
+        it("should be able to split after the prefix", () => {
+          const offset = beforeFrag(offsetFrags.content[0]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.splitAt(cursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toBe(offsetFrags.prefix);
+          expect(result[0].content).toEqual([]);
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual(offsetFrags.content);
+          expect(result[1].suffix).toBe(offsetFrags.suffix);
+        });
+
+        it("should propagate the prefix correctly when splitting twice", () => {
+          const firstOffset = afterFrag(offsetFrags.content[2]);
+          const firstCursor = mockCursor(firstOffset, "assembly", testAssembly);
+          const firstSplit = first(testAssembly.splitAt(firstCursor) ?? []);
+
+          const secondOffset = afterFrag(offsetFrags.content[0]);
+          const secondCursor = mockCursor(secondOffset, "assembly", testAssembly);
+          const result = firstSplit?.splitAt(secondCursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toBe(offsetFrags.prefix);
+          expect(result[0].content).toEqual(offsetFrags.content.slice(0, 1));
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual(offsetFrags.content.slice(1, 3));
+          expect(result[1].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+        });
+
+        it("should reuse an empty prefix fragment", () => {
+          const assemblyData = generateData(3, { prefix: "" });
+          const testAssembly = initAssembly(assemblyData);
+
+          const offset = afterFrag(offsetFrags.content[2]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = first(testAssembly.splitAt(cursor) ?? []);
+
+          // Since the assembly already has an empty prefix, the instance should
+          // be reused instead of creating a new empty fragment.
+          expect(result?.prefix).toBe(assemblyData.prefix);
+        });
+      });
+
+      describe("concerning the suffix", () => {
+        it("should be able to split before the suffix", () => {
+          const offset = afterFrag(offsetFrags.content[4]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = testAssembly.splitAt(cursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toBe(offsetFrags.prefix);
+          expect(result[0].content).toEqual(offsetFrags.content);
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual([]);
+          expect(result[1].suffix).toBe(offsetFrags.suffix);
+        });
+
+        it("should propagate the suffix correctly when splitting twice", () => {
+          const firstOffset = beforeFrag(offsetFrags.content[2]);
+          const firstCursor = mockCursor(firstOffset, "assembly", testAssembly);
+          const firstSplit = last(testAssembly.splitAt(firstCursor) ?? []);
+
+          const secondOffset = beforeFrag(offsetFrags.content[4]);
+          const secondCursor = mockCursor(secondOffset, "assembly", testAssembly);
+          const result = firstSplit?.splitAt(secondCursor) as [TextAssembly, TextAssembly];
+
+          // Left of the cut.
+          expect(result[0].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[0].content).toEqual(offsetFrags.content.slice(2, 4));
+          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+
+          // Right of the cut.
+          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+          expect(result[1].content).toEqual(offsetFrags.content.slice(4));
+          expect(result[1].suffix).toBe(offsetFrags.suffix);
+        });
+
+        it("should reuse an empty suffix fragment", () => {
+          const assemblyData = generateData(3, { suffix: "" });
+          const testAssembly = initAssembly(assemblyData);
+
+          const offset = beforeFrag(offsetFrags.content[2]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const result = last(testAssembly.splitAt(cursor) ?? []);
+
+          // Since the assembly already has an empty suffix, the instance should
+          // be reused instead of creating a new empty fragment.
+          expect(result?.suffix).toBe(assemblyData.suffix);
+        });
+      });
+
+      describe("concerning loose mode", () => {
+        let testAssembly: TextAssembly;
+        let spyFindBest: SpyInstance<TextAssembly["findBest"]>;
+        let spyIsFoundIn: SpyInstance<TextAssembly["isFoundIn"]>;
+
+        beforeEach(() => {
+          testAssembly = initAssembly(offsetFrags);
+          spyFindBest = jest.spyOn(testAssembly, "findBest");
+          spyIsFoundIn = jest.spyOn(testAssembly, "isFoundIn");
+        });
+
+        it("should call `findBest` with the input cursor when active", () => {
+          const offset = beforeFrag(offsetFrags.content[2]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+
+          spyFindBest.mockReturnValue(cursor);
+          testAssembly.splitAt(cursor, true);
+
+          expect(spyFindBest).toBeCalledWith(cursor, true);
+          expect(spyIsFoundIn).not.toHaveBeenCalled();
+        });
+
+        it("should NOT call `findBest` with the input cursor when inactive", () => {
+          const offset = beforeFrag(offsetFrags.content[2]);
+          const cursor = mockCursor(offset, "assembly", testAssembly);
+
+          spyIsFoundIn.mockReturnValue(true);
+          testAssembly.splitAt(cursor, false);
+
+          expect(spyIsFoundIn).toBeCalledWith(cursor);
+          expect(spyFindBest).not.toHaveBeenCalled();
+        });
+
+        it("should not use the best cursor if it is outside the content block", () => {
+          const inputCursor = mockCursor(
+            beforeFrag(offsetFrags.content[2]),
+            "assembly", testAssembly
+          );
+
+          const prefixCursor = mockCursor(
+            insideFrag(offsetFrags.prefix),
+            "assembly", testAssembly
+          );
+
+          spyFindBest.mockReturnValue(prefixCursor);
+          const result = testAssembly.splitAt(inputCursor, true);
+
+          expect(result).toBeUndefined();
+        });
+      });
     });
 
     describe("asOnlyContent", () => {
+      it("should create a new assembly with prefix/suffix removed", () => {
+        const testAssembly = initAssembly(offsetFrags);
 
+        const result = testAssembly.asOnlyContent();
+
+        expect(result).not.toBe(testAssembly);
+        expect(result.prefix).not.toEqual(testAssembly.prefix);
+        expect(result.suffix).not.toEqual(testAssembly.suffix);
+
+        expect(result.prefix).toEqual(getEmptyFrag(testAssembly.prefix));
+        expect(result.suffix).toEqual(getEmptyFrag(testAssembly.suffix));
+      });
+
+      it("should return the same instance if no change is needed", () => {
+        const assemblyData = generateData(0, NO_AFFIX);
+        const testAssembly = initAssembly(assemblyData);
+
+        const result = testAssembly.asOnlyContent();
+
+        expect(result).toBe(testAssembly);
+      });
+
+      it("should reuse the prefix fragment if it is empty", () => {
+        const assemblyData = generateData(0, { prefix: "" });
+        const testAssembly = initAssembly(assemblyData);
+
+        const result = testAssembly.asOnlyContent();
+
+        expect(result.prefix).toBe(testAssembly.prefix);
+      });
+
+      it("should reuse the suffix fragment if it is empty", () => {
+        const assemblyData = generateData(0, { suffix: "" });
+        const testAssembly = initAssembly(assemblyData);
+
+        const result = testAssembly.asOnlyContent();
+
+        expect(result.suffix).toBe(testAssembly.suffix);
+      });
     });
   });
 });
