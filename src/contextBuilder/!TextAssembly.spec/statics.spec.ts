@@ -1,6 +1,6 @@
 import { describe, it, expect } from "@jest/globals";
 import { mockStory } from "@spec/mock-story";
-import { mockFragment } from "@spec/helpers-splitter";
+import { getEmptyFrag, mockFragment } from "@spec/helpers-splitter";
 import { Module, initAssembly } from "./_common";
 import { contiguousFrags, offsetFrags } from "./_common";
 
@@ -44,32 +44,38 @@ describe("TextAssembly", () => {
         expect(result.prefix).toEqual(mockFragment("PREFIX\n", 0));
         expect(result.suffix).toEqual(mockFragment("\nSUFFIX", mockStory.length + 7));
       });
+
+      it("should detect and handle empty strings (with affixing)", () => {
+        const result = TextAssembly.fromSource("", {
+          prefix: "PREFIX\n",
+          suffix: "\nSUFFIX"
+        });
+
+        expect(result.content).toEqual([]);
+        expect(result.prefix).toEqual(mockFragment("PREFIX\n", 0));
+        expect(result.suffix).toEqual(mockFragment("\nSUFFIX", 7));
+      });
+
+      it("should detect and handle empty strings (without affixing)", () => {
+        const result = TextAssembly.fromSource("");
+
+        expect(result.content).toEqual([]);
+        expect(result.prefix).toEqual(mockFragment("", 0));
+        expect(result.suffix).toEqual(mockFragment("", 0));
+      });
     });
 
     describe("fromFragments", () => {
-      it("should create from immutable array of fragments", () => {
+      it("should create from an array of fragments", () => {
         const { content, maxOffset } = offsetFrags;
 
         const result = TextAssembly.fromFragments(content);
 
-        // Referential equality since `content` should be an immutable array.
-        expect(result.content).toBe(content);
-
-        expect(result.prefix).toEqual(mockFragment("", 0));
-        expect(result.suffix).toEqual(mockFragment("", maxOffset));
-      });
-
-      it("should create from mutable array of fragments", () => {
-        const { content, maxOffset } = offsetFrags;
-
-        const copyFrags = [...content];
-        const result = TextAssembly.fromFragments(copyFrags);
-
         // It should make a safe, immutable copy of the fragments.
-        expect(result).not.toBe(copyFrags);
+        expect(result.content).not.toBe(content);
         expect(result.content).toBeInstanceOf(Array);
         expect(Object.isFrozen(result.content)).toBe(true);
-        expect(result.content).toEqual(copyFrags);
+        expect(result.content).toEqual(content);
 
         expect(result.prefix).toEqual(mockFragment("", 0));
         expect(result.suffix).toEqual(mockFragment("", maxOffset));
@@ -110,6 +116,22 @@ describe("TextAssembly", () => {
 
         expect(result.prefix).toEqual(mockFragment("PREFIX\n", 0));
         expect(result.suffix).toEqual(mockFragment("\nSUFFIX", maxOffset + 7));
+      });
+
+      it("should filter out any empty fragments", () => {
+        const { content } = offsetFrags;
+
+        const fragments = [
+          ...content.slice(0, 2),
+          getEmptyFrag(content[2]),
+          ...content.slice(3)
+        ];
+        const result = TextAssembly.fromFragments(fragments);
+
+        expect(result.content).toEqual([
+          ...content.slice(0, 2),
+          ...content.slice(3)
+        ]);
       });
 
       it.todo("should assume continuity when told to");

@@ -266,20 +266,29 @@ const theModule = usModule((require, exports) => {
      */
     static fromSource(sourceText: TextOrFragment, options?: TextAssemblyOptions) {
       const { prefix, suffix } = { ...defaultOptions, ...options };
+
+      const prefixFragment = createFragment(prefix, 0);
+
       const sourceFragment = dew(() => {
-        if (typeof sourceText === "string")
-          return createFragment(sourceText, prefix.length);
+        let content: string;
+        let offset = afterFragment(prefixFragment);
+        if (typeof sourceText === "string") content = sourceText;
+        else {
+          content = sourceText.content;
+          offset += sourceText.offset;
+        }
         
-        const { content, offset } = sourceText;
-        return createFragment(content, offset + prefix.length);
+        if (!content) return undefined;
+        return createFragment(content, offset);
       });
 
-      const suffixOffset = afterFragment(sourceFragment);
+      const suffixOffset = afterFragment(sourceFragment ?? prefixFragment);
+      const suffixFragment = createFragment(suffix, suffixOffset);
 
       return new TextAssembly(
-        createFragment(prefix, 0),
-        toImmutable([sourceFragment]),
-        createFragment(suffix, suffixOffset),
+        prefixFragment,
+        toImmutable(sourceFragment ? [sourceFragment] : []),
+        suffixFragment,
         true, // Can only be contiguous.
         null
       );
@@ -291,11 +300,16 @@ const theModule = usModule((require, exports) => {
     static fromFragments(sourceFrags: Iterable<TextFragment>, options?: TextAssemblyOptions) {
       const { prefix, suffix, assumeContinuity } = { ...defaultOptions, ...options };
 
-      const adjustedFrags
-        = !prefix ? toImmutable(sourceFrags)
-        : chain(sourceFrags)
-            .map(({ content, offset }) => createFragment(content, prefix.length + offset))
-            .value(toImmutable);
+      const adjustedFrags = chain(sourceFrags)
+        .filter((f) => Boolean(f.content))
+        .thru((frags) => {
+          if (!prefix) return frags;
+          return IterOps.mapIter(
+            frags,
+            ({ content, offset }) => createFragment(content, prefix.length + offset)
+          );
+        })
+        .value(toImmutable);
 
       const maxOffset = chain(adjustedFrags)
         .map(afterFragment)
