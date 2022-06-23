@@ -104,3 +104,6 @@ typings/
 
 # Own little testing scripts.
 scripts/
+
+# Output files we don't want to commit.
+dist/dev.user.js

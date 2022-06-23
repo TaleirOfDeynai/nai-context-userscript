@@ -1,5 +1,5 @@
-import conforms from "lodash-es/conforms";
-import matches from "lodash-es/matches";
+import _conforms from "lodash/conforms";
+import _matches from "lodash/matches";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import ContextBuilder from "@nai/ContextBuilder";
@@ -20,9 +20,9 @@ export default usModule((require, exports) => {
 
   const forcedTypes = new Set<SourceType>(["story", "memory", "an", "unknown"]);
 
-  const isForceActivated = conforms({
-    entry: conforms({
-      fieldConfig: matches({
+  const isForceActivated = _conforms({
+    entry: _conforms({
+      fieldConfig: _matches({
         // Obviously, must be true.
         forceActivation: true
       })

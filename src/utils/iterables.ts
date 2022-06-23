@@ -32,12 +32,12 @@ type UnionToIntersection<T>
 type PartitionResult<T extends KVP> = KVP<T[0], T[1][]>;
 type FromPairsResult<T>
   = T extends KVP<infer K, infer V>
-    ? K extends string | number ? { [Prop in K]: V } : never
+    ? K extends string | number | symbol ? { [Prop in K]: V } : never
   : never;
 
 export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   /** Reduces the iterable to a single value. */
-  reduce<TOut, TInit = TOut>(initialValue: TInit, reducer: ReduceFn<ElementOf<TIterIn>, TOut, TInit>): TInit | TOut;
+  reduce<TInit, TOut = TInit>(initialValue: TInit, reducer: ReduceFn<ElementOf<TIterIn>, TOut, TInit>): TInit | TOut;
   /** Transforms each element into a tuple. */
   map<TOut extends readonly Primitives[]>(xformFn: TupleTransformFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
   /** Transforms each element. */
@@ -123,7 +123,7 @@ export const countBy = <T>(iter: Iterable<T>, predicateFn: PredicateFn<T>): numb
 /**
  * Creates an object from key-value-pairs.
  */
-export const fromPairs = <T extends KVP>(
+export const fromPairs = <T extends KVP<string | number | symbol>>(
   kvps: Iterable<T>
 ): UnionToIntersection<FromPairsResult<T>> => {
   const result: any = {};
@@ -134,11 +134,12 @@ export const fromPairs = <T extends KVP>(
 /**
  * Creates an iterable that yields the key-value pairs of an object.
  */
-export const toPairs = function*<TObj extends Record<string, any>>(
-  obj: Maybe<TObj>
-): Iterable<KVP<keyof TObj, AnyValueOf<TObj>>> {
+export function toPairs(obj: null | undefined): Iterable<KVP<never, never>>;
+export function toPairs<TObj extends {}>(obj: Maybe<TObj>): Iterable<KVP<keyof TObj, AnyValueOf<TObj>>>;
+export function* toPairs(obj: any): Iterable<KVP<string | number | symbol, any>> {
   if (obj == null) return;
-  for(const key of Object.keys(obj)) yield [key, obj[key]];
+  for(const key of Object.keys(obj)) yield [key as any, obj[key]];
+  for(const sym of Object.getOwnPropertySymbols(obj)) yield [sym as any, obj[sym]];
 };
 
 /**
@@ -341,7 +342,10 @@ export const skipRight = function*<T>(
   }
 };
 
-/** Yields all items except the very last bunch that all fail the `predicateFn`. */
+/**
+ * Yields all items up-to-and-including the last element to pass the
+ * given predicate.
+ */
 export const skipRightUntil = function*<T extends Iterable<any>>(
   iter: T,
   predicateFn: PredicateFn<ElementOf<T>>
@@ -355,7 +359,32 @@ export const skipRightUntil = function*<T extends Iterable<any>>(
     for (let i = 0; i <= cutOff; i++) yield iter[i];
   }
   else {
-    yield* skipRightUntil([...iter] as Iterable<ElementOf<T>>, predicateFn);
+    // We'll break this iterable up into chunks, separating it by which
+    // item satisfies the predicate.  Then, we'll just not yield the
+    // last chunk (unless we only got one chunk).
+    let holdOver: ElementOf<T>[] = [];
+    let yielded = false;
+    for (const items of buffer(iter, predicateFn, true)) {
+      if (holdOver.length) {
+        yield* holdOver;
+        yielded = true;
+      }
+      holdOver = items;
+    }
+
+    // If we yielded, there was more than one chunk, or the iterable
+    // was simply empty.
+    if (yielded || !holdOver.length) return;
+
+    // If we get here, one of two possible things happened.
+    // - The predicate triggered once on the very first element,
+    //   meaning we skip everything.
+    // - The predicate triggered once on the very last element,
+    //   meaning we skip nothing and yield everything.
+    // Since we know we have a non-empty have an array now, it's fast
+    // to just check if the first element; if it failed the predicate,
+    // we're in that latter possibility.
+    if (!predicateFn(holdOver[0])) yield* holdOver;
   }
 };
 
@@ -406,7 +435,7 @@ export const filterIter = function*<T extends Iterable<any>>(
       yield value;
 };
 
-export const reduceIter = function<TIter extends Iterable<any>, TOut, TInit = TOut>(
+export const reduceIter = function<TIter extends Iterable<any>, TInit, TOut = TInit>(
   iterable: TIter,
   initialValue: TInit,
   reducer: ReduceFn<ElementOf<TIter>, TOut, TInit>
@@ -518,8 +547,10 @@ export const journey = function*<T extends Iterable<any>>(
 }
 
 /**
- * Buffers items until an item passes the given `predicateFn`, then yields
- * those items as an array.
+ * Buffers items until an item passes the given `predicateFn`.
+ * - The item that satisfied the predicate is added to the buffer.
+ * - The buffer is yielded.
+ * - Then a new buffer is created.
  * 
  * If `finalize` is set to `false`, the final buffer will not be yielded if
  * the last item failed to pass the predicate.
@@ -535,6 +566,32 @@ export const buffer = function*<T extends Iterable<any>>(
     if (!predicateFn(item)) continue;
     yield buffer;
     buffer = [];
+  }
+  if (!finalize || !buffer.length) return;
+  yield buffer;
+};
+
+/**
+ * Buffers items until an item passes the given `predicateFn`.
+ * - The buffer is yielded.
+ * - A new buffer is created.
+ * - The item that satisfied the predicate is added to it.
+ * 
+ * If `finalize` is set to `false`, the final buffer will not be yielded if
+ * the last item failed to pass the predicate.
+ */
+export const bufferEagerly = function*<T extends Iterable<any>>(
+  iter: T,
+  predicateFn: PredicateFn<ElementOf<T>>,
+  finalize = true
+): Iterable<ElementOf<T>[]> {
+  let buffer: ElementOf<T>[] = [];
+  for (const item of iter) {
+    if (predicateFn(item)) {
+      if (buffer.length) yield buffer;
+      buffer = [];
+    }
+    buffer.push(item);
   }
   if (!finalize || !buffer.length) return;
   yield buffer;

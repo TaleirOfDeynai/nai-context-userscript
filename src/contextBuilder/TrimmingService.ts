@@ -1,9 +1,11 @@
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
-import { journey, buffer, flatMap, flatten } from "@utils/iterables";
-import { toReplay } from "@utils/asyncIterables";
+import { protoExtend } from "@utils/object";
+import { reduceIter, journey, buffer, flatMap, flatten } from "@utils/iterables";
+import { toReplay, lastValueFrom } from "@utils/asyncIterables";
 import $TextSplitterService from "./TextSplitterService";
+import $TokenizerService from "./TokenizerService";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TextAssembly from "./TextAssembly";
 
@@ -44,21 +46,22 @@ export interface TokenizedAssembly extends TextAssembly {
 }
 
 export interface TrimResult extends EncodeResult {
-  split(): AsyncIterable<TrimResult>;
+  readonly split: () => AsyncIterable<TrimResult>;
 }
 
-export interface Trimmer extends AsyncIterable<TrimResult> {
-  provider: TrimProvider;
-  origin: TextAssembly;
+export interface Trimmer {
+  (): AsyncIterable<TrimResult>;
+  readonly provider: TrimProvider;
+  readonly origin: TextAssembly;
 };
 
 export interface ReplayTrimResult extends EncodeResult {
-  split(): ReplayWrapper<ReplayTrimResult>;
+  readonly split: ReplayWrapper<ReplayTrimResult>;
 }
 
 export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
-  provider: TrimProvider;
-  origin: TextAssembly;
+  readonly provider: TrimProvider;
+  readonly origin: TextAssembly;
 };
 
 const EMPTY = async function*() {};
@@ -66,6 +69,7 @@ const EMPTY = async function*() {};
 export default usModule((require, exports) => {
   const providers = $TrimmingProviders(require);
   const { hasWords } = $TextSplitterService(require);
+  const { appendEncoder } = $TokenizerService(require);
   const { TextAssembly } = $TextAssembly(require);
 
   const optionDefaults: TrimOptions = {
@@ -74,11 +78,8 @@ export default usModule((require, exports) => {
     preserveEnds: true
   };
 
-  const makeTrimResult = (curResult: EncodeResult, split: TrimResult["split"]): TrimResult => {
-    let instance = Object.create(curResult);
-    instance = Object.assign(instance, { split });
-    return Object.freeze(instance);
-  };
+  const makeTrimResult = (curResult: EncodeResult, split: TrimResult["split"]): TrimResult =>
+    protoExtend(curResult, { split });
 
   // I'm not going to beat around the bush.  This will be quite ugly and
   // am just going to do this in the most straight forward way possible.
@@ -126,6 +127,28 @@ export default usModule((require, exports) => {
 
     const config = { ...optionDefaults, ...options };
     const provider = providers.asProvider(config.provider);
+
+    if (provider.noSequencing) {
+      // When we're not sequencing, we'll just run the append encoder
+      // directly and immediately encode all the fragments.  We could
+      // potentially just use `tokenCodec.encode` instead, but I would
+      // prefer to keep things consistent.
+      async function *unSequenced(): AsyncIterable<TrimResult> {
+        const encoding = appendEncoder(tokenCodec, provider.preProcess(assembly), {
+          prefix: assembly.prefix.content,
+          suffix: assembly.suffix.content
+        });
+
+        const result = await lastValueFrom(encoding);
+        yield makeTrimResult(result, EMPTY);
+      };
+
+      return Object.assign(
+        doReplay ? toReplay(unSequenced) : unSequenced,
+        { origin: assembly, provider }
+      );
+    }
+
     const sequencers = providers.getSequencersFrom(provider, config.maximumTrimType);
 
     const nextSplit = (
@@ -174,8 +197,9 @@ export default usModule((require, exports) => {
       sequencers,
       config.preserveEnds ? "ends" : "none"
     );
+
     return Object.assign(
-      doReplay ? toReplay(outerSplit) : outerSplit(),
+      doReplay ? toReplay(outerSplit) : outerSplit,
       { origin: assembly, provider }
     );
   }
@@ -208,7 +232,7 @@ export default usModule((require, exports) => {
     tokenBudget = Math.max(0, tokenBudget);
 
     /** The current iterator; we'll change this when we split. */
-    let iterable: UndefOr<AsyncIterable<TrimResult>> = trimmer;
+    let iterable: UndefOr<AsyncIterable<TrimResult>> = trimmer();
     /** The last in-budget result. */
     let lastResult: UndefOr<TrimResult> = undefined;
 
@@ -333,11 +357,34 @@ export default usModule((require, exports) => {
     maximumLength = Math.max(0, maximumLength - (prefixLength + suffixLength));
 
     // Now we can trim.
+    if (provider.noSequencing) {
+      // If we can't use sequencing, we'll just concatenate the all
+      // the fragments and check if it's below the `maximumLength`.
+      // Start by making a copy of our fragments; we'll need a stable
+      // iterable for this.
+      const theFrags = [...fragments];
+      const totalLength = reduceIter(
+        theFrags,
+        0 as number,
+        (acc, frag) => frag.content.length + acc
+      );
+
+      if (totalLength > maximumLength) return undefined;
+      // Un-reverse if the provider runs in reverse.
+      if (provider.reversed) theFrags.reverse();
+
+      // We should still create a derived assembly, as the pre-processor
+      // could have altered the fragments.
+      return TextAssembly.fromDerived(theFrags, assembly);
+    }
+
+    // Otherwise, we do our thorough trim.
     const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
     const trimmedFrags = [...execTrimLength(
       sequencers, fragments, maximumLength,
       preserveEnds ? "ends" : "none"
     )];
+
     if (trimmedFrags.length === 0) return undefined;
     // Un-reverse if the provider runs in reverse.
     if (provider.reversed) trimmedFrags.reverse();

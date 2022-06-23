@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "strictNullChecks": true,
+    "noEmitOnError": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "module": "ES2020",
+    "target": "ES2020",
+    "paths": {
+      "@utils/*": ["../src/utils/*"],
+      "@nai/*": ["../src/naiModules/*"],
+      "@config": ["../src/config"],
+      "@spec/*": ["./*"],
+      "@src/*": ["../src/*"],
+    },
+    "baseUrl": "."
+  },
+  "ts-node": {
+    "require": ["tsconfig-paths/register"],
+    "files": true,
+    "transpileOnly": true,
+    "compilerOptions": {
+      "module": "CommonJS"
+    }
+  }
+}

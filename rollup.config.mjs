@@ -1,4 +1,4 @@
-import babel from '@rollup/plugin-babel'
+import { babel } from '@rollup/plugin-babel'
 import commonjs from '@rollup/plugin-commonjs'
 import nodeResolve from '@rollup/plugin-node-resolve'
 import replace from '@rollup/plugin-replace'
@@ -6,12 +6,13 @@ import typescriptPlugin from '@rollup/plugin-typescript'
 import typescript from 'typescript'
 import metablock from 'rollup-plugin-userscript-metablock'
 
-const fs = require('fs')
-const pkg = require('./package.json')
+import fs from "node:fs"
+import pkg from "./package.json" assert { type: "json" }
 
 fs.mkdir('dist/', { recursive: true }, () => null)
 
-export default {
+/** @type {import('rollup').RollupOptions} */
+const rollupConfig = {
   input: 'src/index.ts',
   output: {
     file: 'dist/bundle.user.js',
@@ -55,3 +56,5 @@ export default {
   ],
   external: id => /^react(-dom)?$/.test(id)
 }
+
+export default rollupConfig

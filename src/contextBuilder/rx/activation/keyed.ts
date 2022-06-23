@@ -1,4 +1,4 @@
-import conforms from "lodash-es/conforms";
+import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -26,9 +26,9 @@ export type KeyedActivation = AssemblyResultMap;
 export default usModule((require, exports) => {
   const { search, searchForLore } = $SearchService(require);
 
-  const isKeyed = conforms({
-    entry: conforms({
-      fieldConfig: conforms({
+  const isKeyed = _conforms({
+    entry: _conforms({
+      fieldConfig: _conforms({
         // Need a non-empty array to qualify.
         keys: (v) => isArray(v) && Boolean(v.length)
       })

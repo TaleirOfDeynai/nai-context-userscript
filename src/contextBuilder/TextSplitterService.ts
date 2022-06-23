@@ -6,6 +6,9 @@ import { isArray, isString } from "@utils/is";
 import AppConstants from "@nai/AppConstants";
 
 import type { UndefOr } from "@utils/utility-types";
+import type { ContextConfig } from "@nai/Lorebook";
+
+type TrimType = ContextConfig["maximumTrimType"];
 
 /** Represents a fragment of some larger body of text. */
 export interface TextFragment {
@@ -17,7 +20,19 @@ export type TextOrFragment = string | TextFragment;
 
 const { raw } = String;
 
-/** A raw string with all the punctuation characters we care about. */
+/**
+ * A raw string with all the punctuation characters we care about.
+ * 
+ * The characters are:
+ * - The typical english `.`, `?`, and `!`.
+ * - The `~` character, which is seeing more common use.
+ * - `\xbf` -> `¿`
+ * - `\xa1` -> `¡`
+ * - `\u061f` -> `؟`
+ * - `\u3002` -> `。`
+ * - `\uff1f` -> `？`
+ * - `\uff01` -> `！`
+ */
 const PUNCT = raw`.?!~\xbf\xa1\u061f\u3002\uff1f\uff01`;
 /** The quote characters we care about. */
 const QUOTE = `'"`;
@@ -25,7 +40,7 @@ const QUOTE = `'"`;
  * An exception case in sentence separation: english honorific abbreviations.
  * Seems a bit much, but NovelAI apparently found this necessary.
  */
-const HONORIFIC = raw`(?:dr|mr?s?|esq|jr|sn?r)\.`;
+const HONORIFIC = raw`(?:dr|mrs?|ms|esq|jr|sn?r)\.`;
 
 /** Matches something that isn't English syntax. */
 const reWordy = new RegExp(`[^${PUNCT}${QUOTE}\\s-]`);
@@ -107,8 +122,22 @@ export default usModule((require, exports) => {
   const chunkSize = require(AppConstants).contextSize;
   assert("Expected chunk size greater than 0.", !!chunkSize && chunkSize > 0);
 
-  /** Builds a {@link TextFragment} given some inputs. */
-  const resultFrom = (content: string, offset: number, source?: TextOrFragment): TextFragment => {
+  /**
+   * Builds a {@link TextFragment} given some inputs.
+   * 
+   * A `source` may be given if this fragment was derived from another
+   * string or fragment.  If its a {@link TextFragment}, then its
+   * {@link TextFragment.offset offset} will be applied to the given
+   * `offset` for you.
+   */
+  const createFragment = (
+    /** The content of the fragment. */
+    content: string,
+    /** The offset of the fragment within the source fragment/string. */
+    offset: number,
+    /** The source fragment/string, if `content` came from it. */
+    source?: TextOrFragment
+  ): TextFragment => {
     const result
       = !source || isString(source) ? { content, offset }
       : { content, offset: source.offset + offset };
@@ -117,7 +146,7 @@ export default usModule((require, exports) => {
 
   /** Standardizes on text fragments for processing. */
   const asFragment = (inputText: TextOrFragment): TextFragment =>
-    isString(inputText) ? resultFrom(inputText, 0) : inputText;
+    isString(inputText) ? createFragment(inputText, 0) : inputText;
   
   /** Pulls the content text from a string or fragment. */
   const asContent = (inputText: TextOrFragment): string =>
@@ -140,6 +169,12 @@ export default usModule((require, exports) => {
     const [{ offset }] = parts;
     return { content, offset };
   };
+
+  /** Retrieves the starting offset of a fragment. */
+  const beforeFragment = (f: TextFragment) => f.offset;
+
+  /** Retrieves the ending offset of a fragment. */
+  const afterFragment = (f: TextFragment) => f.offset + f.content.length;
 
   /**
    * Checks if the given collection of fragments is contiguous; this means
@@ -165,7 +200,9 @@ export default usModule((require, exports) => {
    * relative to the source text and within the bounds of the fragment.
    */
   const splitFragmentAt = (
+    /** The fragment to split. */
     fragment: TextFragment,
+    /** The offset of the cut. */
     cutOffset: number
   ): [TextFragment, TextFragment] => {
     const { offset, content } = fragment;
@@ -174,13 +211,20 @@ export default usModule((require, exports) => {
       cutOffset >= offset && cutOffset <= offset + content.length
     );
 
+    // Fast-path: reuse the instance if cutting at beginning.
+    if (cutOffset === offset)
+      return [createFragment("", 0, fragment), fragment];
+    // Fast-path: reuse instance if cutting at end.
+    if (cutOffset === offset + content.length)
+      return [fragment, createFragment("", content.length, fragment)];
+
     // Get the relative position of the offset.
     const position = cutOffset - offset;
     const before = content.slice(0, position);
     const after = content.slice(position);
     return [
-      resultFrom(before, 0, fragment),
-      resultFrom(after, before.length, fragment)
+      createFragment(before, 0, fragment),
+      createFragment(after, before.length, fragment)
     ];
   };
   
@@ -198,7 +242,7 @@ export default usModule((require, exports) => {
       const [content] = match;
       const offset = assertExists("Expected match index to exist.", match.index);
       assert("Expected match contents to be non-empty.", content.length > 0);
-      yield resultFrom(content, offset, inputFrag);
+      yield createFragment(content, offset, inputFrag);
     }
   }
 
@@ -211,7 +255,7 @@ export default usModule((require, exports) => {
     inputFrag: TextFragment,
     endIndex: number = inputFrag.content.length
   ): TextFragment {
-    if (!inputFrag.content.length) return resultFrom("", 0, inputFrag);
+    if (!inputFrag.content.length) return createFragment("", 0, inputFrag);
     // The caller should have aborted instead of calling this.
     assert("End index must be non-zero.", endIndex > 0);
 
@@ -225,7 +269,7 @@ export default usModule((require, exports) => {
       chunk = content.slice(startIndex, endIndex);
     }
 
-    return resultFrom(chunk, startIndex, inputFrag);
+    return createFragment(chunk, startIndex, inputFrag);
   }
 
   /**
@@ -254,7 +298,7 @@ export default usModule((require, exports) => {
         // Don't yield the first line; it may be a partial line.
         if (line.offset === 0) break;
         lastOffset = line.offset;
-        yield resultFrom(line.content, line.offset, curChunk);
+        yield createFragment(line.content, line.offset, curChunk);
       }
 
       // Grab the next chunk ending at the last known good line.
@@ -326,18 +370,18 @@ export default usModule((require, exports) => {
         }
 
         if (punctuation) {
-          if (!lastBody) yield resultFrom(punctuation, index, fragment);
+          if (!lastBody) yield createFragment(punctuation, index, fragment);
           else {
-            yield resultFrom(`${lastBody.content}${punctuation}`, lastBody.offset);
+            yield createFragment(`${lastBody.content}${punctuation}`, lastBody.offset);
             lastBody = null;
           }
         }
         else if (whitespace) {
-          yield resultFrom(whitespace, index, fragment);
+          yield createFragment(whitespace, index, fragment);
         }
         else if (body) {
           // Hold on to this body until we've seen the next match.
-          lastBody = resultFrom(body, index, fragment);
+          lastBody = createFragment(body, index, fragment);
         }
       }
 
@@ -360,7 +404,7 @@ export default usModule((require, exports) => {
       const length = content.length;
       const index = assertExists("Expected match index to exist.", match.index);
       assert("Expected match contents to be non-empty.", length > 0);
-      yield resultFrom(content, index, inputFrag);
+      yield createFragment(content, index, inputFrag);
     }
   }
 
@@ -378,17 +422,84 @@ export default usModule((require, exports) => {
     return reWordy.test(isString(inputText) ? inputText : inputText.content);
   }
 
+  /**
+   * Builds an iterator that breaks up the given fragments to the desired
+   * granularity specified by `splitType` in the most efficient way possible
+   * and only as much as demanded by the consumer of the iterator.
+   * 
+   * This smooths over the minute differences in output between using:
+   * - The `byWord` splitter on its own, which will group punctuation
+   *   and not-newline whitespace into a single fragment (anything
+   *   that is not a word).
+   * - The `token` level trim-sequencer, which will split by sentence
+   *   first, separating out the not-newline white space between
+   *   sentences first, before splitting again by word, which will
+   *   separate the punctuation at the end of the sentence.
+   * 
+   * If you need the consistent behavior and laziness of a trim-sequencer
+   * without doing the trimming part, use this rather than calling the
+   * splitting functions yourself.
+   */
+  function makeFragmenter(
+    /** The granularity of the fragments desired. */
+    splitType: TrimType,
+    /** Whether to yield the fragments in reversed order. */
+    reversed: boolean = false
+  ) {
+    const TYPES = ["newline", "sentence", "token"] as const;
+    const index = TYPES.findIndex((v) => v === splitType);
+    const splitters = TYPES.slice(0, index + 1).map((v) => {
+      switch (v) {
+        case "newline": return byLine;
+        case "sentence": return bySentence;
+        case "token": return byWord;
+      }
+    });
+
+    // We're just gonna go recursive, as usual.
+    function *innerIterator(
+      frags: Iterable<TextFragment>,
+      splitFns: typeof splitters
+    ): Iterable<TextFragment> {
+      // If we're iterating towards the top of the assembly, we need
+      // to reverse the fragments we were given.
+      frags = reversed ? iterReverse(frags) : frags;
+
+      if (!splitFns.length) {
+        // if we have no functions to split, the recursion is finished.
+        // Just spit them back out (maybe in reversed order).
+        yield* frags;
+      }
+      else {
+        // Otherwise, split them up and recurse.
+        const [nextFn, ...restFns] = splitFns;
+        for (const srcFrag of frags)
+          yield* innerIterator(nextFn(srcFrag), restFns);
+      }
+    }
+
+    const fragmenter = (
+      /** The fragments to be split up. */
+      fragments: Iterable<TextFragment>
+    ) => innerIterator(fragments, splitters);
+
+    return fragmenter;
+  };
+
   return Object.assign(exports, {
     byLine,
     byLineFromEnd,
     bySentence,
     byWord,
     hasWords,
-    createFragment: resultFrom,
+    createFragment,
     asFragment,
     asContent,
+    beforeFragment,
+    afterFragment,
     mergeFragments,
     isContiguous,
-    splitFragmentAt
+    splitFragmentAt,
+    makeFragmenter
   });
 });

@@ -1,4 +1,4 @@
-import conforms from "lodash-es/conforms";
+import _conforms from "lodash/conforms";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isArray } from "@utils/is";
@@ -59,10 +59,10 @@ export interface CascadeActivation {
 export default usModule((require, exports) => {
   const { searchForLore } = $SearchService(require);
 
-  const isCascading = conforms({
-    source: conforms({
-      entry: conforms({
-        fieldConfig: conforms({
+  const isCascading = _conforms({
+    source: _conforms({
+      entry: _conforms({
+        fieldConfig: _conforms({
           // Need a non-empty array to qualify.
           keys: (v) => isArray(v) && Boolean(v.length),
           // Cascading is active when `true`.

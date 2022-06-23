@@ -1,5 +1,7 @@
+import * as rx from "rxjs";
 import { isFunction } from "./is";
-import { UndefOr } from "./utility-types";
+
+import type { UndefOr } from "./utility-types";
 
 export type ReplaySource<T> = AsyncIterable<T> | (() => AsyncIterable<T>);
 
@@ -11,7 +13,7 @@ export interface ReplayWrapper<T> extends AsyncIterable<T> {
    * from the start.  The wrapped iterable must be capable of multiple
    * iterations for this to be effective.
    */
-  clear(): void;
+  readonly clear: () => void;
 }
 
 /**
@@ -30,7 +32,7 @@ export const toReplay = <T>(
   let elements: T[] = [];
   let iterator: UndefOr<AsyncIterator<T>> = undefined;
 
-  const wrapped = async function*() {
+  async function* replayWrapped(): AsyncIterableIterator<T> {
     yield* elements;
 
     // Start up the iterator if needed.  This is done only on demand
@@ -45,11 +47,26 @@ export const toReplay = <T>(
     }
   };
 
-  return Object.assign(wrapped, {
-    [Symbol.asyncIterator]: wrapped,
-    clear() {
+  return Object.assign(replayWrapped, {
+    [Symbol.asyncIterator]: replayWrapped,
+    clear: () => {
       elements = [];
       iterator = undefined;
     }
   });
 };
+
+/**
+ * Gets the last value from the given `source` async-iterable as
+ * a promise.  This will run the source to the end, naturally.
+ */
+export const lastValueFrom = <T>(source: AsyncIterable<T>): Promise<T> =>
+  rx.lastValueFrom(rx.from(source));
+
+/**
+ * Converts the given `source` async-iterable into a promise of
+ * an array of its yielded values.  This will run the source to
+ * the end.
+ */
+export const toArray = <T>(source: AsyncIterable<T>): Promise<T[]> =>
+  rx.lastValueFrom(rx.from(source).pipe(rx.toArray()));

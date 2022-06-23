@@ -37,7 +37,7 @@ export interface MatchResult {
   /** The full match. */
   readonly match: string;
   /** If there were capture groups, the matches for those. */
-  readonly groups: string[];
+  readonly groups: readonly string[];
   /** If there were named capture groups, the matches for those. */
   readonly namedGroups: Readonly<Record<string, string>>;
   /** The index of the match from the searched string. */
@@ -109,7 +109,8 @@ export default usModule((require, exports) => {
     const [match, ...groups] = regexExec;
 
     return Object.freeze({
-      match, groups,
+      match,
+      groups: Object.freeze(groups),
       index: assertExists("Expected an index.", regexExec.index),
       length: match.length,
       namedGroups: Object.freeze({ ...regexExec?.groups })
