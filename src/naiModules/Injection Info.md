@@ -6,8 +6,8 @@ That will drop you right in there.
 ```
 a: unknown;
 A: typeof UUID;
-u: typeof AppConstants;
-c: typeof EventModule;
+c: typeof AppConstants;
+u: typeof EventModule;
 h: typeof TokenizerHelpers;
 d: typeof TokenizerCodec;
 m: typeof ContextModule;
@@ -17,21 +17,21 @@ b: typeof LoreEntryHelpers;
 
 ```
 // typeof ContextBuilder
-64224
+58043
 
-a = n(2509),
+a = n(52319),
 s = n.n(a),
 A = n(5185),
-u = n(37152),
-c = n(65806),
-l = n(37450),
-f = n(55299),
-h = n(17641),
-d = n(11725),
-p = n(77807),
-g = n(50518),
-y = n(12397),
-m = n(86124),
-v = n(36017),
-b = n(36961)
+c = n(23352),
+u = n(76691),
+l = n(22397),
+f = n(10271),
+h = n(2429),
+d = n(22398),
+g = n(81321),
+p = n(50301),
+y = n(25981),
+m = n(58805),
+v = n(27659),
+b = n(44172);
 ```

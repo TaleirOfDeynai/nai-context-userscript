@@ -60,6 +60,10 @@ export namespace Virtual {
     tokenCodec?: TokenCodec
   ): Promise<ContextRecorder>;
 
+  export declare function splitBySentence(
+    entryText: string
+  ): string[];
+
   export declare class ContextStatus<T extends IContextField = IContextField> {
     included: boolean;
     identifier: string;
@@ -129,22 +133,24 @@ export type ContextRecorder = Virtual.ContextRecorder;
 export interface IContextBuilder {
   "AB": ReportReasons;
   "Ie": typeof Virtual.ContextRecorder;
-  "v$": typeof Virtual.StageReport;
   "NV": typeof Virtual.ContextStatus;
-  "rJ": typeof Virtual.buildContext;
   "eA": typeof Virtual.checkLorebook;
+  "jR": typeof Virtual.splitBySentence;
+  "rJ": typeof Virtual.buildContext;
+  "v$": typeof Virtual.StageReport;
 }
 
 class ContextBuilder extends ModuleDef<IContextBuilder> {
-  moduleId = 64224;
-  expectedExports = 6;
+  moduleId = 58043;
+  expectedExports = 7;
   mapping = {
     "AB": ["REASONS", "object"],
     "Ie": ["ContextRecorder", "function"],
-    "v$": ["StageReport", "function"],
     "NV": ["ContextStatus", "function"],
+    "eA": ["checkLorebook", "function"],
+    "jR": ["splitBySentence", "function"],
     "rJ": ["buildContext", "function"],
-    "eA": ["checkLorebook", "function"]
+    "v$": ["StageReport", "function"]
   } as const;
 }
 
