@@ -10,8 +10,8 @@ import Sorters from "./_sorters";
 import type { LoreEntryConfig } from "@nai/Lorebook";
 import type { ContextParams } from "../../ParamsService";
 import type { ContextSource, ExtendField } from "../../ContextSource";
-import type { StorySource } from "../source";
-import type { ActivatedSource } from "../activation";
+import type { StorySource } from "../1-source";
+import type { ActivatedSource } from "../2-activation";
 import type { BudgetedSource } from "./_shared";
 import type { SorterKey } from "./_sorters";
 

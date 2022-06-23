@@ -1,5 +1,5 @@
 import type { NormalizedBudgetStats } from "../../ContextContent";
-import type { ActivatedSource } from "../activation";
+import type { ActivatedSource } from "../2-activation";
 
 export interface BudgetedSource extends ActivatedSource {
   budgetStats: NormalizedBudgetStats;

@@ -9,7 +9,7 @@ import $ActCascade, { CascadeActivation } from "./cascade";
 
 import type { ConstrainedMap } from "@utils/utility-types";
 import type { StoryContent } from "@nai/EventModule";
-import type { SourcePhaseResult, EnabledSource, DisabledSource } from "../source";
+import type { SourcePhaseResult, EnabledSource, DisabledSource } from "../1-source";
 
 /** Just provides a source of types for {@link ActivationMap}. */
 interface ActivationMapping {

@@ -5,8 +5,8 @@ import { createLogger } from "@utils/logging";
 import Vanilla from "./vanilla";
 
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult } from "../source";
-import type { ActivationPhaseResult } from "../activation";
+import type { SourcePhaseResult } from "../1-source";
+import type { ActivationPhaseResult } from "../2-activation";
 import type { BudgetedSource } from "./_shared";
 
 export type SelectionObservable = rx.Observable<BudgetedSource>;

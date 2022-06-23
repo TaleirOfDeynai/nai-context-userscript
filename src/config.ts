@@ -1,5 +1,5 @@
 import type { LorebookConfig as LC } from "@nai/Lorebook";
-import type { SorterKey } from "./contextBuilder/rx/selection/_sorters";
+import type { SorterKey } from "./contextBuilder/rx/3-selection/_sorters";
 
 /** Configuration options affecting comment removal. */
 const comments = {

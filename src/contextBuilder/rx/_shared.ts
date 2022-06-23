@@ -4,7 +4,7 @@ import { isString } from "@utils/is";
 import type { TypePredicate } from "@utils/is";
 import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry, PhraseBiasConfig } from "@nai/Lorebook";
-import type { ActivationSource, ActivatedSource, RejectedSource } from "./activation";
+import type { ActivationSource, ActivatedSource, RejectedSource } from "./2-activation";
 import type { ContextSource } from "../ContextSource";
 
 // Activation stuff.

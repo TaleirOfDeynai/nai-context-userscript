@@ -10,7 +10,7 @@ import type { TypePredicate } from "@utils/is";
 import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { PhraseBiasConfig, Categories } from "@nai/Lorebook";
-import type { ActivationObservable } from "../activation";
+import type { ActivationObservable } from "../2-activation";
 import type { TriggeredBiasGroup } from "../_shared";
 
 type BiasedCategory = Categories.Category & {

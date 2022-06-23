@@ -10,7 +10,7 @@ import type { TypePredicate } from "@utils/is";
 import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";
-import type { ActivationObservable } from "../activation";
+import type { ActivationObservable } from "../2-activation";
 import type { TriggeredBiasGroup } from "../_shared";
 
 interface BiasedField extends IContextField {

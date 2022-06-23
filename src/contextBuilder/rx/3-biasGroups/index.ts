@@ -6,7 +6,7 @@ import $BiasLore from "./lore";
 import $BiasCategory from "./category";
 
 import type { StoryContent } from "@nai/EventModule";
-import type { ActivationPhaseResult } from "../activation";
+import type { ActivationPhaseResult } from "../2-activation";
 import type { TriggeredBiasGroup } from "../_shared";
 
 export interface BiasGroupPhaseResult {
