@@ -14,14 +14,6 @@ const comments = {
    */
   alwaysRemove: false,
   /**
-   * Vanilla NovelAI only removes comments for the story text, and
-   * then always before it could be used by keywords.
-   * 
-   * If this is set to `true`, comments will work for all entries
-   * and in the same way.
-   */
-  standardizeHandling: true,
-  /**
    * Vanilla NovelAI removes comments before keyword searching is
    * performed.  If lorebook keywords could match text in comments,
    * they could be used to gain more control over cascade activation

@@ -42,22 +42,6 @@ export interface NormalizedBudgetStats {
   readonly actualReservedTokens: number;
 }
 
-// Let's condense our config a bit.
-const contentConfig = dew(() => {
-  const { standardizeHandling, searchComments } = userScriptConfig.comments;
-  const lore = {
-    canRemoveComments: standardizeHandling,
-    searchComments: standardizeHandling && searchComments,
-    keepAffix: true
-  } as const;
-  const story = {
-    canRemoveComments: true,
-    searchComments,
-    keepAffix: userScriptConfig.story.standardizeHandling
-  } as const;
-  return { lore, story } as const;
-});
-
 const reComment = /^##/m;
 
 const theModule = usModule((require, exports) => {
@@ -98,11 +82,9 @@ const theModule = usModule((require, exports) => {
     trimDirection: ContextConfig["trimDirection"],
     contextParams: ContextParams
   ) => {
-    const entryConfig = forStory ? contentConfig.story : contentConfig.lore;
     switch (true as boolean) {
       case !contextParams.removeComments:
-      case !entryConfig.canRemoveComments:
-      case forSearch && entryConfig.searchComments:
+      case forSearch && userScriptConfig.comments.searchComments:
         return providers.basic[trimDirection];
       default:
         return providers.removeComments[trimDirection];
@@ -177,8 +159,8 @@ const theModule = usModule((require, exports) => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);
-      const entryConfig = forStory ? contentConfig.story : contentConfig.lore;
-      return entryConfig.keepAffix ? result : result.asOnlyContent();
+      const keepAffix = !forStory ? true : userScriptConfig.story.standardizeHandling;
+      return keepAffix ? result : result.asOnlyContent();
     }
   });
 
