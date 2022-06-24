@@ -1,3 +1,15 @@
+/**
+ * The Activation Phase takes all the content sources from the
+ * Source Phase and determines which ones have qualified to be
+ * inserted into the context.
+ * 
+ * In contrast to vanilla NovelAI, this is not a stop-fast process;
+ * an entry does not leave the activation process as soon as it
+ * finds the first keyword or what have you.  This phase is used to
+ * do a bit of data gathering, which will help inform later phases
+ * on how to best construct the context.
+ */
+
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";

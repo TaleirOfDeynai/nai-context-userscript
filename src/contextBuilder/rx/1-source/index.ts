@@ -1,3 +1,12 @@
+/**
+ * The Source Phase searches all the provided data for context
+ * content and constructs the {@link ContextSource} instances
+ * for each.
+ * 
+ * This phase may also do some basic normalization steps on
+ * the input entries to ensure things go smoothly later on.
+ */
+
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";

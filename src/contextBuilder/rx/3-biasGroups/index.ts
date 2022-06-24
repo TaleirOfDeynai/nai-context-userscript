@@ -1,3 +1,9 @@
+/**
+ * The Bias-Groups Phase takes the activated and rejected entries
+ * and determines which bias-groups should be activated to service
+ * that feature.
+ */
+
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";

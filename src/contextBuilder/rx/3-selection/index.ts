@@ -1,3 +1,15 @@
+/**
+ * The Selection Phase is responsible for determining how to prioritize
+ * entries within the budgetary constraints of the context.  It has its
+ * fingers in:
+ * - Preparing information on budgeting, such as token reservations.
+ * - Determining how entries are prioritized versus one another and
+ *   which might need to be dropped in order to get those higher
+ *   priority entries into the context.
+ * - Establishing the coarse order of insertion for those entries
+ *   that were selected for insertion.
+ */
+
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -57,7 +69,10 @@ export default usModule((require, exports) => {
     return {
       get totalReservedTokens() {
         return rx.firstValueFrom(inFlightSelected.pipe(
-          rxop.reduce<BudgetedSource, number>((tokens, { budgetStats }) => tokens + budgetStats.actualReservedTokens, 0)
+          rxop.reduce<BudgetedSource, number>(
+            (tokens, { budgetStats }) => tokens + budgetStats.actualReservedTokens,
+            0
+          )
         ));
       },
       get selected() {
