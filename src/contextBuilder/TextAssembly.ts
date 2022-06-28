@@ -70,12 +70,18 @@ namespace Position {
   /** Split the assembly at `cursor` and insert between them. */
   interface SuccessResult {
     type: "inside";
+    /** The position to perform the split. */
     cursor: AssemblyCursor;
   }
 
   /** Insert before/after the assembly. */
   interface InsertResult {
     type: "insertBefore" | "insertAfter";
+    /** 
+     * The number of characters the entry was shunted from its
+     * perfect position.
+     */
+    shunted: number;
   }
 
   export type Result = ContinueResult | SuccessResult | InsertResult;
@@ -613,6 +619,38 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
+     * Converts an assembly cursor into a full-text cursor.
+     * 
+     * The cursor must be for this assembly and addressing a fragment that
+     * exists within this assembly.
+     */
+    toFullText(cursor: AssemblyCursor): FullTextCursor {
+      assert(
+        "Expected an assembly cursor.",
+        cursor.type === "assembly"
+      );
+      assert(
+        "Expected cursor to be for this assembly.",
+        cursor.origin === this
+      );
+      assert(
+        "Expected cursor to belong to a fragment of this assembly.",
+        this.isFoundIn(cursor)
+      );
+
+      let fullLength = 0;
+      for (const frag of this) {
+        if (isCursorInside(cursor, frag)) {
+          fullLength += cursor.offset - beforeFragment(frag);
+          break;
+        }
+        fullLength += frag.content.length;
+      }
+
+      return makeCursor(this, fullLength, "fullText");
+    }
+
+    /**
      * Checks to ensure that the cursor references a valid text fragment;
      * that is, the fragment of this cursor is not missing.
      * 
@@ -989,14 +1027,37 @@ const theModule = usModule((require, exports) => {
           // fragment will need to be split.
           case "content": return { type: "inside", cursor };
           // This tells it to insert before this fragment.
-          case "prefix": return { type: "insertBefore" };
+          case "prefix": return {
+            type: "insertBefore",
+            shunted: cursor.offset - beforeFragment(this.prefix)
+          };
           // And this after this fragment.
-          case "suffix": return { type: "insertAfter" };
+          case "suffix": return {
+            type: "insertAfter",
+            shunted: afterFragment(this.suffix) - cursor.offset
+          };
         }
       }
 
       // In any other case, we tell it to carry on, whatever amount is left.
       return { type: direction, remainder };
+    }
+
+    /**
+     * When we have a cursor inside this assembly, but we can't split it
+     * due to the entry's configuration, this will tell us the nearest side
+     * to insert it adjacent to this assembly.
+     * 
+     * If the cursor could go either way, it will favor toward the top.
+     */
+    bumpOut(cursor: AssemblyCursor): PositionResult {
+      // We actually want to convert this to full-text...
+      const { offset } = this.toFullText(cursor);
+      // ...because then it's stupid simple to tell which side is closer.
+      const fullLength = this.fullText.length;
+      if (offset <= fullLength / 2)
+        return { type: "insertBefore", shunted: offset };
+      return { type: "insertAfter", shunted: fullLength - offset };
     }
 
     /**

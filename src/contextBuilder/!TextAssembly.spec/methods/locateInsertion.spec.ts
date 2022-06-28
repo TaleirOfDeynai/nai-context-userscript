@@ -317,7 +317,10 @@ describe("TextAssembly", () => {
           const cursor = mockCursor(offset, "assembly", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
 
-          expect(result).toEqual({ type: "insertBefore" });
+          expect(result).toEqual({
+            type: "insertBefore",
+            shunted: 6
+          });
         });
       });
 
@@ -331,7 +334,10 @@ describe("TextAssembly", () => {
           const cursor = mockCursor(offset, "assembly", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
 
-          expect(result).toEqual({ type: "insertAfter" });
+          expect(result).toEqual({
+            type: "insertAfter",
+            shunted: 6
+          });
         });
       });
 
