@@ -2,12 +2,13 @@ import { describe, it, expect } from "@jest/globals";
 import { getEmptyFrag } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
-import { generateData, initAssembly, NO_AFFIX } from "../_common";
-import { contiguousFrags, offsetFrags } from "../_common";
+import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
+import { contiguousFrags, offsetFrags } from "@spec/helpers-assembly";
+import { initAssembly } from "../_common";
 
 import { first, last } from "@utils/iterables";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("cursor/selection methods", () => {
     describe("positionOf", () => {
       const testAssembly = initAssembly(contiguousFrags);
@@ -19,7 +20,7 @@ describe("TextAssembly", () => {
 
       it("should identify unrelated cursors", () => {
         // Relations are determined through referential equality.
-        const cursor = mockCursor(10, "assembly", { source: {} });
+        const cursor = mockCursor(10, "fragment", { source: {} });
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("unrelated");
@@ -27,7 +28,7 @@ describe("TextAssembly", () => {
 
       it("should identify cursors inside prefix", () => {
         const offset = insideFrag(testAssembly.prefix);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("prefix");
@@ -35,7 +36,7 @@ describe("TextAssembly", () => {
 
       it("should identify cursors inside suffix", () => {
         const offset = insideFrag(testAssembly.suffix);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("suffix");
@@ -43,13 +44,13 @@ describe("TextAssembly", () => {
 
       it("should identify cursors inside any content", () => {
         const firstOffset = insideFrag(first(testAssembly.content));
-        const firstCursor = mockCursor(firstOffset, "assembly", testAssembly);
+        const firstCursor = mockCursor(firstOffset, "fragment", testAssembly);
         const firstResult = testAssembly.positionOf(firstCursor);
 
         expect(firstResult).toBe("content");
 
         const lastOffset = insideFrag(last(testAssembly.content));
-        const lastCursor = mockCursor(lastOffset, "assembly", testAssembly);
+        const lastCursor = mockCursor(lastOffset, "fragment", testAssembly);
         const lastResult = testAssembly.positionOf(lastCursor);
 
         expect(lastResult).toBe("content");
@@ -57,7 +58,7 @@ describe("TextAssembly", () => {
 
       it("should favor content when ambiguous with prefix", () => {
         const offset = afterFrag(testAssembly.prefix);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("content");
@@ -65,7 +66,7 @@ describe("TextAssembly", () => {
 
       it("should favor content when ambiguous with suffix", () => {
         const offset = beforeFrag(testAssembly.suffix);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("content");
@@ -79,7 +80,7 @@ describe("TextAssembly", () => {
         const offset = afterFrag(assemblyData.prefix);
         expect(offset).toBe(beforeFrag(assemblyData.suffix));
 
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.positionOf(cursor);
 
         expect(result).toBe("prefix");
@@ -94,7 +95,7 @@ describe("TextAssembly", () => {
         });
 
         const offset = insideFrag(offsetFrags.prefix);
-        const cursor = mockCursor(offset, "assembly", childAssembly);
+        const cursor = mockCursor(offset, "fragment", childAssembly);
         const result = childAssembly.positionOf(cursor);
 
         expect(result).toBe("prefix");
@@ -109,7 +110,7 @@ describe("TextAssembly", () => {
         });
 
         const offset = insideFrag(offsetFrags.suffix);
-        const cursor = mockCursor(offset, "assembly", childAssembly);
+        const cursor = mockCursor(offset, "fragment", childAssembly);
         const result = childAssembly.positionOf(cursor);
 
         expect(result).toBe("suffix");

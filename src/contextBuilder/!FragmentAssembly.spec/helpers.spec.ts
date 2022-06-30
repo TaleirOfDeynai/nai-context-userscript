@@ -1,9 +1,10 @@
 import { jest, describe, it, expect } from "@jest/globals";
+import { afterEach } from "@jest/globals";
 import { mockFragment } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { Module } from "./_common";
 
-import type { TextCursor } from "../TextAssembly";
+import type { AnyCursor } from "../FragmentAssembly";
 import type { MatchResult } from "../MatcherService";
 
 describe("isCursorInside", () => {
@@ -35,16 +36,16 @@ describe("isCursorInside", () => {
   });
 });
 
-describe("asAssemblyCursor", () => {
-  const { asAssemblyCursor } = Module;
+describe("asFragmentCursor", () => {
+  const { asFragmentCursor } = Module;
 
-  // This relies heavily on `TextAssembly.fromFullText`.
+  // This relies heavily on `FragmentAssembly.fromFullText`.
   // We're only going to test that it attempts the conversion when
   // it is necessary, so we're not double-testing.
 
-  it("should return the cursor as-is when already an assembly cursor", () => {
-    const cursor = mockCursor(10, "assembly");
-    expect(asAssemblyCursor(cursor)).toBe(cursor);
+  it("should return the cursor as-is when already an fragment cursor", () => {
+    const cursor = mockCursor(10, "fragment");
+    expect(asFragmentCursor(cursor)).toBe(cursor);
   });
 
   it("should attempt to convert the cursor if it is a full-text cursor", () => {
@@ -52,7 +53,7 @@ describe("asAssemblyCursor", () => {
     const mockOrigin = { fromFullText: jest.fn() };
     const cursor = mockCursor(30, "fullText", mockOrigin);
 
-    asAssemblyCursor(cursor);
+    asFragmentCursor(cursor);
     expect(mockOrigin.fromFullText).toHaveBeenCalledWith(cursor);
   });
 });
@@ -60,18 +61,20 @@ describe("asAssemblyCursor", () => {
 describe("toSelection", () => {
   const { toSelection } = Module;
 
-  // This makes calls out to `asAssemblyCursor` to handle the conversion
+  // This makes calls out to `asFragmentCursor` to handle the conversion
   // when the `type` argument is `"fullText"`.  We'll just use a spoof'd
-  // implementation of `TextAssembly.fromFullText` to fake a conversion
+  // implementation of `FragmentAssembly.fromFullText` to fake a conversion
   // in a detectable way.
 
   const mockOrigin = {
-    fromFullText: jest.fn((cursor: TextCursor) => {
-      return mockCursor(cursor.offset + 10, "assembly", cursor.origin);
+    fromFullText: jest.fn((cursor: AnyCursor) => {
+      return mockCursor(cursor.offset + 10, "fragment", cursor.origin);
     })
   };
 
-  afterEach(() => mockOrigin.fromFullText.mockClear());
+  afterEach(() => {
+    mockOrigin.fromFullText.mockClear()
+  });
 
   const mockMatch: MatchResult = Object.freeze({
     match: "foo",
@@ -82,10 +85,10 @@ describe("toSelection", () => {
   });
 
   it("should convert from an assembly match", () => {
-    const result = toSelection(mockMatch, mockOrigin as any, "assembly");
+    const result = toSelection(mockMatch, mockOrigin as any, "fragment");
     expect(result).toEqual([
-      mockCursor(30, "assembly", mockOrigin),
-      mockCursor(33, "assembly", mockOrigin)
+      mockCursor(30, "fragment", mockOrigin),
+      mockCursor(33, "fragment", mockOrigin)
     ]);
 
     expect(mockOrigin.fromFullText).not.toHaveBeenCalled();
@@ -94,8 +97,8 @@ describe("toSelection", () => {
   it("should convert from a full-text match", () => {
     const result = toSelection(mockMatch, mockOrigin as any, "fullText");
     expect(result).toEqual([
-      mockCursor(40, "assembly", mockOrigin),
-      mockCursor(43, "assembly", mockOrigin)
+      mockCursor(40, "fragment", mockOrigin),
+      mockCursor(43, "fragment", mockOrigin)
     ]);
 
     expect(mockOrigin.fromFullText).toHaveBeenCalledTimes(2);
@@ -110,8 +113,8 @@ describe("toSelection", () => {
       length: 0
     });
 
-    const result = toSelection(zeroMatch, mockOrigin as any, "assembly");
-    expect(result[0]).toEqual(mockCursor(30, "assembly", mockOrigin));
+    const result = toSelection(zeroMatch, mockOrigin as any, "fragment");
+    expect(result[0]).toEqual(mockCursor(30, "fragment", mockOrigin));
     expect(result[0]).toBe(result[1]);
   });
 });

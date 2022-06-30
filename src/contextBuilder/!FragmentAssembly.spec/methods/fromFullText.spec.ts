@@ -2,17 +2,18 @@ import { describe, it, expect } from "@jest/globals";
 import { mockFragment } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
-import { generateData, initAssembly, NO_AFFIX } from "../_common";
-import { offsetFrags } from "../_common";
+import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
+import { offsetFrags } from "@spec/helpers-assembly";
+import { initAssembly } from "../_common";
 
 import { dew } from "@utils/dew";
 import { chain, first, last } from "@utils/iterables";
 
-import type { GenerateOpts } from "../_common";
-import type { TextAssembly } from "../../TextAssembly";
+import type { GenerateOpts } from "@spec/helpers-assembly";
+import type { FragmentAssembly } from "../../FragmentAssembly";
 import type { TextFragment } from "../../TextSplitterService";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("cursor/selection methods", () => {
     describe("fromFullText", () => {
       describe("sanity checks", () => {
@@ -20,7 +21,7 @@ describe("TextAssembly", () => {
 
         it.failing("should FAIL if cursor is not full-text", () => {
           const offset = insideFrag(mockFragment(testAssembly.fullText, 0));
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           
           // @ts-ignore - We're checking this assertion fails at runtime.
           testAssembly.fromFullText(cursor);
@@ -43,7 +44,7 @@ describe("TextAssembly", () => {
       // This method has a lot of disambiguation cases that it handles,
       // where the full-text cursor falls between two fragments and
       // rules need to be applied to figure out which is the best fragment
-      // to base the assembly cursor on.
+      // to base the fragment cursor on.
 
       // Many of these cases are redundantly checked by the procedural cases
       // below, so chances are if you have an error here, you will also have
@@ -77,7 +78,7 @@ describe("TextAssembly", () => {
 
               expect(result).toEqual(mockCursor(
                 afterFrag(assemblyData.content[0]),
-                "assembly",
+                "fragment",
                 testAssembly
               ));
             });
@@ -102,7 +103,7 @@ describe("TextAssembly", () => {
 
               expect(result).toEqual(mockCursor(
                 afterFrag(assemblyData.content[0]),
-                "assembly",
+                "fragment",
                 testAssembly
               ));
             });
@@ -123,7 +124,7 @@ describe("TextAssembly", () => {
 
             expect(result).toEqual(mockCursor(
               beforeFrag(testAssembly.prefix),
-              "assembly",
+              "fragment",
               testAssembly
             ));
           });
@@ -135,7 +136,7 @@ describe("TextAssembly", () => {
 
             expect(result).toEqual(mockCursor(
               insideFrag(testAssembly.prefix),
-              "assembly",
+              "fragment",
               testAssembly
             ));
           });
@@ -148,7 +149,7 @@ describe("TextAssembly", () => {
 
             expect(result).toEqual(mockCursor(
               insideFrag(testAssembly.suffix),
-              "assembly",
+              "fragment",
               testAssembly
             ));
           });
@@ -161,7 +162,7 @@ describe("TextAssembly", () => {
 
             expect(result).toEqual(mockCursor(
               afterFrag(testAssembly.suffix),
-              "assembly",
+              "fragment",
               testAssembly
             ));
           });
@@ -190,7 +191,7 @@ describe("TextAssembly", () => {
 
                 expect(result).toEqual(mockCursor(
                   afterFrag(testAssembly.prefix),
-                  "assembly",
+                  "fragment",
                   testAssembly
                 ));
               });
@@ -210,7 +211,7 @@ describe("TextAssembly", () => {
 
                 expect(result).toEqual(mockCursor(
                   beforeFrag(testAssembly.suffix),
-                  "assembly",
+                  "fragment",
                   testAssembly
                 ));
               });
@@ -233,7 +234,7 @@ describe("TextAssembly", () => {
 
               expect(result).toEqual(mockCursor(
                 afterFrag(sourceAssembly.prefix),
-                "assembly",
+                "fragment",
                 testAssembly
               ));
             });
@@ -249,7 +250,7 @@ describe("TextAssembly", () => {
               const cursor = mockCursor(0, "fullText", testAssembly);
               const result = testAssembly.fromFullText(cursor);
 
-              expect(result).toEqual(mockCursor(0, "assembly", testAssembly));
+              expect(result).toEqual(mockCursor(0, "fragment", testAssembly));
             });
           });
         });
@@ -266,18 +267,18 @@ describe("TextAssembly", () => {
 
         interface DescribeParams {
           name: string,
-          testAssembly: TextAssembly,
+          testAssembly: FragmentAssembly,
           theSpecs: readonly SpecParams[]
         }
 
-        const specRunner = (testAssembly: TextAssembly) => (specParams: SpecParams) => {
+        const specRunner = (testAssembly: FragmentAssembly) => (specParams: SpecParams) => {
           const cursorOffset = specParams.cursorOffset as number;
           const expectedOffset = specParams.expectedOffset as number;
 
           const cursor = mockCursor(cursorOffset, "fullText", testAssembly);
           const result = testAssembly.fromFullText(cursor);
 
-          expect(result).toEqual(mockCursor(expectedOffset, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(expectedOffset, "fragment", testAssembly));
         };
 
         const describeRunner = (describeParams: DescribeParams) => {
@@ -314,7 +315,7 @@ describe("TextAssembly", () => {
         } as const;
 
         function* produceForDescribe(
-          produceForSpecs: (testAssembly: TextAssembly) => Iterable<SpecParams>,
+          produceForSpecs: (testAssembly: FragmentAssembly) => Iterable<SpecParams>,
           assemblyMods = baseAssemblyMods
         ): Iterable<DescribeParams> {
           for (const [affixStr, affixArg] of assemblyMods.affixing) {
@@ -370,7 +371,7 @@ describe("TextAssembly", () => {
               ])
             } as const;
 
-            function* forContent(testAssembly: TextAssembly) {
+            function* forContent(testAssembly: FragmentAssembly) {
               for (const [idxStr, fragIndex] of cursorMods.indices) {
                 for (const [posStr, posFn] of cursorMods.positions) {
                   const { prefix, content, suffix } = testAssembly;
@@ -407,7 +408,7 @@ describe("TextAssembly", () => {
         // start of the first content fragment instead.
         describe("with cursor in prefix block", () => {
           const theDescribes = dew(() => {
-            type PositionModifier = (assembly: TextAssembly) => number;
+            type PositionModifier = (assembly: FragmentAssembly) => number;
 
             // Different parts of the prefix have different mappings.
             const cursorMods = {
@@ -421,7 +422,7 @@ describe("TextAssembly", () => {
               ])
             } as const;
 
-            function* forPrefix(testAssembly: TextAssembly) {
+            function* forPrefix(testAssembly: FragmentAssembly) {
               for (const [posStr, posMod] of cursorMods.positions) {
                 const { prefix } = testAssembly;
                 const [originFn, expectedFn] = Array.isArray(posMod) ? posMod : [posMod, posMod];
@@ -453,7 +454,7 @@ describe("TextAssembly", () => {
         // end of the last content fragment instead.
         describe("with cursor in suffix block", () => {
           const theDescribes = dew(() => {
-            type PositionModifier = (assembly: TextAssembly) => number;
+            type PositionModifier = (assembly: FragmentAssembly) => number;
 
             // Different parts of the suffix have different mappings.
             const cursorMods = {
@@ -467,7 +468,7 @@ describe("TextAssembly", () => {
               ])
             } as const;
 
-            function* forSuffix(testAssembly: TextAssembly) {
+            function* forSuffix(testAssembly: FragmentAssembly) {
               for (const [posStr, posMod] of cursorMods.positions) {
                 const { prefix, suffix, content } = testAssembly;
                 const [originFn, expectedFn] = Array.isArray(posMod) ? posMod : [posMod, posMod];
