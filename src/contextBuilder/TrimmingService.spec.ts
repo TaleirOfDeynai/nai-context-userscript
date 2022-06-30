@@ -8,16 +8,21 @@ import levDist from "fast-levenshtein";
 import AppConstants from "@nai/AppConstants";
 import $TrimmingService from "./TrimmingService";
 import $TrimmingProviders from "./TrimmingProviders";
-import $TextAssembly from "./TextAssembly";
+import $ContentAssembly from "./ContentAssembly";
+import $TokenizedAssembly from "./TokenizedAssembly";
 
 import type { SpyInstance } from "jest-mock";
-import type { TextAssembly } from "./TextAssembly";
+import type { FragmentAssembly } from "./FragmentAssembly";
+import type { ContentAssembly } from "./ContentAssembly";
+import type { TokenizedAssembly } from "./TokenizedAssembly";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimDirection } from "./TrimmingProviders";
 import type { Trimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
 
-type TextAssemblyCtor = ReturnType<typeof $TextAssembly>["TextAssembly"];
+type SomeAssemblyCtor
+  = ReturnType<typeof $ContentAssembly>["ContentAssembly"]
+  | ReturnType<typeof $TokenizedAssembly>["TokenizedAssembly"];
 
 const fakeRequire: any = (module: any) => {
   switch (module) {
@@ -29,22 +34,25 @@ const fakeRequire: any = (module: any) => {
   }
 };
 
-const textAssembly = $TextAssembly(fakeRequire);
+const { ContentAssembly } = $ContentAssembly(fakeRequire);
+const { TokenizedAssembly } = $TokenizedAssembly(fakeRequire);
 const providers = $TrimmingProviders(fakeRequire);
 const trimming = $TrimmingService(fakeRequire);
 
-const mockAssembly = (
+const mockAssembly = <T extends FragmentAssembly = FragmentAssembly>(
   content: Iterable<TextFragment>,
   prefix: TextFragment,
-  suffix: TextFragment
-): TextAssembly => {
+  suffix: TextFragment,
+  extraProps?: Object
+): T => {
   return {
     prefix, content, suffix,
     *[Symbol.iterator]() {
       if (prefix.content) yield prefix;
       yield* content;
       if (suffix.content) yield suffix;
-    }
+    },
+    ...extraProps
   } as any;
 }
 
@@ -54,7 +62,7 @@ const mockNewAssembly = (
   srcContent: string,
   srcPrefix?: string,
   srcSuffix?: string
-): TextAssembly => {
+): FragmentAssembly => {
   const prefix = mockFragment(srcPrefix ?? "", 0);
   const content = mockFragment(srcContent, 0, prefix);
   const suffix = mockFragment(srcSuffix ?? "", 0, content);
@@ -65,16 +73,30 @@ const mockParams: ContextParams = Object.freeze({ tokenCodec: mockCodec }) as an
 
 /**
  * Sets a spy and mock implementation on
- * {@link TextAssemblyCtor.fromDerived TextAssembly.fromDerived}.
+ * {@link SomeAssemblyCtor.fromDerived SomeAssemblyCtor.fromDerived}.
  * 
  * Use the function returned to get the spy during the test.
  */
-const withFromDerivedSpy = () => {
-  let spy: SpyInstance<typeof textAssembly.TextAssembly["fromDerived"]>;
+function withFromDerivedSpy(ctor: typeof ContentAssembly): () => SpyInstance<typeof ContentAssembly["fromDerived"]>;
+function withFromDerivedSpy(ctor: typeof TokenizedAssembly): () => SpyInstance<typeof TokenizedAssembly["fromDerived"]>;
+function withFromDerivedSpy(ctor: SomeAssemblyCtor) {
+  let spy: SpyInstance<any>;
   
   beforeEach(() => {
-    spy = jest.spyOn(textAssembly.TextAssembly, "fromDerived")
-      .mockImplementation((f, o) => mockAssembly(f, o.prefix, o.suffix));
+    if (ctor === ContentAssembly) {
+      spy = jest.spyOn(ctor as typeof ContentAssembly, "fromDerived")
+        .mockImplementation((f, o) => {
+          return mockAssembly<ContentAssembly>(f, o.prefix, o.suffix);
+        });
+    }
+    else {
+      spy = jest.spyOn(ctor as typeof TokenizedAssembly, "fromDerived")
+        .mockImplementation((f, o, _, opts) => {
+          const tokens = opts?.tokens ?? [];
+          const assembly = mockAssembly<TokenizedAssembly>(f, o.prefix, o.suffix, { tokens });
+          return Promise.resolve(assembly);
+        });
+    }
   });
 
   afterEach(() => {
@@ -171,7 +193,7 @@ describe("execTrimTokens", () => {
   // is doing what we expect.  Failures here might indicate a need
   // for a new test in another spec.
 
-  withFromDerivedSpy();
+  withFromDerivedSpy(TokenizedAssembly);
 
   const theStory = withMockStory();
 
@@ -440,7 +462,7 @@ describe("trimByTokens", () => {
   // Unfortunately, since the user-script modules call functions
   // directly, we can't use spies to just check for calls.  Oh well!
 
-  withFromDerivedSpy();
+  withFromDerivedSpy(TokenizedAssembly);
 
   const theStory = withMockStory();
 
@@ -477,7 +499,7 @@ describe("trimByTokens", () => {
 describe("trimByLength", () => {
   // This is again mostly just a sanity check.
 
-  withFromDerivedSpy();
+  withFromDerivedSpy(ContentAssembly);
 
   const theStory = withMockStory();
 
