@@ -11,7 +11,7 @@ import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { StreamEncodeFn, EncodeResult } from "./TokenizerService";
-import type { TextAssembly } from "./TextAssembly";
+import type { FragmentAssembly } from "./FragmentAssembly";
 
 export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];
@@ -29,11 +29,11 @@ export type SplitterFn = (text: TextFragment) => Iterable<TextFragment>;
  */
 export interface TrimProvider extends Record<TrimType, SplitterFn> {
   /**
-   * Typically performs the conversion of a {@link TextAssembly} into an
+   * Typically performs the conversion of a {@link FragmentAssembly} into an
    * iterable of {@link TextFragment} to be trimmed, as needed, but can
    * also handle other pre-trimming processing on those fragments.
    */
-  preProcess: (assembly: TextAssembly) => Iterable<TextFragment>;
+  preProcess: (assembly: FragmentAssembly) => Iterable<TextFragment>;
   /**
    * Whether this provider iterates fragments in reverse, from the end of
    * the input string towards the beginning.
@@ -78,7 +78,7 @@ export default usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
 
   // Generally, we just work off the assembly's content.
-  const basicPreProcess = (assembly: TextAssembly) => assembly.content;
+  const basicPreProcess = (assembly: FragmentAssembly) => assembly.content;
 
   // For `doNotTrim`, we do not trim...  So, yield an empty iterable.
   const noop = (): Iterable<TextFragment> => [];
