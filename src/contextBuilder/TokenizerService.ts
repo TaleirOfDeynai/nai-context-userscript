@@ -7,6 +7,7 @@ import { defer } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
 import $TokenizerCodec from "@nai/TokenizerCodec";
 import $TextSplitterService from "./TextSplitterService";
+import { onEndContext } from "./rx/events";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { Deferred } from "@utils/functions";
@@ -74,6 +75,36 @@ export interface StreamEncodeFn {
     options?: StreamEncodeOptions
   ): AsyncIterable<EncodeResult>
 }
+
+export interface TokenData {
+  index: number;
+  token: number;
+  value: string;
+}
+
+namespace TokenOffset {
+  interface Single {
+    type: "single";
+    /** The data of the token. */
+    data: TokenData;
+    /** How many characters into `data.value` the original offset resides. */
+    remainder: number;
+  }
+  
+  interface Double {
+    type: "double";
+    /** The data of the token before the offset. */
+    min: TokenData;
+    /** The data of the token after the offset. */
+    max: TokenData;
+    /** There is no dangling offset. */
+    remainder: 0;
+  }
+  
+  export type Result = Single | Double;
+}
+
+export type TokenOffsetResult = TokenOffset.Result;
 
 type ResumeTuple = [
   /** The tokens considered unstable. */
@@ -482,10 +513,105 @@ export default usModule((require, exports) => {
     return wrapInTaskRunner(codec);
   }
 
+  type TokenCache = Map<number, Promise<string>>;
+  const tokenCache = new Map<TokenCodec, TokenCache>();
+
+  onEndContext.subscribe(() => {
+    tokenCache.clear();
+  });
+
+  /**
+   * Gets the translated string for a single token.  This uses a cache
+   * that is reset after a context is generated.
+   */
+  const getTokenString = (
+    /** The token codec to use. */
+    codec: TokenCodec,
+    /** The token to translate. */
+    token: number
+  ): Promise<string> => {
+    let theCache = tokenCache.get(codec);
+    if (!theCache) {
+      theCache = new Map();
+      tokenCache.set(codec, theCache);
+    }
+
+    let result = theCache.get(token);
+    if (!result) {
+      result = codec.decode([token]);
+      theCache.set(token, result);
+    }
+    return result;
+  };
+
+  /**
+   * Searches the given `tokens` to locate a range of indices in `tokens`
+   * that contains the cursor at some `offset` number of characters.
+   * 
+   * It returns a range, since the offset could lie between two tokens.
+   * If it does not, both elements of the returned array will be equal.
+   * 
+   * @todo Investigate if a binary search would be more efficient.
+   */
+  const tokensOfOffset = async (
+    /** The token codec to use. */
+    codec: TokenCodec,
+    /** The array of tokens to search. */
+    tokens: Tokens,
+    /** The character offset to locate. */
+    offset: number
+  ): Promise<UndefOr<TokenOffsetResult>> => {
+    if (!tokens.length) return undefined;
+
+    // Hopefully this won't be too rough with our tokenizer optimizations.
+    // A decode should be quite quick, but this is potentially several
+    // hundred decodes all at once.
+    const tokenTable = await chain(new Set(tokens))
+      .map(async (token) => [token, await getTokenString(codec, token)] as const)
+      .value(async (promises) => new Map(await Promise.all([...promises])));
+    
+    let curOffset = 0;
+    let result = [] as number[];
+
+    for (let i = 0, len = tokens.length; i < len; i++) {
+      if (result.length === 2) break;
+      if (offset < curOffset) break;
+
+      const token = tokens[i];
+      const value = tokenTable.get(token) as string;
+      curOffset += value.length;
+
+      if (offset > curOffset) continue;
+      result.push(i);
+    }
+
+    const getData = (index: number): TokenData => {
+      const token = tokens[index];
+      const value = tokenTable.get(token) as string;
+      return { index, token, value };
+    };
+
+    switch (result.length) {
+      case 2: {
+        const min = getData(result[0]);
+        const max = getData(result[1]);
+        return { type: "double", min, max, remainder: 0 };
+      }
+      case 1: {
+        const data = getData(result[0]);
+        const remainder = data.value.length - (curOffset - offset);
+        return { type: "single", data, remainder };
+      }
+      default: return undefined;
+    }
+  };
+
   return Object.assign(exports, {
     isCodec,
     codecFor,
     mendTokens,
+    getTokenString,
+    tokensOfOffset,
     prependEncoder,
     appendEncoder
   });

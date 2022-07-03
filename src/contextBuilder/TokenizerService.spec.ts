@@ -567,3 +567,69 @@ describe("append encoder", () => {
     await expect(result).rejects.toThrow();
   });
 });
+
+describe("tokensOfOffset", () => {
+  const { tokensOfOffset } = tokenizer;
+
+  it("should find a single index when inside a token", async () => {
+    const tokens = [301, 1, 302]; // "foo bar"
+
+    const fooResult = await tokensOfOffset(mockCodec, tokens, 2);
+    expect(fooResult).toEqual({
+      type: "single",
+      data: {
+        index: 0,
+        token: 301,
+        value: "foo"
+      },
+      remainder: 2
+    });
+
+    const barResult = await tokensOfOffset(mockCodec, tokens, 5);
+    expect(barResult).toEqual({
+      type: "single",
+      data: {
+        index: 2,
+        token: 302,
+        value: "bar"
+      },
+      remainder: 1
+    });
+  });
+
+  it("should find a range when bordering two tokens", async () => {
+    const tokens = [301, 1, 302]; // "foo bar"
+
+    const fooResult = await tokensOfOffset(mockCodec, tokens, 3);
+    expect(fooResult).toEqual({
+      type: "double",
+      min: {
+        index: 0,
+        token: 301,
+        value: "foo"
+      },
+      max: {
+        index: 1,
+        token: 1,
+        value: " "
+      },
+      remainder: 0
+    });
+
+    const barResult = await tokensOfOffset(mockCodec, tokens, 4);
+    expect(barResult).toEqual({
+      type: "double",
+      min: {
+        index: 1,
+        token: 1,
+        value: " "
+      },
+      max: {
+        index: 2,
+        token: 302,
+        value: "bar"
+      },
+      remainder: 0
+    });
+  });
+});
