@@ -525,8 +525,7 @@ const theModule = usModule((require, exports) => {
     /**
      * Converts an fragment cursor into a full-text cursor.
      * 
-     * The cursor must be for this assembly and addressing a fragment that
-     * exists within this assembly.
+     * The cursor must be addressing a fragment that exists within this assembly.
      */
     toFullText(cursor: FragmentCursor): FullTextCursor {
       assert(
@@ -534,8 +533,8 @@ const theModule = usModule((require, exports) => {
         cursor.type === "fragment"
       );
       assert(
-        "Expected cursor to be for this assembly.",
-        cursor.origin === this
+        "Expected cursor to be related to this assembly.",
+        this.isRelatedTo(cursor.origin)
       );
       assert(
         "Expected cursor to belong to a fragment of this assembly.",

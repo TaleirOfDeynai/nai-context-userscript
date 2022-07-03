@@ -21,7 +21,7 @@ describe("FragmentAssembly", () => {
           testAssembly.toFullText(cursor);
         });
   
-        it.failing("should FAIL if cursor is not for the assembly", () => {
+        it.failing("should FAIL if cursor is not related to the assembly", () => {
           const offset = insideFrag(offsetFrags.content[2]);
           const cursor = mockCursor(offset, "fragment", { origin: {} });
 
