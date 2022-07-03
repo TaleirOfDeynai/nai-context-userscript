@@ -10,24 +10,9 @@ import $TrimmingProviders from "./TrimmingProviders";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReduceFn } from "@utils/iterables";
-import type { ContextConfig } from "@nai/Lorebook";
-import type { TextFragment, TextOrFragment } from "./TextSplitterService";
+import type { TextFragment } from "./TextSplitterService";
 import type { MatchResult } from "./MatcherService";
 import type { TextSequencer, TrimType } from "./TrimmingProviders";
-
-export interface TextAssemblyOptions {
-  prefix?: ContextConfig["prefix"];
-  suffix?: ContextConfig["suffix"];
-  /**
-   * When the source content is a collection of fragments, whether to make
-   * assumptions on if the fragments are contiguous.
-   * 
-   * Setting this to `true` can save time when creating a lot of derived
-   * assemblies by skipping the iteration to check for continuity in the
-   * fragments.
-   */
-  assumeContinuity?: boolean;
-}
 
 export interface AssemblyStats {
   /** The minimum possible offset of all fragments. */
@@ -40,21 +25,21 @@ export interface AssemblyStats {
   concatLength: number;
 }
 
-export interface AssemblyCursor {
-  readonly type: "assembly";
-  readonly origin: TextAssembly;
+export interface FragmentCursor {
+  readonly type: "fragment";
+  readonly origin: FragmentAssembly;
   readonly offset: number;
 }
 
 export interface FullTextCursor {
   readonly type: "fullText";
-  readonly origin: TextAssembly;
+  readonly origin: FragmentAssembly;
   readonly offset: number;
 }
 
-export type TextCursor = AssemblyCursor | FullTextCursor;
+export type AnyCursor = FragmentCursor | FullTextCursor;
 
-export type TextSelection = readonly [AssemblyCursor, AssemblyCursor];
+export type FragmentSelection = readonly [FragmentCursor, FragmentCursor];
 
 export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";
 
@@ -71,7 +56,7 @@ namespace Position {
   interface SuccessResult {
     type: "inside";
     /** The position to perform the split. */
-    cursor: AssemblyCursor;
+    cursor: FragmentCursor;
   }
 
   /** Insert before/after the assembly. */
@@ -92,25 +77,19 @@ export type PositionResult = Position.Result;
 /** If thorough assertions should be run. */
 const thoroughChecks = userScriptConfig.debugLogging || userScriptConfig.testLogging;
 
-const defaultOptions: Required<TextAssemblyOptions> = {
-  prefix: "",
-  suffix: "",
-  assumeContinuity: false
-};
-
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
-  const { createFragment, isContiguous, hasWords } = splitterService;
+  const { createFragment, hasWords } = splitterService;
   const { beforeFragment, afterFragment } = splitterService;
   const { getSequencersFrom } = $TrimmingProviders(require);
 
   /** Creates a full-text cursor. */
-  function makeCursor(origin: TextAssembly, offset: number, type: "fullText"): FullTextCursor;
+  function makeCursor(origin: FragmentAssembly, offset: number, type: "fullText"): FullTextCursor;
   /** Creates a cursor referencing a fragment in an assembly. */
-  function makeCursor(origin: TextAssembly, offset: number, type?: "assembly"): AssemblyCursor;
+  function makeCursor(origin: FragmentAssembly, offset: number, type?: "fragment"): FragmentCursor;
   /** Creates a cursor of the given type. */
-  function makeCursor(origin: TextAssembly, offset: number, type: TextCursor["type"]): TextCursor;
-  function makeCursor(origin: TextAssembly, offset: number, type: TextCursor["type"] = "assembly") {
+  function makeCursor(origin: FragmentAssembly, offset: number, type: AnyCursor["type"]): AnyCursor;
+  function makeCursor(origin: FragmentAssembly, offset: number, type: AnyCursor["type"] = "fragment") {
     return Object.freeze({ type, origin, offset });
   }
 
@@ -120,38 +99,38 @@ const theModule = usModule((require, exports) => {
    * 
    * As fragments do not have information on their origin assembly,
    * it does not check to make sure the cursor is actually for the
-   * fragment.  Use {@link TextAssembly.positionOf} to interrogate
+   * fragment.  Use {@link FragmentAssembly.positionOf} to interrogate
    * the assembly the fragment came from for that.
    */
-  const isCursorInside = (cursor: TextCursor, fragment: TextFragment) => {
+  const isCursorInside = (cursor: AnyCursor, fragment: TextFragment) => {
     const { offset } = cursor;
     if (offset < beforeFragment(fragment)) return false;
     if (offset > afterFragment(fragment)) return false;
     return true;
   };
 
-  /** Ensures the given cursor is an {@link AssemblyCursor}. */
-  const asAssemblyCursor = (cursor: TextCursor): AssemblyCursor => {
-    if (cursor.type === "assembly") return cursor;
+  /** Ensures the given cursor is an {@link FragmentCursor}. */
+  const asFragmentCursor = (cursor: AnyCursor): FragmentCursor => {
+    if (cursor.type === "fragment") return cursor;
     return cursor.origin.fromFullText(cursor);
   };
 
   /**
-   * Converts a {@link MatchResult} to a {@link TextSelection}.
+   * Converts a {@link MatchResult} to a {@link FragmentSelection}.
    * 
    * If the match is zero-length, the two cursors will both be
    * identical instances.
    */
   const toSelection = (
     match: MatchResult,
-    origin: TextAssembly,
-    type: TextCursor["type"]
-  ): TextSelection => {
+    origin: FragmentAssembly,
+    type: AnyCursor["type"]
+  ): FragmentSelection => {
     const { index, length } = match;
-    const left = asAssemblyCursor(makeCursor(origin, index, type));
+    const left = asFragmentCursor(makeCursor(origin, index, type));
     if (length === 0) return Object.freeze([left, left] as const);
 
-    const right = asAssemblyCursor(makeCursor(origin, index + length, type));
+    const right = asFragmentCursor(makeCursor(origin, index + length, type));
     return Object.freeze([left, right] as const);
   };
 
@@ -184,10 +163,65 @@ const theModule = usModule((require, exports) => {
     };
   };
 
+  /**
+   * Given a cursor and a sequence of text fragments, splits the sequence
+   * into two sequences.  The result is a tuple where the first element
+   * is the text before the cut and the second element is the text after
+   * the cut.
+   * 
+   * It is assumed that `cursor` belongs to some fragment of `content`.
+   */
+  const splitSequenceAt = (
+    content: readonly TextFragment[],
+    cursor: FragmentCursor
+  ): [TextFragment[], TextFragment[]] => {
+    const beforeCut: TextFragment[] = [];
+    const afterCut: TextFragment[] = [];
+    let curBucket = beforeCut;
+    for (const frag of content) {
+      // Do we need to swap buckets?
+      checkForSwap: {
+        if (curBucket === afterCut) break checkForSwap;
+        if (!isCursorInside(cursor, frag)) break checkForSwap;
+
+        const cursorOffset = cursor.offset;
+
+        // This is the fragment of the cut.  Let's figure out how to split
+        // the fragment.  We only need to bother if the point is inside the
+        // fragment, that is, not at one of its ends.  We're going to the
+        // trouble because text fragments are immutable and it'd be nice to
+        // preserve referential equality where possible.
+        switch (cursorOffset) {
+          case beforeFragment(frag):
+            afterCut.push(frag);
+            break;
+          case afterFragment(frag):
+            beforeCut.push(frag);
+            break;
+          default: {
+            const [before, after] = splitterService.splitFragmentAt(frag, cursorOffset);
+            beforeCut.push(before);
+            afterCut.push(after);
+            break;
+          }
+        }
+        // Finally, swap the buckets so we place the remaining fragments in
+        // the correct derivative assembly.
+        curBucket = afterCut;
+        continue;
+      }
+
+      // If we left the `checkForSwap` block, just add it to the current bucket.
+      curBucket.push(frag);
+    }
+
+    return [beforeCut, afterCut];
+  };
+
   type OffsetResult = [offset: number, distance: number];
 
   /**
-   * Just a helper for {@link TextAssembly.findBest}.
+   * Just a helper for {@link FragmentAssembly.findBest}.
    * 
    * This can probably emit multiple identical tuples, but we're okay with that.
    */
@@ -207,7 +241,7 @@ const theModule = usModule((require, exports) => {
     }
   }
 
-  /** A reducer function for {@link TextAssembly.findBest}. */
+  /** A reducer function for {@link FragmentAssembly.findBest}. */
   const _offsetReducer: ReduceFn<OffsetResult, OffsetResult, undefined> = (p, c) => {
     if (!p) return c;
     if (c[1] <= p[1]) return c;
@@ -218,23 +252,23 @@ const theModule = usModule((require, exports) => {
    * An abstraction that standardizes how text is assembled with prefixes
    * and suffixes taken into account.
    * 
-   * It aids searching by ensuring that a {@link TextCursor} for some source
+   * It aids searching by ensuring that an {@link AnyCursor} for some source
    * text will retain consistent offsets as it travels through various parts
    * of the program.
    * 
    * These are also used for trimming and filtering, as the `content` can
    * be any number of fragments, even if non-contiguous or out-of-order.
    * 
-   * Finally, they can be split at specific offsets using a {@link TextCursor},
+   * Finally, they can be split at specific offsets using an {@link AnyCursor},
    * which is handy for assembly.
    */
-  class TextAssembly implements Iterable<TextFragment> {
+  abstract class FragmentAssembly implements Iterable<TextFragment> {
     constructor(
       prefix: TextFragment,
       content: Iterable<TextFragment>,
       suffix: TextFragment,
       isContiguous: boolean,
-      source: TextAssembly | null
+      source: FragmentAssembly | null
     ) {
       assert(
         "Expected `source` to be a source assembly.",
@@ -267,145 +301,8 @@ const theModule = usModule((require, exports) => {
       }
     }
 
-    /**
-     * Creates a new source assembly from a single string or {@link TextFragment}.
-     */
-    static fromSource(sourceText: TextOrFragment, options?: TextAssemblyOptions) {
-      const { prefix, suffix } = { ...defaultOptions, ...options };
-
-      const prefixFragment = createFragment(prefix, 0);
-
-      const sourceFragment = dew(() => {
-        let content: string;
-        let offset = afterFragment(prefixFragment);
-        if (typeof sourceText === "string") content = sourceText;
-        else {
-          content = sourceText.content;
-          offset += sourceText.offset;
-        }
-        
-        if (!content) return undefined;
-        return createFragment(content, offset);
-      });
-
-      const suffixOffset = afterFragment(sourceFragment ?? prefixFragment);
-      const suffixFragment = createFragment(suffix, suffixOffset);
-
-      return new TextAssembly(
-        prefixFragment,
-        toImmutable(sourceFragment ? [sourceFragment] : []),
-        suffixFragment,
-        true, // Can only be contiguous.
-        null
-      );
-    }
-
-    /**
-     * Creates a new source assembly from a collection of {@link TextFragment}.
-     */
-    static fromFragments(sourceFrags: Iterable<TextFragment>, options?: TextAssemblyOptions) {
-      const { prefix, suffix, assumeContinuity } = { ...defaultOptions, ...options };
-
-      const adjustedFrags = chain(sourceFrags)
-        .filter((f) => Boolean(f.content))
-        .thru((frags) => {
-          if (!prefix) return frags;
-          return IterOps.mapIter(
-            frags,
-            ({ content, offset }) => createFragment(content, prefix.length + offset)
-          );
-        })
-        .value(toImmutable);
-
-      const maxOffset = chain(adjustedFrags)
-        .map(afterFragment)
-        .reduce(0, Math.max);
-
-      return new TextAssembly(
-        createFragment(prefix, 0),
-        adjustedFrags,
-        createFragment(suffix, maxOffset),
-        assumeContinuity ? true : isContiguous(adjustedFrags),
-        null
-      );
-    }
-
-    /**
-     * Creates a new assembly derived from the given `originAssembly`.  The given
-     * `fragments` should have originated from the origin assembly's
-     * {@link TextAssembly.content content}.
-     * 
-     * If `fragments` contains the origin's `prefix` and `suffix`, they are
-     * filtered out automatically.  This is because `TextAssembly` is itself an
-     * `Iterable<TextFragment>` and sometimes you just wanna apply a simple
-     * transformation on its fragments, like a filter.
-     */
-    static fromDerived(
-      /** The fragments making up the derivative's content. */
-      fragments: Iterable<TextFragment>,
-      /**
-       * The assembly whose fragments were used to make the given fragments.
-       * This assembly does not need to be a source assembly.
-       */
-      originAssembly: TextAssembly,
-      /**
-       * Whether to make assumptions on if the fragments are contiguous.
-       * 
-       * Setting this to `true` can save time when creating a lot of derived
-       * assemblies by skipping the iteration to check for continuity in the
-       * fragments.
-       */
-      assumeContinuity: boolean = false
-    ) {
-      // Fast path: the underlying data of `TextAssembly` is immutable, so if
-      // we're given one, just spit it right back out.
-      if (fragments instanceof TextAssembly) {
-        // But make sure we're still internally consistent.
-        assert(
-          "Expected the assembly to be related to `originAssembly`.",
-          TextAssembly.checkRelated(fragments, originAssembly)
-        );
-        return fragments;
-      }
-
-      // Make sure we actually have the source assembly.
-      const { source } = originAssembly;
-      // Use the given instance's prefix and suffix, though.  It may now
-      // differ from the source due to splitting and the like.
-      const { prefix, suffix } = originAssembly;
-
-      const localFrags = chain(fragments)
-        // Just make sure the prefix and suffix fragments are not included.
-        .filter((v) => v !== prefix && v !== suffix)
-        .value(toImmutable);
-
-      const assembly = new TextAssembly(
-        prefix, localFrags, suffix,
-        // We'll assume the derived assembly has the same continuity as
-        // its origin assembly.
-        assumeContinuity ? originAssembly.#isContiguous : isContiguous(localFrags),
-        source
-      );
-
-      // Also sanity check the content if thorough logging is enabled.
-      if (thoroughChecks) {
-        const oldStats = source.contentStats;
-        const newStats = assembly.contentStats;
-        assert(
-          "Expected minimum offset to be in range of source.",
-          newStats.minOffset >= oldStats.minOffset
-        );
-        assert(
-          "Expected maximum offset to be in range of source.",
-          newStats.maxOffset <= oldStats.maxOffset
-        );
-      }
-
-      return assembly;
-    }
-
     /** Checks if two assemblies have the same source, and thus, comparable content. */
-    static checkRelated(a: TextAssembly, b: TextAssembly): boolean {
+    static checkRelated(a: FragmentAssembly, b: FragmentAssembly): boolean {
       return a.source === b.source;
     }
 
@@ -442,7 +339,7 @@ const theModule = usModule((require, exports) => {
     #assemblyStats: UndefOr<AssemblyStats> = undefined;
 
     /**
-     * The stats for only the {@link TextAssembly.content content} portion of
+     * The stats for only the {@link FragmentAssembly.content content} portion of
      * the assembly.
      */
     get contentStats(): AssemblyStats {
@@ -454,13 +351,13 @@ const theModule = usModule((require, exports) => {
     #contentStats: UndefOr<AssemblyStats> = undefined;
 
     /**
-     * The source of this text assembly.  If `isSource` is `true`, this
+     * The source of this assembly.  If `isSource` is `true`, this
      * will return itself, so this will always get a source fragment.
      */
-    get source(): TextAssembly {
+    get source(): FragmentAssembly {
       return this.#source ?? this;
     }
-    readonly #source: TextAssembly | null;
+    readonly #source: FragmentAssembly | null;
 
     /** Whether this assembly was generated directly from a source text. */
     get isSource(): boolean {
@@ -468,14 +365,21 @@ const theModule = usModule((require, exports) => {
     }
 
     /** Whether either `prefix` and `suffix` are non-empty. */
+    get isAffixed() {
+      return this.#isAffixed;
+    }
     readonly #isAffixed: boolean;
+
     /** Whether `content` is contiguous. */
+    get isContiguous() {
+      return this.#isContiguous;
+    }
     readonly #isContiguous: boolean;
 
     /**
      * Iterator that yields all fragments that are not empty.  This can
-     * include both the {@link TextAssembly.prefix prefix} and the
-     * {@link TextAssembly.suffix suffix}.
+     * include both the {@link FragmentAssembly.prefix prefix} and the
+     * {@link FragmentAssembly.suffix suffix}.
      */
     *[Symbol.iterator](): Iterator<TextFragment> {
       const { prefix, content, suffix } = this;
@@ -502,7 +406,7 @@ const theModule = usModule((require, exports) => {
      * - Between a wordy fragment and a non-wordy fragment, use the wordy fragment.
      * - Otherwise, whichever fragment comes first in natural order.
      */
-    fromFullText(cursor: FullTextCursor): AssemblyCursor {
+    fromFullText(cursor: FullTextCursor): FragmentCursor {
       assert(
         "Expected a full-text cursor.",
         cursor.type === "fullText"
@@ -619,19 +523,18 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Converts an assembly cursor into a full-text cursor.
+     * Converts an fragment cursor into a full-text cursor.
      * 
-     * The cursor must be for this assembly and addressing a fragment that
-     * exists within this assembly.
+     * The cursor must be addressing a fragment that exists within this assembly.
      */
-    toFullText(cursor: AssemblyCursor): FullTextCursor {
+    toFullText(cursor: FragmentCursor): FullTextCursor {
       assert(
-        "Expected an assembly cursor.",
-        cursor.type === "assembly"
+        "Expected an fragment cursor.",
+        cursor.type === "fragment"
       );
       assert(
-        "Expected cursor to be for this assembly.",
-        cursor.origin === this
+        "Expected cursor to be related to this assembly.",
+        this.isRelatedTo(cursor.origin)
       );
       assert(
         "Expected cursor to belong to a fragment of this assembly.",
@@ -654,15 +557,15 @@ const theModule = usModule((require, exports) => {
      * Checks to ensure that the cursor references a valid text fragment;
      * that is, the fragment of this cursor is not missing.
      * 
-     * When `cursor` originated from another {@link TextAssembly} that was
+     * When `cursor` originated from another {@link FragmentAssembly} that was
      * created from the same source text, this can be used to validate that
      * the fragment the cursor is trying to target is still in this instance's
      * `content` array.
      */
-    isFoundIn(cursor: AssemblyCursor): boolean {
+    isFoundIn(cursor: FragmentCursor): boolean {
       assert(
-        "Expected an assembly cursor.",
-        cursor.type === "assembly"
+        "Expected an fragment cursor.",
+        cursor.type === "fragment"
       );
       assert(
         "Expected cursor to be related to this assembly.",
@@ -686,20 +589,20 @@ const theModule = usModule((require, exports) => {
      * If the assembly is empty (all fragments have length-zero content),
      * it will reposition it to the nearest prefix or suffix offset.
      * 
-     * When `cursor` originated from a related {@link TextAssembly}, this
+     * When `cursor` originated from a related {@link FragmentAssembly}, this
      * can be used to adapt the cursor to a reasonable position that does
      * exist.
      */
     findBest(
       /** The cursor to potentially adjust. */
-      cursor: AssemblyCursor,
+      cursor: FragmentCursor,
       /**
        * Whether to favor content fragments.  This does not guarantee that
        * the returned cursor will be inside the content, but it will do
        * its best.
        */
       preferContent: boolean = false
-    ): AssemblyCursor {
+    ): FragmentCursor {
       // This also does the various assertions, so no need to repeat those.
       if (this.isFoundIn(cursor)) {
         if (!preferContent) return cursor;
@@ -752,107 +655,13 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Given a cursor placed within this assembly's content, splits this
-     * assembly into two assemblies.  The result is a tuple where the
-     * first element is the text before the cut and the second element
-     * is the text after the cut.
-     * 
-     * The `suffix` of the first assembly and the `prefix` of the second
-     * assembly will be empty, and so may differ from their shared source.
-     * 
-     * If a cut cannot be made, `undefined` is returned.
-     */
-    splitAt(
-      /** The cursor demarking the position of the cut. */
-      cursor: AssemblyCursor,
-      /**
-       * If `true` and no fragment exists in the assembly for the position,
-       * the next best position will be used instead as a fallback.
-       */
-      loose: boolean = false
-    ): UndefOr<[TextAssembly, TextAssembly]> {
-      const usedCursor = dew(() => {
-        // The input cursor must be for the content.
-        if (this.positionOf(cursor) !== "content") return undefined;
-        if (!loose) return this.isFoundIn(cursor) ? cursor : undefined;
-        const bestCursor = this.findBest(cursor, true);
-        // Make sure the cursor did not get moved out of the content.
-        // This can happen when the content is empty; the only remaining
-        // place it could be moved was to a prefix/suffix fragment.
-        return this.positionOf(bestCursor) === "content" ? bestCursor : undefined;
-      });
-
-      if (!usedCursor) return undefined;
-
-      const beforeCut: TextFragment[] = [];
-      const afterCut: TextFragment[] = [];
-      let curBucket = beforeCut;
-      for (const frag of this.content) {
-        // Do we need to swap buckets?
-        checkForSwap: {
-          if (curBucket === afterCut) break checkForSwap;
-          if (!isCursorInside(usedCursor, frag)) break checkForSwap;
-
-          const cursorOffset = usedCursor.offset;
-
-          // This is the fragment of the cut.  Let's figure out how to split
-          // the fragment.  We only need to bother if the point is inside the
-          // fragment, that is, not at one of its ends.  We're going to the
-          // trouble because text fragments are immutable and it'd be nice to
-          // preserve referential equality where possible.
-          switch (cursorOffset) {
-            case beforeFragment(frag):
-              afterCut.push(frag);
-              break;
-            case afterFragment(frag):
-              beforeCut.push(frag);
-              break;
-            default: {
-              const [before, after] = splitterService.splitFragmentAt(frag, cursorOffset);
-              beforeCut.push(before);
-              afterCut.push(after);
-              break;
-            }
-          }
-          // Finally, swap the buckets so we place the remaining fragments in
-          // the correct derivative assembly.
-          curBucket = afterCut;
-          continue;
-        }
-
-        // If we left the `checkForSwap` block, just add it to the current bucket.
-        curBucket.push(frag);
-      }
-
-      // If we're splitting this assembly, it doesn't make sense to preserve
-      // the suffix on the assembly before the cut or the prefix after the cut.
-      // Replace them with empty fragments, as needed.
-      const { prefix, suffix } = this;
-      const afterPrefix = !prefix.content ? prefix : createFragment("", 0, prefix);
-      const beforeSuffix = !suffix.content ? suffix : createFragment("", 0, suffix);
-
-      // Because we're changing the prefix and suffix, we're going to invoke
-      // the constructor directly instead of using `fromDerived`.
-      return [
-        new TextAssembly(
-          prefix, toImmutable(beforeCut), beforeSuffix,
-          this.#isContiguous, this.source
-        ),
-        new TextAssembly(
-          afterPrefix, toImmutable(afterCut), suffix,
-          this.#isContiguous, this.source
-        )
-      ];
-    }
-
-    /**
      * A helper function for {@link fragmentsFrom} to get the fragments
      * starting from the fragment identified by a `cursor` toward either
      * the top or bottom of the text.
      */
     #fragsStartingFrom(
       /** The cursor that will identify the starting fragment. */
-      cursor: AssemblyCursor,
+      cursor: FragmentCursor,
       /** Which direction to iterate. */
       direction: IterDirection
     ): Iterable<TextFragment> {
@@ -869,7 +678,7 @@ const theModule = usModule((require, exports) => {
      */
     #sequenceFragments(
       /** The cursor that will identify the starting fragment. */
-      cursor: AssemblyCursor,
+      cursor: FragmentCursor,
       /** The input fragments to process. */
       inFrags: Iterable<TextFragment>,
       /** The sequencers left to run. */
@@ -912,11 +721,11 @@ const theModule = usModule((require, exports) => {
       /**
        * A cursor or selection marking the position of the iteration.
        * 
-       * If a {@link TextSelection}:
+       * If a {@link FragmentSelection}:
        * - When `direction` is `"toTop"`, the first cursor is used.
        * - When `direction` is `"toBottom"`, the second cursor is used.
        */
-      position: AssemblyCursor | TextSelection,
+      position: FragmentCursor | FragmentSelection,
       /** The splitting type to use to generate the fragments. */
       splitType: TrimType,
       /** Which direction to iterate. */
@@ -929,7 +738,7 @@ const theModule = usModule((require, exports) => {
 
       // In case the cursor points to no existing fragment, this will move
       // it to the next nearest fragment.
-      const cursor = this.findBest(position as AssemblyCursor);
+      const cursor = this.findBest(position as FragmentCursor);
 
       const initFrags = this.#fragsStartingFrom(cursor, direction);
       const provider = direction === "toTop" ? "trimTop" : "trimBottom";
@@ -956,11 +765,11 @@ const theModule = usModule((require, exports) => {
       /**
        * A cursor or selection marking the position of the iteration.
        * 
-       * If a {@link TextSelection}:
+       * If a {@link FragmentSelection}:
        * - When `direction` is `"toTop"`, the first cursor is used.
        * - When `direction` is `"toBottom"`, the second cursor is used.
        */
-      position: AssemblyCursor | TextSelection,
+      position: FragmentCursor | FragmentSelection,
       /** The type of insertion being done. */
       insertionType: TrimType,
       /** Which direction to look for an insertion position. */
@@ -1050,7 +859,7 @@ const theModule = usModule((require, exports) => {
      * 
      * If the cursor could go either way, it will favor toward the top.
      */
-    bumpOut(cursor: AssemblyCursor): PositionResult {
+    bumpOut(cursor: FragmentCursor): PositionResult {
       // We actually want to convert this to full-text...
       const { offset } = this.toFullText(cursor);
       // ...because then it's stupid simple to tell which side is closer.
@@ -1058,26 +867,6 @@ const theModule = usModule((require, exports) => {
       if (offset <= fullLength / 2)
         return { type: "insertBefore", shunted: offset };
       return { type: "insertAfter", shunted: fullLength - offset };
-    }
-
-    /**
-     * Generates a version of this assembly that has no prefix or suffix.
-     * 
-     * It still has the same source, so cursors for that source will still
-     * work as expected.
-     */
-    asOnlyContent(): TextAssembly {
-      // No need if we don't have a prefix or suffix.
-      if (!this.#isAffixed) return this;
-
-      // Replace the suffix and prefix with zero-length fragments.
-      const { prefix, suffix } = this;
-      return new TextAssembly(
-        !prefix.content ? prefix : createFragment("", 0, prefix),
-        this.#content,
-        !suffix.content ? suffix : createFragment("", 0, suffix),
-        this.#isContiguous, this.source
-      );
     }
 
     /**
@@ -1097,10 +886,10 @@ const theModule = usModule((require, exports) => {
      * corresponds to the cursor's position.  Use {@link isFoundIn} to make that
      * determination.
      */
-    positionOf(cursor: AssemblyCursor): CursorPosition {
+    positionOf(cursor: FragmentCursor): CursorPosition {
       assert(
-        "Expected an assembly cursor.",
-        cursor.type === "assembly"
+        "Expected an fragment cursor.",
+        cursor.type === "fragment"
       );
 
       // Can't be in this assembly if it is unrelated.
@@ -1124,23 +913,24 @@ const theModule = usModule((require, exports) => {
     /**
      * Determines if this assembly and `otherAssembly` share a source.
      * 
-     * If they are related, {@link TextCursor text cursors} for one assembly
+     * If they are related, {@link AnyCursor text cursors} for one assembly
      * should have meaning to the other.
      */
-    isRelatedTo(otherAssembly: TextAssembly) {
-      return TextAssembly.checkRelated(this, otherAssembly);
+    isRelatedTo(otherAssembly: FragmentAssembly) {
+      return FragmentAssembly.checkRelated(this, otherAssembly);
     }
   }
 
   return Object.assign(exports, {
     isCursorInside,
     makeCursor,
-    asAssemblyCursor,
+    asFragmentCursor,
     toSelection,
     getStats,
-    TextAssembly
+    splitSequenceAt,
+    FragmentAssembly
   });
 });
 
 export default theModule;
-export type TextAssembly = InstanceType<ReturnType<typeof theModule>["TextAssembly"]>;
+export type FragmentAssembly = InstanceType<ReturnType<typeof theModule>["FragmentAssembly"]>;

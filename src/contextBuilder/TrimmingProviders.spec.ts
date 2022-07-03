@@ -8,7 +8,7 @@ import { chain, interweave, flatMap, iterReverse, skipRight } from "@utils/itera
 import $TrimmingProviders from "./TrimmingProviders";
 import AppConstants from "@nai/AppConstants";
 
-import type { TextAssembly } from "./TextAssembly";
+import type { FragmentAssembly } from "./FragmentAssembly";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimProvider, SplitterFn } from "./TrimmingProviders";
 
@@ -132,7 +132,7 @@ describe("comment removal", () => {
   });
 
   // These currently only interact with the `content` property.
-  const mockAssembly = (lines: readonly string[]): TextAssembly => {
+  const mockAssembly = (lines: readonly string[]): FragmentAssembly => {
     const content = chain(lines)
       .thru((iter) => interweave("\n", iter))
       .value((iter) => Object.freeze([mockFragment([...iter].join(""), 10)]));
@@ -207,7 +207,7 @@ describe("comment removal", () => {
     const provider = providers.removeComments.trimBottom;
     const { preProcess, newline, reversed } = provider;
 
-    it("should pre-process by extracting the text assembly's content", () => {
+    it("should pre-process by extracting the assembly's content", () => {
       const assembly = mockAssembly(simpleTests.baseLines);
       expect(preProcess(assembly)).toBe(assembly.content);
     });
@@ -220,7 +220,7 @@ describe("comment removal", () => {
     const provider = providers.removeComments.trimTop;
     const { preProcess, newline, reversed } = provider;
 
-    it("should pre-process by extracting the text assembly's content", () => {
+    it("should pre-process by extracting the assembly's content", () => {
       const assembly = mockAssembly(simpleTests.baseLines);
       expect(preProcess(assembly)).toBe(assembly.content);
     });

@@ -1,12 +1,11 @@
 import { describe, it, expect } from "@jest/globals";
 import { mockFragment } from "@spec/helpers-splitter";
 import { afterFrag } from "@spec/helpers-assembly";
-import { Module } from "./_common";
+import { SpecAssembly } from "./_common";
 
-import type { TextAssembly } from "../TextAssembly";
+import type { FragmentAssembly } from "../FragmentAssembly";
 
-describe("TextAssembly", () => {
-  const { TextAssembly } = Module;
+describe("FragmentAssembly", () => {
 
   describe("construction", () => {
     it("should throw if given a `source` that is not a source assembly", () => {
@@ -14,10 +13,10 @@ describe("TextAssembly", () => {
         const prefixFrag = mockFragment("", 0);
         const contentFrag = mockFragment("This is content.", afterFrag(prefixFrag));
         const suffixFrag = mockFragment("", afterFrag(contentFrag));
-        return new TextAssembly(
+        return new SpecAssembly(
           prefixFrag, [contentFrag], suffixFrag,
           true,
-          { isSource: false } as TextAssembly
+          { isSource: false } as FragmentAssembly
         );
       };
 
@@ -29,7 +28,7 @@ describe("TextAssembly", () => {
         const prefixFrag = mockFragment("", 10);
         const contentFrag = mockFragment("This is content.", afterFrag(prefixFrag));
         const suffixFrag = mockFragment("", afterFrag(contentFrag));
-        return new TextAssembly(
+        return new SpecAssembly(
           prefixFrag, [contentFrag], suffixFrag,
           true,
           null
@@ -46,7 +45,7 @@ describe("TextAssembly", () => {
         const firstFrag = mockFragment("", afterFrag(prefixFrag));
         const secondFrag = mockFragment("This is content.", afterFrag(firstFrag));
         const suffixFrag = mockFragment("", afterFrag(secondFrag));
-        return new TextAssembly(
+        return new SpecAssembly(
           prefixFrag, [firstFrag, secondFrag], suffixFrag,
           true,
           null

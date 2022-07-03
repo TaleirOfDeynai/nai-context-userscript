@@ -1,6 +1,6 @@
 import { describe, it } from "@jest/globals";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("iterator", () => {
     it.todo("should iterate through all fragments (no affixing)");
     it.todo("should iterate through all fragments (with affixing)");

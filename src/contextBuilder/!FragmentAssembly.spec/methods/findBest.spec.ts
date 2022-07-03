@@ -2,15 +2,15 @@ import { describe, it, expect } from "@jest/globals";
 import { getEmptyFrag } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
+import { offsetFrags } from "@spec/helpers-assembly";
 import { initAssembly } from "../_common";
-import { offsetFrags } from "../_common";
 
 import { first, last } from "@utils/iterables";
 
-import type { TextAssembly } from "../../TextAssembly";
+import type { FragmentAssembly } from "../../FragmentAssembly";
 import type { TextFragment } from "../../TextSplitterService";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("cursor/selection methods", () => {
     describe("findBest", () => {
       // This always repositions to the nearest existing fragment,
@@ -19,13 +19,13 @@ describe("TextAssembly", () => {
       // they were present.
 
       const runCommonTests = (
-        testAssembly: TextAssembly,
+        testAssembly: FragmentAssembly,
         minContent: TextFragment,
         maxContent: TextFragment
       ) => {
         it("should return the same cursor instance when found", () => {
           const offset = insideFrag(minContent);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
           expect(result).toBe(cursor);
@@ -35,40 +35,40 @@ describe("TextAssembly", () => {
           const afterPrefix = afterFrag(testAssembly.prefix);
 
           const offset = afterPrefix + 1;
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
-          expect(result).toEqual(mockCursor(afterPrefix, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(afterPrefix, "fragment", testAssembly));
         });
 
         it("should be able to position to suffix if closest", () => {
           const beforeSuffix = beforeFrag(testAssembly.suffix);
 
           const offset = beforeSuffix - 1;
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
-          expect(result).toEqual(mockCursor(beforeSuffix, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(beforeSuffix, "fragment", testAssembly));
         });
 
         it("should reposition to nearest content when possible (near prefix)", () => {
           const expectedOffset = beforeFrag(minContent);
 
           const offset = afterFrag(testAssembly.prefix) + 2;
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
-          expect(result).toEqual(mockCursor(expectedOffset, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(expectedOffset, "fragment", testAssembly));
         });
 
         it("should reposition to nearest content when possible (near suffix)", () => {
           const expectedOffset = afterFrag(maxContent);
 
           const offset = beforeFrag(testAssembly.suffix) - 2;
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
-          expect(result).toEqual(mockCursor(expectedOffset, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(expectedOffset, "fragment", testAssembly));
         });
       };
 
@@ -103,10 +103,10 @@ describe("TextAssembly", () => {
           const expectedOffset = afterFrag(offsetFrags.content[1]);
 
           const offset = insideFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
-          expect(result).toEqual(mockCursor(expectedOffset, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(expectedOffset, "fragment", testAssembly));
         });
       });
 
@@ -131,10 +131,10 @@ describe("TextAssembly", () => {
           const expectedOffset = beforeFrag(offsetFrags.content[3]);
 
           const offset = insideFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.findBest(cursor);
 
-          expect(result).toEqual(mockCursor(expectedOffset, "assembly", testAssembly));
+          expect(result).toEqual(mockCursor(expectedOffset, "fragment", testAssembly));
         });
       });
 
@@ -153,7 +153,7 @@ describe("TextAssembly", () => {
             const testAssembly = initAssembly(offsetFrags);
 
             const offset = insideFrag(offsetFrags.prefix);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.findBest(cursor, true);
 
             expect(result.offset).toBe(beforeFrag(first(offsetFrags.content)));
@@ -163,7 +163,7 @@ describe("TextAssembly", () => {
             const testAssembly = initAssembly(offsetFrags);
 
             const offset = afterFrag(offsetFrags.prefix) + 1;
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.findBest(cursor, true);
 
             expect(result.offset).toBe(beforeFrag(first(offsetFrags.content)));
@@ -173,7 +173,7 @@ describe("TextAssembly", () => {
             const testAssembly = initAssembly({ ...offsetFrags, content: [] });
 
             const offset = insideFrag(first(offsetFrags.content));
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.findBest(cursor, true);
 
             expect(result.offset).toBe(afterFrag(offsetFrags.prefix));
@@ -189,7 +189,7 @@ describe("TextAssembly", () => {
             });
 
             const offset = afterFrag(offsetFrags.prefix);
-            const cursor = mockCursor(offset, "assembly", sourceAssembly);
+            const cursor = mockCursor(offset, "fragment", sourceAssembly);
 
             // Sanity check the cursor; will we do a shift?
             expect(childAssembly.isFoundIn(cursor)).toBe(false);
@@ -206,7 +206,7 @@ describe("TextAssembly", () => {
             const testAssembly = initAssembly(offsetFrags);
 
             const offset = insideFrag(offsetFrags.suffix);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.findBest(cursor, true);
 
             expect(result.offset).toBe(afterFrag(last(offsetFrags.content)));
@@ -216,7 +216,7 @@ describe("TextAssembly", () => {
             const testAssembly = initAssembly(offsetFrags);
 
             const offset = beforeFrag(offsetFrags.suffix) - 1;
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.findBest(cursor, true);
 
             expect(result.offset).toBe(afterFrag(last(offsetFrags.content)));
@@ -226,7 +226,7 @@ describe("TextAssembly", () => {
             const testAssembly = initAssembly({ ...offsetFrags, content: [] });
 
             const offset = insideFrag(last(offsetFrags.content));
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.findBest(cursor, true);
 
             expect(result.offset).toBe(beforeFrag(offsetFrags.suffix));
@@ -242,7 +242,7 @@ describe("TextAssembly", () => {
             });
 
             const offset = afterFrag(offsetFrags.suffix);
-            const cursor = mockCursor(offset, "assembly", sourceAssembly);
+            const cursor = mockCursor(offset, "fragment", sourceAssembly);
 
             // Sanity check the cursor; will we do a shift?
             expect(childAssembly.isFoundIn(cursor)).toBe(false);

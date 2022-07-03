@@ -1,8 +1,10 @@
 import { jest, describe, it, expect } from "@jest/globals";
+import { beforeEach } from "@jest/globals";
 import { toFragmentSeq, toContent } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
-import { Module, generateData, initAssembly, NO_AFFIX } from "../_common";
+import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
+import { Module, initAssembly } from "../_common";
 
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
@@ -10,9 +12,9 @@ import { isArray } from "@utils/is";
 import { first, last } from "@utils/iterables";
 
 import type { SpyInstance } from "jest-mock";
-import type { TextAssembly } from "../../TextAssembly";
+import type { FragmentAssembly } from "../../FragmentAssembly";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("query methods", () => {
     describe("locateInsertion", () => {
       // Most of the heavy lifting is done by `fragmentsFrom`, which is
@@ -79,8 +81,8 @@ describe("TextAssembly", () => {
         // Just using it.  Don't care.
         const { isCursorInside } = Module;
 
-        let testAssembly: TextAssembly;
-        let spy: SpyInstance<TextAssembly["fragmentsFrom"]>;
+        let testAssembly: FragmentAssembly;
+        let spy: SpyInstance<FragmentAssembly["fragmentsFrom"]>;
 
         beforeEach(() => {
           testAssembly = initAssembly(simulated.data);
@@ -109,11 +111,11 @@ describe("TextAssembly", () => {
         // In NovelAI, this would be `insertionPosition === 0`.
         describe("with offset of 0 (to bottom)", () => {
           // A function since `testAssembly` is only set during a test.
-          const getExpectedResult = (testAssembly: TextAssembly) => ({
+          const getExpectedResult = (testAssembly: FragmentAssembly) => ({
             type: "inside",
             cursor: mockCursor(
               afterFrag(simulated.rawFrags[8]),
-              "assembly",
+              "fragment",
               testAssembly
             )
           });
@@ -122,7 +124,7 @@ describe("TextAssembly", () => {
             const { testAssembly, spy } = theSpied;
 
             const offset = insideFrag(simulated.rawFrags[8]);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 0);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
@@ -133,7 +135,7 @@ describe("TextAssembly", () => {
             const { testAssembly, spy } = theSpied;
 
             const offset = afterFrag(simulated.rawFrags[8]);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 0);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
@@ -144,11 +146,11 @@ describe("TextAssembly", () => {
         // In NovelAI, this would be `insertionPosition === -1`.
         describe("with offset of 0 (to top)", () => {
           // A function since `testAssembly` is only set during a test.
-          const getExpectedResult = (testAssembly: TextAssembly) => ({
+          const getExpectedResult = (testAssembly: FragmentAssembly) => ({
             type: "inside",
             cursor: mockCursor(
               beforeFrag(simulated.rawFrags[8]),
-              "assembly",
+              "fragment",
               testAssembly
             )
           });
@@ -157,7 +159,7 @@ describe("TextAssembly", () => {
             const { testAssembly, spy } = theSpied;
 
             const offset = insideFrag(simulated.rawFrags[8]);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 0);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
@@ -168,7 +170,7 @@ describe("TextAssembly", () => {
             const { testAssembly, spy } = theSpied;
 
             const offset = beforeFrag(simulated.rawFrags[8]);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 0);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
@@ -181,7 +183,7 @@ describe("TextAssembly", () => {
             const { testAssembly, spy } = theSpied;
 
             const offset = insideFrag(simulated.rawFrags[8]);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
@@ -190,7 +192,7 @@ describe("TextAssembly", () => {
               cursor: mockCursor(
                 // After the fragment with text: "Fragment 6."
                 afterFrag(simulated.rawFrags[12]),
-                "assembly",
+                "fragment",
                 testAssembly
               )
             });
@@ -200,7 +202,7 @@ describe("TextAssembly", () => {
             const { testAssembly, spy } = theSpied;
 
             const offset = insideFrag(simulated.rawFrags[8]);
-            const cursor = mockCursor(offset, "assembly", testAssembly);
+            const cursor = mockCursor(offset, "fragment", testAssembly);
             const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
@@ -209,7 +211,7 @@ describe("TextAssembly", () => {
               cursor: mockCursor(
                 // Before the fragment with text: "Fragment 2."
                 beforeFrag(simulated.rawFrags[4]),
-                "assembly",
+                "fragment",
                 testAssembly
               )
             });
@@ -230,8 +232,8 @@ describe("TextAssembly", () => {
           content: [rawFrags.map(toContent).join("")]
         });
 
-        let testAssembly: TextAssembly;
-        let spy: SpyInstance<TextAssembly["fragmentsFrom"]>;
+        let testAssembly: FragmentAssembly;
+        let spy: SpyInstance<FragmentAssembly["fragmentsFrom"]>;
 
         beforeEach(() => {
           testAssembly = initAssembly(assemblyData);
@@ -245,7 +247,7 @@ describe("TextAssembly", () => {
         it("should position cursor between two empty newline characters (to bottom)", () => {
           // Cursor not currently important; making it correctly anyways.
           const offset = beforeFrag(first(rawFrags));
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
 
           expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
@@ -254,7 +256,7 @@ describe("TextAssembly", () => {
             cursor: mockCursor(
               // After the first "\n" and before the second "\n".
               afterFrag(rawFrags[3]),
-              "assembly",
+              "fragment",
               testAssembly
             )
           });
@@ -263,7 +265,7 @@ describe("TextAssembly", () => {
         it("should position cursor between two empty newline characters (to top)", () => {
           // Cursor not currently important; making it correctly anyways.
           const offset = afterFrag(last(rawFrags));
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
 
           expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
@@ -272,7 +274,7 @@ describe("TextAssembly", () => {
             cursor: mockCursor(
               // After the first "\n" and before the second "\n".
               afterFrag(rawFrags[3]),
-              "assembly",
+              "fragment",
               testAssembly
             )
           });
@@ -282,8 +284,8 @@ describe("TextAssembly", () => {
       describe("unusual circumstance: empty assembly", () => {
         const assemblyData = generateData(0, { ...NO_AFFIX, content: [] });
 
-        let testAssembly: TextAssembly;
-        let spy: SpyInstance<TextAssembly["fragmentsFrom"]>;
+        let testAssembly: FragmentAssembly;
+        let spy: SpyInstance<FragmentAssembly["fragmentsFrom"]>;
 
         beforeEach(() => {
           testAssembly = initAssembly(assemblyData);
@@ -292,7 +294,7 @@ describe("TextAssembly", () => {
         });
 
         const getResult = (dir: "toTop" | "toBottom", offset: number) => {
-          const cursor = mockCursor(0, "assembly", testAssembly);
+          const cursor = mockCursor(0, "fragment", testAssembly);
           return testAssembly.locateInsertion(cursor, "newline", dir, offset);
         };
 
@@ -314,7 +316,7 @@ describe("TextAssembly", () => {
           const { testAssembly } = theSpied;
 
           const offset = insideFrag(simulated.contentFrags[3]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
 
           expect(result).toEqual({
@@ -331,7 +333,7 @@ describe("TextAssembly", () => {
           const { testAssembly } = theSpied;
 
           const offset = insideFrag(simulated.contentFrags[10]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
 
           expect(result).toEqual({
@@ -364,7 +366,7 @@ describe("TextAssembly", () => {
           // 2: "Next 2."
 
           const offset = insideFrag(simulated.contentFrags[10]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 5);
 
           expect(result).toEqual({ type: "toBottom", remainder: 2 });
@@ -374,7 +376,7 @@ describe("TextAssembly", () => {
           const { testAssembly } = theSpied;
 
           const offset = insideFrag(simulated.contentFrags[10]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 3);
 
           expect(result).toEqual({ type: "toBottom", remainder: 0 });          
@@ -400,7 +402,7 @@ describe("TextAssembly", () => {
           // 0: "Previous 1."
 
           const offset = insideFrag(simulated.contentFrags[3]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 5);
 
           expect(result).toEqual({ type: "toTop", remainder: 2 });
@@ -410,7 +412,7 @@ describe("TextAssembly", () => {
           const { testAssembly } = theSpied;
 
           const offset = insideFrag(simulated.contentFrags[3]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 3);
 
           expect(result).toEqual({ type: "toTop", remainder: 0 });          
@@ -425,8 +427,8 @@ describe("TextAssembly", () => {
           spy.mockImplementation(() => [...simulated.rawFrags]);
 
           const selection = [
-            mockCursor(beforeFrag(simulated.contentFrags[3]), "assembly", testAssembly),
-            mockCursor(afterFrag(simulated.contentFrags[3]), "assembly", testAssembly)
+            mockCursor(beforeFrag(simulated.contentFrags[3]), "fragment", testAssembly),
+            mockCursor(afterFrag(simulated.contentFrags[3]), "fragment", testAssembly)
           ] as const;
           testAssembly.locateInsertion(selection, "newline", "toBottom", 1);
 
@@ -442,7 +444,7 @@ describe("TextAssembly", () => {
           const { testAssembly } = theSpied;
 
           const offset = insideFrag(simulated.contentFrags[3]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           testAssembly.locateInsertion(cursor, "newline", "toBottom", -1);
         });
       });

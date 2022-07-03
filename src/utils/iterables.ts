@@ -631,7 +631,7 @@ export const tapAll = function*<T>(
 /** Creates a chain from the given iterable. */
 function chain<TIter extends Iterable<unknown>>(iterable: TIter): ChainComposition<TIter>;
 /** Creates an empty iterable chain. */
-function chain(): ChainComposition<[]>;
+function chain<TIter extends Iterable<unknown> = []>(): ChainComposition<TIter>;
 function chain(iterable?: any) {
   iterable = iterable ?? [];
   return {

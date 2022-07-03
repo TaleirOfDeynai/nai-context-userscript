@@ -2,12 +2,13 @@ import { describe, it, expect } from "@jest/globals";
 import { mockFragment, toFragmentSeq, toContent } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
-import { generateData, initAssembly, NO_AFFIX } from "../_common";
-import { contiguousFrags } from "../_common";
+import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
+import { contiguousFrags } from "@spec/helpers-assembly";
+import { initAssembly } from "../_common";
 
 import { first } from "@utils/iterables";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("query methods", () => {
     describe("fragmentsFrom", () => {
       const assemblyData = generateData(0, {
@@ -29,7 +30,7 @@ describe("TextAssembly", () => {
         // for the trimming providers.
 
         it("should split into fragments of the desired granularity (newline)", () => {
-          const cursor = mockCursor(0, "assembly", mergedAssembly);
+          const cursor = mockCursor(0, "fragment", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "newline", "toBottom")];
 
           expect(result.map(toContent)).toEqual([
@@ -42,7 +43,7 @@ describe("TextAssembly", () => {
         });
 
         it("should split into fragments of the desired granularity (sentence)", () => {
-          const cursor = mockCursor(0, "assembly", mergedAssembly);
+          const cursor = mockCursor(0, "fragment", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "sentence", "toBottom")];
 
           expect(result.map(toContent)).toEqual([
@@ -57,7 +58,7 @@ describe("TextAssembly", () => {
         });
 
         it("should split into fragments of the desired granularity (token)", () => {
-          const cursor = mockCursor(0, "assembly", mergedAssembly);
+          const cursor = mockCursor(0, "fragment", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "token", "toBottom")];
 
           // Only checking through into the second sentence here.
@@ -75,7 +76,7 @@ describe("TextAssembly", () => {
 
         it("should iterate from bottom to top (IE: in reverse)", () => {
           const offset = afterFrag(mergedAssembly.suffix);
-          const cursor = mockCursor(offset, "assembly", mergedAssembly);
+          const cursor = mockCursor(offset, "fragment", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "sentence", "toTop")];
 
           // Lazily copy and pasted the above and added the `reverse` call.
@@ -104,14 +105,14 @@ describe("TextAssembly", () => {
         const startOffset = insideFrag(expectedSplit[4]);
 
         it("should start at the fragment containing the cursor (to bottom)", () => {
-          const cursor = mockCursor(startOffset, "assembly", mergedAssembly);
+          const cursor = mockCursor(startOffset, "fragment", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "sentence", "toBottom")];
 
           expect(result).toEqual(expectedSplit.slice(4));
         });
 
         it("should start at the fragment containing the cursor (to top)", () => {
-          const cursor = mockCursor(startOffset, "assembly", mergedAssembly);
+          const cursor = mockCursor(startOffset, "fragment", mergedAssembly);
           const result = [...mergedAssembly.fragmentsFrom(cursor, "sentence", "toTop")];
 
           expect(result).toEqual(expectedSplit.slice(0, 5).reverse());
@@ -129,7 +130,7 @@ describe("TextAssembly", () => {
 
         it("should start at earliest fragment (to bottom)", () => {
           const offset = afterFrag(splitAssembly.content[2]);
-          const cursor = mockCursor(offset, "assembly", splitAssembly);
+          const cursor = mockCursor(offset, "fragment", splitAssembly);
           const result = [...splitAssembly.fragmentsFrom(cursor, "sentence", "toBottom")];
 
           expect(first(result)).toEqual(splitAssembly.content[2]);
@@ -137,7 +138,7 @@ describe("TextAssembly", () => {
 
         it("should start at latest fragment (to top)", () => {
           const offset = beforeFrag(splitAssembly.content[2]);
-          const cursor = mockCursor(offset, "assembly", splitAssembly);
+          const cursor = mockCursor(offset, "fragment", splitAssembly);
           const result = [...splitAssembly.fragmentsFrom(cursor, "sentence", "toTop")];
 
           // Still `first`, because this iterates in reverse.
@@ -155,8 +156,8 @@ describe("TextAssembly", () => {
         ], 0);
 
         const selection = [
-          mockCursor(insideFrag(expectedSplit[4]), "assembly", mergedAssembly),
-          mockCursor(insideFrag(expectedSplit[6]), "assembly", mergedAssembly),
+          mockCursor(insideFrag(expectedSplit[4]), "fragment", mergedAssembly),
+          mockCursor(insideFrag(expectedSplit[6]), "fragment", mergedAssembly),
         ] as const;
 
         it("should use the second cursor when iterating to bottom", () => {
@@ -186,7 +187,7 @@ describe("TextAssembly", () => {
         });
 
         const testAssembly = initAssembly(assemblyData);
-        const cursor = mockCursor(0, "assembly", testAssembly);
+        const cursor = mockCursor(0, "fragment", testAssembly);
         const result = [...testAssembly.fragmentsFrom(cursor, "sentence", "toBottom")];
 
         expect(result).toEqual([

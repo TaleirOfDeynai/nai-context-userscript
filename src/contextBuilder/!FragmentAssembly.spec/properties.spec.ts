@@ -1,12 +1,12 @@
 import { describe, it, expect } from "@jest/globals";
 import { toContent } from "@spec/helpers-splitter";
 import { afterFrag, beforeFrag } from "@spec/helpers-assembly";
-import { generateData, initAssembly, NO_AFFIX } from "./_common";
-import { offsetFrags } from "./_common";
+import { generateData, offsetFrags, NO_AFFIX } from "@spec/helpers-assembly";
+import { initAssembly } from "./_common";
 
 import { first, last } from "@utils/iterables";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("properties", () => {
     const sourceAssembly = initAssembly(offsetFrags);
 

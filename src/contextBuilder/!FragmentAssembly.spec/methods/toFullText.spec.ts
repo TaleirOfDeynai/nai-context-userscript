@@ -2,11 +2,12 @@ import { describe, it, expect } from "@jest/globals";
 import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
 import { insideFrag, beforeFrag } from "@spec/helpers-assembly";
-import { initAssembly, offsetFrags } from "../_common";
+import { offsetFrags } from "@spec/helpers-assembly";
+import { initAssembly } from "../_common";
 
 import { dew } from "@utils/dew";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("cursor/selection methods", () => {
     describe("toFullText", () => {
       const testAssembly = initAssembly(offsetFrags);
@@ -20,9 +21,9 @@ describe("TextAssembly", () => {
           testAssembly.toFullText(cursor);
         });
   
-        it.failing("should FAIL if cursor is not for the assembly", () => {
+        it.failing("should FAIL if cursor is not related to the assembly", () => {
           const offset = insideFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "assembly", { origin: {} });
+          const cursor = mockCursor(offset, "fragment", { origin: {} });
 
           testAssembly.toFullText(cursor);
         });
@@ -38,7 +39,7 @@ describe("TextAssembly", () => {
           });
 
           const offset = insideFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
 
           testAssembly.toFullText(cursor);
         });
@@ -47,7 +48,7 @@ describe("TextAssembly", () => {
       describe("basic functionality", () => {
         it("should work for the prefix", () => {
           const offset = insideFrag(offsetFrags.prefix);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.toFullText(cursor);
 
           expect(result).toEqual(mockCursor(
@@ -59,7 +60,7 @@ describe("TextAssembly", () => {
 
         it("should work for any content", () => {
           const offset = insideFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.toFullText(cursor);
 
           expect(result).toEqual(mockCursor(
@@ -76,7 +77,7 @@ describe("TextAssembly", () => {
 
         it("should work for the suffix", () => {
           const offset = insideFrag(offsetFrags.suffix);
-          const cursor = mockCursor(offset, "assembly", testAssembly);
+          const cursor = mockCursor(offset, "fragment", testAssembly);
           const result = testAssembly.toFullText(cursor);
 
           expect(result).toEqual(mockCursor(

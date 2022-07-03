@@ -1,18 +1,19 @@
 import { describe, it, expect } from "@jest/globals";
 import { mockCursor } from "@spec/helpers-assembly";
 import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
-import { generateData, initAssembly, offsetFrags, NO_AFFIX } from "../_common";
+import { generateData, offsetFrags, NO_AFFIX } from "@spec/helpers-assembly";
+import { initAssembly } from "../_common";
 
 import { dew } from "@utils/dew";
 
-describe("TextAssembly", () => {
+describe("FragmentAssembly", () => {
   describe("query methods", () => {
     describe("bumpOut", () => {
       const testAssembly = initAssembly(offsetFrags);
 
       it("should bump toward the top when closest", () => {
         const offset = insideFrag(offsetFrags.content[0]);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.bumpOut(cursor);
 
         expect(result).toEqual({
@@ -27,7 +28,7 @@ describe("TextAssembly", () => {
 
       it("should bump toward the bottom when closest", () => {
         const offset = insideFrag(offsetFrags.content[4]);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.bumpOut(cursor);
 
         expect(result).toEqual({
@@ -49,7 +50,7 @@ describe("TextAssembly", () => {
         const testAssembly = initAssembly(assemblyData);
 
         const offset = insideFrag(assemblyData.content[1]);
-        const cursor = mockCursor(offset, "assembly", testAssembly);
+        const cursor = mockCursor(offset, "fragment", testAssembly);
         const result = testAssembly.bumpOut(cursor);
 
         expect(result).toEqual({
