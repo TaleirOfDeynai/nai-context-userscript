@@ -328,11 +328,20 @@ export default usModule((require, exports) => {
    * codec instance.
    */
   const getCodec = (type: TokenizerTypes, givenCodec?: SomeTokenCodec): TokenCodec => {
+    // Wrap in a try/catch in case it is synchronous.
     if (isCodec(givenCodec)) return {
-      encode: (text) => Promise.resolve(givenCodec.encode(text)),
-      decode: (tokens) => Promise.resolve(givenCodec.decode(tokens))
+      encode: (text) => {
+        try { return Promise.resolve(givenCodec.encode(text)); }
+        catch (err) { return Promise.reject(err); }
+      },
+      decode: (tokens) => {
+        try { return Promise.resolve(givenCodec.decode(tokens)); }
+        catch (err) { return Promise.reject(err); }
+      }
     };
 
+    // I do not know why NovelAI keeps instantiating a new class for the
+    // global encoder like this, but I will do as they do.
     return {
       encode: (text) => new tokenizerCodec.GlobalEncoder().encode(text, type),
       decode: (tokens) => new tokenizerCodec.GlobalEncoder().decode(tokens, type)
