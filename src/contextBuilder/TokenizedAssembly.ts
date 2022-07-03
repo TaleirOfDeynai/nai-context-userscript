@@ -1,33 +1,75 @@
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
-import { assert } from "@utils/assert";
+import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
-import { chain, toImmutable } from "@utils/iterables";
+import { toImmutable } from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
+import $TokenizerService from "./TokenizerService";
 import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TokenCodec } from "@nai/TokenizerCodec";
-import type { ContextConfig } from "@nai/Lorebook";
-import type { ContextParams } from "./ParamsService";
 import type { TextFragment } from "./TextSplitterService";
 import type { FragmentAssembly, FragmentCursor } from "./FragmentAssembly";
 import type { ContinuityOptions } from "./ContentAssembly";
-import type { Trimmer } from "./TrimmingService";
-import type { EncodeResult } from "./TokenizerService";
+import type { Tokens } from "./TokenizerService";
 
 export interface DerivedOptions extends ContinuityOptions {
+  /** Required when not deriving from another `TokenizedAssembly`. */
+  codec?: TokenCodec;
   /** The tokens for the derived assembly. */
-  tokens?: readonly number[];
+  tokens?: Tokens;
 }
+
+const TOKEN_MENDING_RANGE = 5;
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
   const { createFragment, isContiguous } = splitterService;
   const { beforeFragment, afterFragment } = splitterService;
-  const { FragmentAssembly, isCursorInside } = $FragmentAssembly(require);
+  const { FragmentAssembly, splitSequenceAt, makeCursor } = $FragmentAssembly(require);
   const { ContentAssembly } = $ContentAssembly(require);
+  const { tokensOfOffset, mendTokens } = $TokenizerService(require);
+
+  // I'm reminded why I absolutely HATE classes...  HATE!  HATE!
+  // If the word "hate" were written on every micro-angstrom of my...
+
+  const getTokensForSplit = async (
+    codec: TokenCodec,
+    offset: number,
+    tokens: Tokens
+  ): Promise<[Tokens, Tokens]> => {
+    const result = assertExists(
+      "Expected to locate the cursor in the tokens.",
+      await tokensOfOffset(codec, tokens, offset)
+    );
+
+    if (result.type === "double") {
+      // We don't need to do anything special in this case because the
+      // cursor falls between two sets of tokens.
+      const index = result.max.index;
+      return [
+        tokens.slice(0, index),
+        tokens.slice(index)
+      ];
+    }
+    else {
+      // In this case, we're splitting a single token into two parts,
+      // which means we will need two new tokens, and the ends at the
+      // cut could even encode differently.
+      const splitToken = result.data.value;
+      const left = splitToken.slice(0, result.remainder);
+      const right = splitToken.slice(result.remainder);
+
+      const index = result.data.index;
+      const mendingFn = mendTokens(codec, TOKEN_MENDING_RANGE);
+      return Promise.all([
+        mendingFn(tokens.slice(0, index), left),
+        mendingFn(right, tokens.slice(index + 1))
+      ]);
+    }
+  }
 
   /**
    * An abstraction that standardizes how text is assembled with prefixes
@@ -48,7 +90,7 @@ const theModule = usModule((require, exports) => {
       prefix: TextFragment,
       content: Iterable<TextFragment>,
       suffix: TextFragment,
-      tokens: readonly number[],
+      tokens: Tokens,
       codec: TokenCodec,
       isContiguous: boolean,
       source: FragmentAssembly | null
@@ -76,8 +118,6 @@ const theModule = usModule((require, exports) => {
        * This assembly does not need to be a source assembly.
        */
       originAssembly: FragmentAssembly,
-      /** The token codec or context parameters object. */
-      codecSource: TokenCodec | ContextParams,
       /** The options for creating a derived assembly. */
       options?: DerivedOptions
     ) {
@@ -108,10 +148,15 @@ const theModule = usModule((require, exports) => {
         return fragments;
       }
 
-      const tokenCodec
-        = "tokenCodec" in codecSource ? codecSource.tokenCodec
-        : codecSource;
+      const tokenCodec = dew(() => {
+        if (originAssembly instanceof TokenizedAssembly) return originAssembly.#codec;
+        return assertExists(
+          "A codec is required unless deriving from a tokenized assembly.",
+          options?.codec
+        );
+      });
 
+      // Being lazy; this will do all the checks we want done.
       const theDerived = ContentAssembly.fromDerived(
         fragments, originAssembly, { assumeContinuity: true }
       );
@@ -141,7 +186,7 @@ const theModule = usModule((require, exports) => {
     get tokens() {
       return this.#tokens;
     }
-    readonly #tokens: readonly number[];
+    readonly #tokens: Tokens;
 
     /** The codec we're using for manipulation. */
     readonly #codec: TokenCodec;
@@ -157,7 +202,7 @@ const theModule = usModule((require, exports) => {
      * 
      * If a cut cannot be made, `undefined` is returned.
      */
-    splitAt(
+    async splitAt(
       /** The cursor demarking the position of the cut. */
       cursor: FragmentCursor,
       /**
@@ -165,8 +210,48 @@ const theModule = usModule((require, exports) => {
        * the next best position will be used instead as a fallback.
        */
       loose: boolean = false
-    ): UndefOr<[TokenizedAssembly, TokenizedAssembly]> {
-      throw new Error("NOT IMPLEMENTED");
+    ): Promise<UndefOr<[TokenizedAssembly, TokenizedAssembly]>> {
+      const usedCursor = dew(() => {
+        // The input cursor must be for the content.
+        if (this.positionOf(cursor) !== "content") return undefined;
+        if (!loose) return this.isFoundIn(cursor) ? cursor : undefined;
+        const bestCursor = this.findBest(cursor, true);
+        // Make sure the cursor did not get moved out of the content.
+        // This can happen when the content is empty; the only remaining
+        // place it could be moved was to a prefix/suffix fragment.
+        return this.positionOf(bestCursor) === "content" ? bestCursor : undefined;
+      });
+
+      if (!usedCursor) return undefined;
+      
+      const [beforeCut, afterCut] = splitSequenceAt(this.content, usedCursor);
+      const [beforeTokens, afterTokens] = await getTokensForSplit(
+        this.#codec,
+        this.toFullText(usedCursor).offset,
+        this.#tokens
+      );
+
+      // If we're splitting this assembly, it doesn't make sense to preserve
+      // the suffix on the assembly before the cut or the prefix after the cut.
+      // Replace them with empty fragments, as needed.
+      const { prefix, suffix } = this;
+      const afterPrefix = !prefix.content ? prefix : createFragment("", 0, prefix);
+      const beforeSuffix = !suffix.content ? suffix : createFragment("", 0, suffix);
+
+      // Because we're changing the prefix and suffix, we're going to invoke
+      // the constructor directly instead of using `fromDerived`.
+      return [
+        new TokenizedAssembly(
+          prefix, toImmutable(beforeCut), beforeSuffix,
+          beforeTokens, this.#codec,
+          this.isContiguous, this.source
+        ),
+        new TokenizedAssembly(
+          afterPrefix, toImmutable(afterCut), suffix,
+          afterTokens, this.#codec,
+          this.isContiguous, this.source
+        )
+      ];
     }
 
     /**
@@ -175,11 +260,50 @@ const theModule = usModule((require, exports) => {
      * It still has the same source, so cursors for that source will still
      * work as expected.
      */
-    asOnlyContent(): TokenizedAssembly {
+    async asOnlyContent(): Promise<TokenizedAssembly> {
       // No need if we don't have a prefix or suffix.
       if (!this.isAffixed) return this;
 
-      throw new Error("NOT IMPLEMENTED");
+      // This can be seen as splitting the prefix and suffix from the rest
+      // of the content, so we will want to get tokens for each of these
+      // splits we make.
+
+      const { prefix, suffix } = this;
+
+      // Starts with the current tokens and drops the prefix from them.
+      const [nextPrefix, noPrefixTokens] = await dew(async () => {
+        const tokensIn = this.#tokens;
+        if (!prefix.content) return [prefix, tokensIn];
+
+        const ftCursor = this.toFullText(makeCursor(this, afterFragment(prefix)));
+        const [, theTokens] = await getTokensForSplit(
+          this.#codec,
+          ftCursor.offset,
+          tokensIn
+        );
+        return [createFragment("", 0, prefix), theTokens];
+      });
+
+      // This must use the tokens from the prefix and adjust the full-text
+      // cursor for the now missing prefix portion.
+      const [nextSuffix, finalTokens] = await dew(async () => {
+        const tokensIn = noPrefixTokens;
+        if (!suffix.content) return [suffix, tokensIn];
+
+        const ftCursor = this.toFullText(makeCursor(this, beforeFragment(suffix)));
+        const [theTokens] = await getTokensForSplit(
+          this.#codec,
+          ftCursor.offset - prefix.content.length,
+          tokensIn
+        );
+        return [createFragment("", 0, suffix), theTokens];
+      });
+
+      return new TokenizedAssembly(
+        nextPrefix, this.content, nextSuffix,
+        finalTokens, this.#codec,
+        this.isContiguous, this.source
+      );
     }
   }
 

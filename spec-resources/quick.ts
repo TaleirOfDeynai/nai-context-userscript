@@ -1,4 +1,5 @@
 /** A short string with common uses. */
-const quickString = "This statement is false.";
+export const quickString = "This statement is false.";
 
-export default quickString;
+/** A quick string for the mock codec. */
+export const quickFoobar = "foobarbar foobar barfoobar barfoo.";

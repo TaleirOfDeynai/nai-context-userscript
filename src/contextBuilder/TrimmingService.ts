@@ -87,8 +87,8 @@ export default usModule((require, exports) => {
     assert("Expected at least one text fragment.", fragments.length > 0);
 
     const assembly = await TokenizedAssembly.fromDerived(
-      fragments, origin, codec,
-      { tokens }
+      fragments, origin,
+      { codec, tokens }
     );
 
     return Object.freeze({ assembly, split });

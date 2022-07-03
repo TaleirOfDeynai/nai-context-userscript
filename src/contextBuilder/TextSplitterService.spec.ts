@@ -1,5 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
-import quickString from "@spec/quick";
+import { quickString } from "@spec/quick";
 import { collection as phrasesEnglish } from "@spec/phrases-english";
 import { collection as phrasesSpanish } from "@spec/phrases-spanish";
 import { collection as phrasesJapanese } from "@spec/phrases-japanese";

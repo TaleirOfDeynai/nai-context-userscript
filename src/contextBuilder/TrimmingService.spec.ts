@@ -91,7 +91,7 @@ function withFromDerivedSpy(ctor: SomeAssemblyCtor) {
     }
     else {
       spy = jest.spyOn(ctor as typeof TokenizedAssembly, "fromDerived")
-        .mockImplementation((f, o, _, opts) => {
+        .mockImplementation((f, o, opts) => {
           const tokens = opts?.tokens ?? [];
           const assembly = mockAssembly<TokenizedAssembly>(f, o.prefix, o.suffix, { tokens });
           return Promise.resolve(assembly);
