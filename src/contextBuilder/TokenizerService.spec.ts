@@ -1,6 +1,7 @@
 import { describe, it, expect } from "@jest/globals";
 import { toFragmentSeq } from "@spec/helpers-splitter";
 import * as helpers from "@spec/helpers-tokenizer";
+import * as mockStory from "@spec/mock-story";
 
 import { dew } from "@utils/dew";
 import { iterReverse, interweave } from "@utils/iterables";
@@ -25,6 +26,87 @@ const { mockCodec } = helpers;
 // These tests make use of the mock codec which has a limited number
 // of phrases it can encode and decode.  Please reference its source
 // for a table of phrases that it will accept.
+
+describe("mendTokens", () => {
+  const { mendTokens } = tokenizer;
+
+  // A great many scenarios are tested by the append/prepend encoders.
+  // So, we're just going to test the scenarios unique to `mendTokens`.
+  // These tests rely on the default `UNSAFE_TOKEN_BUFFER` value to
+  // collapse tokens so they match the result of `mockCodec.encode`.
+
+  it("should do basic string encoding", async () => {
+    const mendingFn = mendTokens(mockCodec);
+    const result = await mendingFn("foo bar");
+
+    expect(result).toEqual(await mockCodec.encode("foo bar"));
+  });
+
+  it("should do string concatenation encoding", async () => {
+    const mendingFn = mendTokens(mockCodec);
+    const result = await mendingFn("foo", " ", "bar");
+
+    expect(result).toEqual(await mockCodec.encode("foo bar"));
+  });
+
+  it("should handle an array of tokens between two strings", async () => {
+    const mendingFn = mendTokens(mockCodec);
+    const result = await mendingFn(
+      "foo",
+      [1, 111, 321, 112, 1], // " [ foobar ] "
+      "bar"
+    );
+
+    expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
+  });
+
+  it("should handle a string between two arrays of tokens", async () => {
+    const mendingFn = mendTokens(mockCodec);
+    const result = await mendingFn(
+      [301, 1, 111], // "foo [ "
+      "foobar",
+      [112, 312] // " ] bar"
+    );
+
+    expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
+  });
+
+  it("should handle mending of many arrays of tokens", async () => {
+    const mendingFn = mendTokens(mockCodec);
+    const result = await mendingFn(
+      [301, 1, 111], // "foo [ "
+      [301, 302], // "foobar"
+      [112, 312] // " ] bar"
+    );
+
+    expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
+  });
+
+  it("should work with large inputs", async () => {
+    const { startComments, middleComments, endComments } = mockStory;
+    const concatComments = [startComments, middleComments, endComments].join("");
+
+    const startTokens = await mockCodec.encode(startComments);
+    const middleTokens = await mockCodec.encode(middleComments);
+    const endTokens = await mockCodec.encode(endComments);
+    const expected = await mockCodec.encode(concatComments);
+
+    const mendingFn = mendTokens(mockCodec);
+
+    // Throw a battery of trials at it.
+    const trials = [
+      [startTokens, middleComments, endTokens],     // T S T
+      [startComments, middleTokens, endComments],   // S T S
+      [startTokens, middleTokens, endTokens],       // T T T
+      [startComments, middleComments, endComments], // S S S
+    ];
+
+    for (const trial of trials) {
+      const result = await mendingFn(...trial);
+      expect(result).toEqual(expected);
+    }
+  });
+});
 
 describe("prepend encoder", () => {
   const { prependEncoder } = tokenizer;

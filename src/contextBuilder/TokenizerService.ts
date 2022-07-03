@@ -1,19 +1,18 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
-import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
-import { isFunction, isObject } from "@utils/is";
+import { assert } from "@utils/assert";
+import { isArray, isFunction, isObject } from "@utils/is";
 import { defer } from "@utils/functions";
-import { chain, buffer } from "@utils/iterables";
+import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
 import $TokenizerCodec from "@nai/TokenizerCodec";
 import $TextSplitterService from "./TextSplitterService";
 
+import type { UndefOr } from "@utils/utility-types";
 import type { Deferred } from "@utils/functions";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
-import type { TextFragment } from "./TextSplitterService";
-import { assert } from "@utils/assert";
-import { UndefOr } from "@utils/utility-types";
+import type { TextOrFragment, TextFragment } from "./TextSplitterService";
 
 
 export interface SyncTokenCodec {
@@ -23,6 +22,7 @@ export interface SyncTokenCodec {
 
 export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
 export type TokenCodec = AsyncTokenCodec;
+export type Tokens = readonly number[];
 
 export interface ResumeData {
   readonly type: "append" | "prepend";
@@ -34,14 +34,14 @@ export interface ResumeData {
    */
   readonly safeCount: number;
   /** The tokens to append or prepend to {@link EncodeResult.tokens}. */
-  readonly unsafeTokens: readonly number[];
+  readonly unsafeTokens: Tokens;
 }
 
 export interface EncodeResult {
   /** The fragments this result contains (excluding prefix/suffix). */
   readonly fragments: readonly TextFragment[];
   /** The tokens, with prefix/suffix. */
-  readonly tokens: readonly number[];
+  readonly tokens: Tokens;
   /**
    * The data needed to resume encoding, when used as the
    * {@link StreamEncodeOptions.seedResult seedResult}.
@@ -77,9 +77,9 @@ export interface StreamEncodeFn {
 
 type ResumeTuple = [
   /** The tokens considered unstable. */
-  wilderness: readonly number[],
+  wilderness: Tokens,
   /** The tokens considered stable. */
-  safeHouse: readonly number[],
+  safeHouse: Tokens,
   /** The fragments encoded thus far. */
   encoded: readonly TextFragment[]
 ];
@@ -125,6 +125,112 @@ export default usModule((require, exports) => {
   // previous fragment, decoding them back into a string, tacking them on
   // to the start of the next fragment, encoding it, and then all but the
   // last 10-ish tokens from this fragment are considered safe.
+
+
+  /**
+   * Creates a function that can mend together token arrays, strings, and
+   * {@link TextFragment text fragments} into a single, uniform token array.
+   */
+  const mendTokens = (
+    /** The token codec to use. */
+    codec: TokenCodec,
+    /** How many tokens at mending boundaries to re-encode. */
+    bufferSize: number = UNSAFE_TOKEN_BUFFER
+  ) => {
+    type Section = string | Tokens;
+
+    const isTokens = isArray as (v: Tokens | TextOrFragment) => v is Tokens;
+
+    /** Splits the leading tokens into safe and unsafe portions. */
+    const leadingTokens = (tokens: Tokens): [Tokens, Tokens] => {
+      if (tokens.length === 0) return [tokens, tokens];
+
+      const left = tokens.slice(0, -bufferSize);
+      const right = tokens.slice(-bufferSize);
+      return [left, right];
+    };
+
+    /** Splits the trailing tokens into unsafe and safe portions. */
+    const trailingTokens = (tokens: Tokens): [Tokens, Tokens] => {
+      if (tokens.length === 0) return [tokens, tokens];
+
+      const left = tokens.slice(0, bufferSize);
+      const right = tokens.slice(bufferSize);
+      return [left, right];
+    };
+
+    const doMending = async (
+      /** All the tokens we have encoded up to this point. */
+      prevTokens: Tokens,
+      /** The sections to be mended. */
+      sections: Section[]
+    ) => {
+      // We need at least one section.
+      const lastSection = last(sections);
+      if (!lastSection) return prevTokens;
+
+      // We need to figure out what is going to be involved in the
+      // mend and what is not.  We do not need to do an expensive
+      // re-encoding when we can use just decode a smaller section
+      // of tokens and encode that instead.
+      const [leadingLeft, leadingRight] = leadingTokens(prevTokens);
+      // We need to handle the case that the last element was a string.
+      const [trailingLeft, trailingRight]
+        = isTokens(lastSection) ? trailingTokens(lastSection)
+        : [lastSection, [] as Tokens];
+      
+      // We've got the important portion of the last element in
+      // `trailingLeft`, so we'll use `skipRight` to replace it.
+      // We need to decode everything containing tokens now.
+      const frags = await chain([leadingRight, ...skipRight(sections, 1), trailingLeft])
+        .filter((v) => v.length > 0)
+        .map((v) => isTokens(v) ? codec.decode(v as any) : Promise.resolve(v))
+        .value((promises) => Promise.all(Array.from(promises)));
+
+      // And now we concat and encode.
+      const mendedTokens = await codec.encode(frags.join(""));
+
+      // And rejoin the split tokens back into the re-encoded portion.
+      return [...leadingLeft, ...mendedTokens, ...trailingRight];
+    };
+
+    /**
+     * Given any arrangement of token arrays, strings, and
+     * {@link TextFragment text fragments}, re-encodes everything into a
+     * single, uniform array of tokens as efficiently as possible.
+     */
+    const boundMendTokens = async (
+      /** The sections of tokens and strings to be mended together. */
+      ...inputSections: Array<Tokens | TextOrFragment>
+    ): Promise<Tokens> => {
+      // Get everything into either an array of tokens or a string.
+      // While we're at it, drop any empty sections; no reason to bother.
+      const sections = inputSections
+        .map((v) => isTokens(v) ? v : textSplitter.asContent(v))
+        .filter((v) => v.length > 0);
+
+      // If empty, our result is also empty.
+      if (sections.length === 0) return Object.freeze([]);
+
+      // If we have only one thing, we just make sure its tokens.
+      if (sections.length === 1) {
+        const [section] = sections;
+        if (isTokens(section)) return toImmutable(section);
+        return Object.freeze(await codec.encode(section));
+      }
+
+      // We want to process things in chunks, each containing zero-or-more
+      // strings and ended by an array of tokens (possibly; there is nothing
+      // that says the final element can't be a string).
+      let prevTokens = [] as Tokens;
+      for (const bufSections of buffer(sections, isTokens))
+        prevTokens = await doMending(prevTokens, bufSections);
+      
+      return toImmutable(prevTokens);
+    };
+
+    return boundMendTokens;
+  }
 
   const bootstrapPrepend = async (
     codec: AsyncTokenCodec,
@@ -179,6 +285,8 @@ export default usModule((require, exports) => {
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
+    const mendingFn = mendTokens(codec, bufferSize);
+
     let [wilderness, safeHouse, encoded] = await bootstrapPrepend(
       codec, seedResult, suffix
     );
@@ -190,26 +298,16 @@ export default usModule((require, exports) => {
 
     for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
-      const boundary = await codec.decode([...wilderness]);
-      const fullText = [...theBuffer.map(textSplitter.asContent), boundary].join("");
-      const theTokens = await codec.encode(fullText);
+      const toPrepend = await mendingFn(...theBuffer, wilderness);
 
       // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...theBuffer, ...encoded]);
-      const tokens = await dew(async () => {
-        // Without a prefix, this is easy.
-        if (!prefix) return Object.freeze([...theTokens, ...safeHouse]);
-
-        // But with a prefix, we have to do one more cycle to tack it on the beginning.
-        const theStart = await codec.decode(theTokens.slice(0, bufferSize));
-        const withPrefix = await codec.encode(`${prefix}${theStart}`);
-        return Object.freeze([...withPrefix, ...theTokens.slice(bufferSize), ...safeHouse]);
-      });
+      const tokens = await mendingFn(prefix, [...toPrepend, ...safeHouse]);
 
       // The first `bufferSize` tokens are considered unverified.
-      wilderness = Object.freeze(theTokens.slice(0, bufferSize));
+      wilderness = Object.freeze(toPrepend.slice(0, bufferSize));
       // And anything afterwards is now considered verified.
-      safeHouse = [...theTokens.slice(bufferSize), ...safeHouse];
+      safeHouse = [...toPrepend.slice(bufferSize), ...safeHouse];
       encoded = fragments;
 
       const resume = Object.freeze({
@@ -271,6 +369,8 @@ export default usModule((require, exports) => {
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
+    const mendingFn = mendTokens(codec, bufferSize);
+
     let [wilderness, safeHouse, encoded] = await bootstrapAppend(
       codec, seedResult, prefix
     );
@@ -281,26 +381,16 @@ export default usModule((require, exports) => {
 
     for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
-      const boundary = wilderness.length ? await codec.decode([...wilderness]) : "";
-      const fullText = [boundary, ...theBuffer.map(textSplitter.asContent)].join("");
-      const theTokens = await codec.encode(fullText);
+      const toAppend = await mendingFn(wilderness, ...theBuffer);
 
       // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...encoded, ...theBuffer]);
-      const tokens = await dew(async () => {
-        // Without a suffix, this is easy.
-        if (!suffix) return Object.freeze([...safeHouse, ...theTokens]);
-
-        // But with a suffix, we have to do one more cycle to tack it on the end.
-        const theEnd = await codec.decode(theTokens.slice(-bufferSize));
-        const withSuffix = await codec.encode(`${theEnd}${suffix}`);
-        return Object.freeze([...safeHouse, ...theTokens.slice(0, -bufferSize), ...withSuffix]);
-      });
+      const tokens =  await mendingFn([...safeHouse, ...toAppend], suffix);
 
       // The last `bufferSize` tokens are considered unverified.
-      wilderness = Object.freeze(theTokens.slice(-bufferSize));
+      wilderness = Object.freeze(toAppend.slice(-bufferSize));
       // And anything before that is now considered verified.
-      safeHouse = [...safeHouse, ...theTokens.slice(0, -bufferSize)];
+      safeHouse = [...safeHouse, ...toAppend.slice(0, -bufferSize)];
       encoded = fragments;
 
       const resume = Object.freeze({
@@ -395,6 +485,7 @@ export default usModule((require, exports) => {
   return Object.assign(exports, {
     isCodec,
     codecFor,
+    mendTokens,
     prependEncoder,
     appendEncoder
   });
