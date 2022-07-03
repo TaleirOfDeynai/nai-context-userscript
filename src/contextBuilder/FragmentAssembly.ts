@@ -79,7 +79,7 @@ const thoroughChecks = userScriptConfig.debugLogging || userScriptConfig.testLog
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
-  const { createFragment, isContiguous, hasWords } = splitterService;
+  const { createFragment, hasWords } = splitterService;
   const { beforeFragment, afterFragment } = splitterService;
   const { getSequencersFrom } = $TrimmingProviders(require);
 
@@ -161,6 +161,61 @@ const theModule = usModule((require, exports) => {
       impliedLength: maxOffset - minOffset,
       concatLength: fragments.reduce((p, v) => p + v.content.length, 0)
     };
+  };
+
+  /**
+   * Given a cursor and a sequence of text fragments, splits the sequence
+   * into two sequences.  The result is a tuple where the first element
+   * is the text before the cut and the second element is the text after
+   * the cut.
+   * 
+   * It is assumed that `cursor` belongs to some fragment of `content`.
+   */
+  const splitSequenceAt = (
+    content: readonly TextFragment[],
+    cursor: FragmentCursor
+  ): [TextFragment[], TextFragment[]] => {
+    const beforeCut: TextFragment[] = [];
+    const afterCut: TextFragment[] = [];
+    let curBucket = beforeCut;
+    for (const frag of content) {
+      // Do we need to swap buckets?
+      checkForSwap: {
+        if (curBucket === afterCut) break checkForSwap;
+        if (!isCursorInside(cursor, frag)) break checkForSwap;
+
+        const cursorOffset = cursor.offset;
+
+        // This is the fragment of the cut.  Let's figure out how to split
+        // the fragment.  We only need to bother if the point is inside the
+        // fragment, that is, not at one of its ends.  We're going to the
+        // trouble because text fragments are immutable and it'd be nice to
+        // preserve referential equality where possible.
+        switch (cursorOffset) {
+          case beforeFragment(frag):
+            afterCut.push(frag);
+            break;
+          case afterFragment(frag):
+            beforeCut.push(frag);
+            break;
+          default: {
+            const [before, after] = splitterService.splitFragmentAt(frag, cursorOffset);
+            beforeCut.push(before);
+            afterCut.push(after);
+            break;
+          }
+        }
+        // Finally, swap the buckets so we place the remaining fragments in
+        // the correct derivative assembly.
+        curBucket = afterCut;
+        continue;
+      }
+
+      // If we left the `checkForSwap` block, just add it to the current bucket.
+      curBucket.push(frag);
+    }
+
+    return [beforeCut, afterCut];
   };
 
   type OffsetResult = [offset: number, distance: number];
@@ -873,6 +928,7 @@ const theModule = usModule((require, exports) => {
     asFragmentCursor,
     toSelection,
     getStats,
+    splitSequenceAt,
     FragmentAssembly
   });
 });

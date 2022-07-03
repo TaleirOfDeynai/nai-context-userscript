@@ -41,8 +41,8 @@ const defaultMakeOptions: Required<MakeAssemblyOptions> = {
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
   const { createFragment, isContiguous } = splitterService;
-  const { beforeFragment, afterFragment } = splitterService;
-  const { FragmentAssembly, isCursorInside } = $FragmentAssembly(require);
+  const { afterFragment } = splitterService;
+  const { FragmentAssembly, splitSequenceAt } = $FragmentAssembly(require);
 
   /**
    * An abstraction that standardizes how text is assembled with prefixes
@@ -241,45 +241,7 @@ const theModule = usModule((require, exports) => {
 
       if (!usedCursor) return undefined;
 
-      const beforeCut: TextFragment[] = [];
-      const afterCut: TextFragment[] = [];
-      let curBucket = beforeCut;
-      for (const frag of this.content) {
-        // Do we need to swap buckets?
-        checkForSwap: {
-          if (curBucket === afterCut) break checkForSwap;
-          if (!isCursorInside(usedCursor, frag)) break checkForSwap;
-
-          const cursorOffset = usedCursor.offset;
-
-          // This is the fragment of the cut.  Let's figure out how to split
-          // the fragment.  We only need to bother if the point is inside the
-          // fragment, that is, not at one of its ends.  We're going to the
-          // trouble because text fragments are immutable and it'd be nice to
-          // preserve referential equality where possible.
-          switch (cursorOffset) {
-            case beforeFragment(frag):
-              afterCut.push(frag);
-              break;
-            case afterFragment(frag):
-              beforeCut.push(frag);
-              break;
-            default: {
-              const [before, after] = splitterService.splitFragmentAt(frag, cursorOffset);
-              beforeCut.push(before);
-              afterCut.push(after);
-              break;
-            }
-          }
-          // Finally, swap the buckets so we place the remaining fragments in
-          // the correct derivative assembly.
-          curBucket = afterCut;
-          continue;
-        }
-
-        // If we left the `checkForSwap` block, just add it to the current bucket.
-        curBucket.push(frag);
-      }
+      const [beforeCut, afterCut] = splitSequenceAt(this.content, usedCursor);
 
       // If we're splitting this assembly, it doesn't make sense to preserve
       // the suffix on the assembly before the cut or the prefix after the cut.

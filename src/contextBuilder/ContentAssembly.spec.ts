@@ -274,42 +274,11 @@ describe("ContentAssembly", () => {
       });
 
       describe("basic functionality", () => {
-        // All of these are doing slice in the fragment with the text:
-        // "This is the second fragment."
+        // This is all handled by `splitSequenceAt` in the `FragmentAssembly`
+        // module.  We're just going to check that it's splitting the assembly
+        // and not go into much detail.
 
-        it("should be able to split before a fragment", () => {
-          const offset = beforeFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.splitAt(cursor) as SplitContent;
-
-          // Left of the cut.
-          expect(result[0].prefix).toBe(offsetFrags.prefix);
-          expect(result[0].content).toEqual(offsetFrags.content.slice(0, 2));
-          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
-
-          // Right of the cut.
-          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
-          expect(result[1].content).toEqual(offsetFrags.content.slice(2));
-          expect(result[1].suffix).toBe(offsetFrags.suffix);
-        });
-
-        it("should be able to split after a fragment", () => {
-          const offset = afterFrag(offsetFrags.content[2]);
-          const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.splitAt(cursor) as SplitContent;
-
-          // Left of the cut.
-          expect(result[0].prefix).toBe(offsetFrags.prefix);
-          expect(result[0].content).toEqual(offsetFrags.content.slice(0, 3));
-          expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
-
-          // Right of the cut.
-          expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
-          expect(result[1].content).toEqual(offsetFrags.content.slice(3));
-          expect(result[1].suffix).toBe(offsetFrags.suffix);
-        });
-
-        it("should be able to split inside a fragment", () => {
+        it("should be able to split the assembly correctly", () => {
           const sliceOffset = ("This is the").length;
           const slicedFrag = offsetFrags.content[2];
           const offset = beforeFrag(slicedFrag) + sliceOffset;
@@ -319,18 +288,12 @@ describe("ContentAssembly", () => {
 
           // Left of the cut.
           expect(result[0].prefix).toBe(offsetFrags.prefix);
-          expect(result[0].content).toEqual([
-            ...offsetFrags.content.slice(0, 2),
-            mockFragment("This is the", 0, slicedFrag)
-          ]);
+          expect(result[0].content).toEqual(expect.any(Array));
           expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
 
           // Right of the cut.
           expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
-          expect(result[1].content).toEqual([
-            mockFragment(" second fragment.", sliceOffset, slicedFrag),
-            ...offsetFrags.content.slice(3)
-          ]);
+          expect(result[1].content).toEqual(expect.any(Array));
           expect(result[1].suffix).toBe(offsetFrags.suffix);
         });
       });
