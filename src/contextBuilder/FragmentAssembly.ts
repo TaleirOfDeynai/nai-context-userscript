@@ -853,6 +853,22 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
+     * Gets a cursor for entering this assembly during iteration.
+     */
+    entryPosition(direction: IterDirection): FragmentCursor {
+      if (direction === "toTop") {
+        const suffix = this.suffix.content ? this.suffix : undefined;
+        const frag = suffix ?? IterOps.last(this.content) ?? this.prefix;
+        return makeCursor(this, afterFragment(frag));
+      }
+      else {
+        const prefix = this.prefix.content ? this.prefix : undefined;
+        const frag = prefix ?? IterOps.first(this.content) ?? this.suffix;
+        return makeCursor(this, beforeFragment(frag));
+      }
+    }
+
+    /**
      * When we have a cursor inside this assembly, but we can't split it
      * due to the entry's configuration, this will tell us the nearest side
      * to insert it adjacent to this assembly.
