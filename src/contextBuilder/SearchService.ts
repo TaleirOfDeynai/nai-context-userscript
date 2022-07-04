@@ -313,9 +313,9 @@ export default usModule((require, exports) => {
   }
 
   /** Finds the result with the lowest index of all keys searched. */
-  const findLowestIndex = (
-    results: Maybe<TextResultMap>
-  ): UndefOr<[string, TextResult]> => {
+  function findLowestIndex(results: Maybe<AssemblyResultMap>): UndefOr<[string, AssemblyResult]>;
+  function findLowestIndex(results: Maybe<TextResultMap>): UndefOr<[string, TextResult]>;
+  function findLowestIndex(results: Maybe<TextResultMap>) {
     if (!results) return undefined;
 
     return Iterables.chain(results)
@@ -338,9 +338,9 @@ export default usModule((require, exports) => {
   };
 
   /** Finds the result with the highest index of all keys searched. */
-  const findHighestIndex = (
-    results: Maybe<TextResultMap>
-  ): UndefOr<[string, TextResult]> => {
+  function findHighestIndex(results: Maybe<AssemblyResultMap>): UndefOr<[string, AssemblyResult]>;
+  function findHighestIndex(results: Maybe<TextResultMap>): UndefOr<[string, TextResult]>;
+  function findHighestIndex(results: Maybe<TextResultMap>) {
     if (!results) return undefined;
 
     return Iterables.chain(results)
