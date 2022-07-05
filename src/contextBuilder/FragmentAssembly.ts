@@ -875,14 +875,22 @@ const theModule = usModule((require, exports) => {
      * 
      * If the cursor could go either way, it will favor toward the top.
      */
-    bumpOut(cursor: FragmentCursor): PositionResult {
-      // We actually want to convert this to full-text...
+    shuntOut(
+      cursor: FragmentCursor,
+      mode: IterDirection | "nearest" = "nearest"
+    ): PositionResult {
+      // We actually want to convert this to a full-text cursor, as it
+      // simplifies a lot of this.
       const { offset } = this.toFullText(cursor);
-      // ...because then it's stupid simple to tell which side is closer.
       const fullLength = this.fullText.length;
-      if (offset <= fullLength / 2)
-        return { type: "insertBefore", shunted: offset };
-      return { type: "insertAfter", shunted: fullLength - offset };
+
+      const type
+        = mode === "toTop" ? "insertBefore"
+        : mode === "toBottom" ? "insertAfter"
+        : offset <= fullLength / 2 ? "insertBefore" : "insertAfter";
+
+      const shunted = type === "insertBefore" ? offset : fullLength - offset;
+      return { type, shunted };
     }
 
     /**

@@ -140,7 +140,7 @@ const selection = {
   ] as SorterKey[]
 } as const;
 
-/** Configuration options relating to sub-context construction. */
+/** Configuration options relating to sub-context assembly. */
 const subContext = {
   /**
    * Vanilla NovelAI pre-processes sub-contexts prior to final assembly,
@@ -284,6 +284,24 @@ const weightedRandom = {
   groupBySubContext: false
 } as const;
 
+/** Configuration options relating to context assembly. */
+const assembly = {
+  /**
+   * When one entry wants to insert into another, but that just isn't
+   * going to happen for some reason or another, the alternative is
+   * to shunt the entry either before or after the entry that is
+   * rejecting it.
+   * 
+   * One of these options determines how that shunting happens:
+   * - `"inDirection"` - If the entry to insert had a positive insertion
+   *   position, it will place it after the entry.  If it was negative,
+   *   it will be placed before it.  If it was 0, it will be shunted
+   *   to the nearest end.
+   * - `"nearest"` - Always shunts the entry to the nearest end.
+   */
+  shuntingMode: "inDirection" as ShuntingMode
+};
+
 /** Configuration options relating to context post-processing. */
 const postProcess = {
   /**
@@ -323,10 +341,12 @@ const config = {
   lorebook,
   /** Configuration options relating to selection. */
   selection,
-  /** Configuration options relating to sub-context construction. */
+  /** Configuration options relating to sub-context assembly. */
   subContext,
   /** Configuration options relating to weighted-random selection. */
   weightedRandom,
+  /** Configuration options relating to context assembly. */
+  assembly,
   /** Configuration options relating to context post-processing. */
   postProcess
 } as const;
