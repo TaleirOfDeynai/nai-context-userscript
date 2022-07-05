@@ -12,7 +12,7 @@ import { isArray } from "@utils/is";
 import { first, last } from "@utils/iterables";
 
 import type { SpyInstance } from "jest-mock";
-import type { FragmentAssembly } from "../../FragmentAssembly";
+import type { FragmentAssembly, InsertionPosition } from "../../FragmentAssembly";
 
 describe("FragmentAssembly", () => {
   describe("query methods", () => {
@@ -22,6 +22,12 @@ describe("FragmentAssembly", () => {
       // with the fragments it gets back from `fragmentsFrom`, we're
       // just going to use simulated fragments and test its own internal
       // behavior.
+
+      const mockPosition = (
+        position: InsertionPosition["position"],
+        direction: InsertionPosition["direction"],
+        offset: InsertionPosition["offset"]
+      ): InsertionPosition => ({ position, direction, offset });
 
       const simulated = dew(() => {
         const rawFrags = toFragmentSeq([
@@ -125,7 +131,8 @@ describe("FragmentAssembly", () => {
 
             const offset = insideFrag(simulated.rawFrags[8]);
             const cursor = mockCursor(offset, "fragment", testAssembly);
-            const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 0);
+            const position = mockPosition(cursor, "toBottom", 0);
+            const result = testAssembly.locateInsertion("newline", position);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
             expect(result).toEqual(getExpectedResult(testAssembly));
@@ -136,7 +143,8 @@ describe("FragmentAssembly", () => {
 
             const offset = afterFrag(simulated.rawFrags[8]);
             const cursor = mockCursor(offset, "fragment", testAssembly);
-            const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 0);
+            const position = mockPosition(cursor, "toBottom", 0);
+            const result = testAssembly.locateInsertion("newline", position);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
             expect(result).toEqual(getExpectedResult(testAssembly));
@@ -160,7 +168,8 @@ describe("FragmentAssembly", () => {
 
             const offset = insideFrag(simulated.rawFrags[8]);
             const cursor = mockCursor(offset, "fragment", testAssembly);
-            const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 0);
+            const position = mockPosition(cursor, "toTop", 0);
+            const result = testAssembly.locateInsertion("newline", position);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
             expect(result).toEqual(getExpectedResult(testAssembly));
@@ -171,7 +180,8 @@ describe("FragmentAssembly", () => {
 
             const offset = beforeFrag(simulated.rawFrags[8]);
             const cursor = mockCursor(offset, "fragment", testAssembly);
-            const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 0);
+            const position = mockPosition(cursor, "toTop", 0);
+            const result = testAssembly.locateInsertion("newline", position);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
             expect(result).toEqual(getExpectedResult(testAssembly));
@@ -184,7 +194,8 @@ describe("FragmentAssembly", () => {
 
             const offset = insideFrag(simulated.rawFrags[8]);
             const cursor = mockCursor(offset, "fragment", testAssembly);
-            const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
+            const position = mockPosition(cursor, "toBottom", 2);
+            const result = testAssembly.locateInsertion("newline", position);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
             expect(result).toEqual({
@@ -203,7 +214,8 @@ describe("FragmentAssembly", () => {
 
             const offset = insideFrag(simulated.rawFrags[8]);
             const cursor = mockCursor(offset, "fragment", testAssembly);
-            const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
+            const position = mockPosition(cursor, "toTop", 2);
+            const result = testAssembly.locateInsertion("newline", position);
 
             expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
             expect(result).toEqual({
@@ -248,7 +260,8 @@ describe("FragmentAssembly", () => {
           // Cursor not currently important; making it correctly anyways.
           const offset = beforeFrag(first(rawFrags));
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
+          const position = mockPosition(cursor, "toBottom", 2);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(spy).toHaveBeenCalledWith(cursor, "newline", "toBottom");
           expect(result).toEqual({
@@ -266,7 +279,8 @@ describe("FragmentAssembly", () => {
           // Cursor not currently important; making it correctly anyways.
           const offset = afterFrag(last(rawFrags));
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
+          const position = mockPosition(cursor, "toTop", 2);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(spy).toHaveBeenCalledWith(cursor, "newline", "toTop");
           expect(result).toEqual({
@@ -295,7 +309,8 @@ describe("FragmentAssembly", () => {
 
         const getResult = (dir: "toTop" | "toBottom", offset: number) => {
           const cursor = mockCursor(0, "fragment", testAssembly);
-          return testAssembly.locateInsertion(cursor, "newline", dir, offset);
+          const position = mockPosition(cursor, dir, offset);
+          return testAssembly.locateInsertion("newline", position);
         };
 
         it("should return the original offset as the remainder", () => {
@@ -317,7 +332,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[3]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 2);
+          const position = mockPosition(cursor, "toTop", 2);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(result).toEqual({
             type: "insertBefore",
@@ -334,7 +350,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[10]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 2);
+          const position = mockPosition(cursor, "toBottom", 2);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(result).toEqual({
             type: "insertAfter",
@@ -367,7 +384,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[10]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 5);
+          const position = mockPosition(cursor, "toBottom", 5);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(result).toEqual({ type: "toBottom", remainder: 2 });
         });
@@ -377,7 +395,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[10]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toBottom", 3);
+          const position = mockPosition(cursor, "toBottom", 3);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(result).toEqual({ type: "toBottom", remainder: 0 });          
         });
@@ -403,7 +422,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[3]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 5);
+          const position = mockPosition(cursor, "toTop", 5);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(result).toEqual({ type: "toTop", remainder: 2 });
         });
@@ -413,7 +433,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[3]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          const result = testAssembly.locateInsertion(cursor, "newline", "toTop", 3);
+          const position = mockPosition(cursor, "toTop", 3);
+          const result = testAssembly.locateInsertion("newline", position);
 
           expect(result).toEqual({ type: "toTop", remainder: 0 });          
         });
@@ -430,7 +451,8 @@ describe("FragmentAssembly", () => {
             mockCursor(beforeFrag(simulated.contentFrags[3]), "fragment", testAssembly),
             mockCursor(afterFrag(simulated.contentFrags[3]), "fragment", testAssembly)
           ] as const;
-          testAssembly.locateInsertion(selection, "newline", "toBottom", 1);
+          const position = mockPosition(selection, "toBottom", 1);
+          testAssembly.locateInsertion("newline", position);
 
           // We only care to know it still passed the selection.
           expect(spy).toHaveBeenCalledWith(selection, "newline", "toBottom");
@@ -445,7 +467,8 @@ describe("FragmentAssembly", () => {
 
           const offset = insideFrag(simulated.contentFrags[3]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
-          testAssembly.locateInsertion(cursor, "newline", "toBottom", -1);
+          const position = mockPosition(cursor, "toBottom", -1);
+          testAssembly.locateInsertion("newline", position);
         });
       });
     });

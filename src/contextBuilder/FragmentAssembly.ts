@@ -45,6 +45,21 @@ export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";
 
 export type IterDirection = "toTop" | "toBottom";
 
+export interface InsertionPosition {
+  /**
+   * A cursor or selection marking the position of the iteration.
+   * 
+   * If a {@link FragmentSelection}:
+   * - When `direction` is `"toTop"`, the first cursor is used.
+   * - When `direction` is `"toBottom"`, the second cursor is used.
+   */
+  position: FragmentCursor | FragmentSelection;
+  /** Which direction to look for an insertion position. */
+  direction: IterDirection;
+  /** How many elements to shift the position by; must be positive. */
+  offset: number;
+}
+
 namespace Position {
   /** No suitable place found; continue with next fragment. */
   interface ContinueResult {
@@ -762,21 +777,13 @@ const theModule = usModule((require, exports) => {
      * to place the entry immediately before or after this assembly.
      */
     locateInsertion(
-      /**
-       * A cursor or selection marking the position of the iteration.
-       * 
-       * If a {@link FragmentSelection}:
-       * - When `direction` is `"toTop"`, the first cursor is used.
-       * - When `direction` is `"toBottom"`, the second cursor is used.
-       */
-      position: FragmentCursor | FragmentSelection,
       /** The type of insertion being done. */
       insertionType: TrimType,
-      /** Which direction to look for an insertion position. */
-      direction: IterDirection,
-      /** How many elements to shift the position by; must be positive. */
-      offset: number
+      /** An object describing how to locate the insertion. */
+      positionData: Readonly<InsertionPosition>
     ): PositionResult {
+      const { position, direction, offset } = positionData;
+
       assert("Expected `offset` to be a positive number.", offset >= 0);
 
       const [remainder, frag] = dew(() => {
