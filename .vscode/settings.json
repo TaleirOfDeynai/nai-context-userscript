@@ -4,6 +4,7 @@
     "defragmenting",
     "fragmenter",
     "ingestor",
+    "insertable",
     "lorebook",
     "prepending",
     "rebudget",

@@ -11,7 +11,7 @@ import $ContentAssembly from "./ContentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
-import type { ContextConfig } from "@nai/Lorebook";
+import type { ContextConfig, LoreEntryConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
 import type { FragmentAssembly } from "./FragmentAssembly";
@@ -27,6 +27,11 @@ import type { TokenizedAssembly } from "./TokenizedAssembly";
 type AnyAssembly = ContentAssembly | TokenizedAssembly;
 
 type InFlightTrimming = Promise<UndefOr<TokenizedAssembly>>;
+
+export interface StoryContent extends IContextField {
+  allowInnerInsertion: boolean;
+  allowInsertionInside: boolean;
+}
 
 export interface NormalizedBudgetStats {
   /** The configured token reservation; always an integer. */
@@ -217,7 +222,7 @@ const theModule = usModule((require, exports) => {
       return new ContextContent(field, searchText, trimmer, contextParams);
     }
 
-    static async forStory(contextParams: ContextParams): Promise<ContextContent> {
+    static async forStory(contextParams: ContextParams) {
       const { storyState } = contextParams;
       const contextConfig = storyState.storyContent.storyContextConfig;
       const storyText = storyState.storyContent.story.getText();
@@ -237,12 +242,14 @@ const theModule = usModule((require, exports) => {
       );
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
 
-      return new ContextContent(
+      const field: StoryContent = Object.assign(
         new ContextField(contextConfig, searchText.fullText),
-        searchText,
-        trimmer,
-        contextParams
+        // The story has some implied insertion rules that we're making
+        // explicit here.
+        { allowInnerInsertion: false, allowInsertionInside: true }
       );
+
+      return new ContextContent(field, searchText, trimmer, contextParams);
     }
 
     #uniqueId: string;
@@ -301,7 +308,7 @@ const theModule = usModule((require, exports) => {
     /**
      * The current token budget.
      * 
-     * This value is updated by calling {@link ContextContent.rebudget rebudget}.
+     * This value is updated by calling {@link rebudget}.
      */
     get currentBudget(): number {
       return this.#currentBudget;
