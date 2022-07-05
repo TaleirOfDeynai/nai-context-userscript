@@ -32,7 +32,7 @@ export interface IContextModule {
 };
 
 class ContextModule extends ModuleDef<IContextModule> {
-  moduleId = 58805;
+  moduleId = 65417;
   expectedExports = 9;
   mapping = {
     "SI": ["ContextField", "function"],
