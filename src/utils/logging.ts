@@ -1,6 +1,9 @@
 import userScriptConfig from "@config";
+import { isThenable } from "./is";
 import * as rx from "./rx";
 import * as rxop from "./rxop";
+
+import type { UndefOr } from "./utility-types";
 
 interface LoggerMessage {
   origin: string;
@@ -8,12 +11,23 @@ interface LoggerMessage {
   data: any[];
 }
 
+interface AggregatedMeasurement {
+  name: string;
+  count: number;
+  total: number;
+  min: number;
+  avg: number;
+  max: number;
+}
+
 /** A small interface for working with performance measurements. */
 interface StopWatch {
   /** Begins measuring performance. */
   start(): void;
   /** Stops measuring performance. */
-  stop(): void;
+  stop(logMeasurement?: boolean): void;
+  /** Stops measuring performance and returns the measurement. */
+  stopAndReport(): UndefOr<PerformanceMeasure>;
 }
 
 /**
@@ -69,33 +83,107 @@ class Logger {
     /** The name of this measurement. */
     name: string
   ): StopWatch {
-    if (!userScriptConfig.debugLogging) return { start: rx.noop, stop: rx.noop };
+    if (!userScriptConfig.debugLogging) return {
+      start: rx.noop,
+      stop: rx.noop,
+      stopAndReport: rx.noop as StopWatch["stopAndReport"]
+    };
 
     const NAME = `[${this.#origin}] ${name}`;
     const START = `[${this.#origin}] START ${name}`;
     const STOP = `[${this.#origin}] STOP ${name}`;
     let started = false;
+
+    const start = () => {
+      if (!started) {
+        started = true;
+        performance.mark(START);
+        return;
+      }
+      this.warn(`Measurement \`${name}\` already started.`);
+    };
+
+    const stopAndReport = () => {
+      if (started) {
+        started = false;
+        performance.mark(STOP);
+        return performance.measure(NAME, START, STOP);
+      }
+      this.warn(`Measurement \`${name}\` not yet started.`);
+    };
+
+    const stop = (logMeasurement: boolean = true) => {
+      const measurement = stopAndReport();
+      if (measurement && logMeasurement) this.info(measurement);
+    };
   
-    return {
-      start: () => {
-        if (!started) {
-          started = true;
-          performance.mark(START);
-          return;
+    return { start, stop, stopAndReport };
+  }
+
+  /** Wraps a function, measuring how long it takes to call it. */
+  measureFn<T extends (this: unknown, ...args: any[]) => any>(
+    fn: T,
+    name: string = fn.name || "<anonymous>"
+  ): T {
+    if (!userScriptConfig.debugLogging) return fn;
+    const self = this;
+
+    const wrappedName = `measured ${name}`;
+    const aggregator = new rx.Subject<PerformanceMeasure>();
+
+    aggregator.pipe(
+      rxop.bufferTime(1000),
+      rxop.filter((measurements) => measurements.length > 0),
+      rxop.map((measurements) => measurements.reduce(
+        (acc: AggregatedMeasurement, m: PerformanceMeasure) => {
+          const initCount = acc.count;
+          const dur = m.duration;
+
+          acc.count = initCount + 1;
+          acc.total = acc.total + dur;
+          acc.min = initCount > 0 ? Math.min(acc.min, dur) : dur;
+          acc.avg = acc.total / acc.count;
+          acc.max = Math.max(acc.max, dur);
+
+          return acc;
+        },
+        {
+          name: wrappedName,
+          count: 0,
+          total: 0,
+          min: 0,
+          avg: 0,
+          max: 0
         }
-        this.warn(`Measurement \`${name}\` already started.`);
-      },
-      stop: () => {
-        if (started) {
-          started = false;
-          performance.mark(STOP);
-          const measurement = performance.measure(NAME, START, STOP);
-          this.info(measurement);
-          return;
+      ))
+    ).subscribe((m) => this.info(m));
+
+    // An old trick to give a dynamic name to a function.
+    const wrapping = {
+      [wrappedName](this: ThisParameterType<T>) {
+        const stopWatch = self.stopWatch(name);
+
+        const doStop = () => {
+          const measurement = stopWatch.stopAndReport();
+          if (!measurement) return;
+          aggregator.next(measurement);
+        };
+
+        stopWatch.start();
+        const retVal = fn.apply(this, arguments);
+
+        // For async functions, we want to wait for it to resolve.
+        if (isThenable(retVal)) {
+          return Promise.resolve(retVal).finally(doStop);
         }
-        this.warn(`Measurement \`${name}\` not yet started.`);
+        else {
+          doStop();
+          return retVal;
+        }
       }
     };
+
+    return wrapping[wrappedName] as T;
   }
 
   /** Measures the performance of the operations within a given function. */
