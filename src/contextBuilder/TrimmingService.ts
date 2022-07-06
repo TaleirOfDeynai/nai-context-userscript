@@ -12,7 +12,7 @@ import $TokenizedAssembly from "./TokenizedAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReplayWrapper } from "@utils/asyncIterables";
-import type { TokenCodec, EncodeResult } from "./TokenizerService";
+import type { AugmentedTokenCodec, EncodeResult } from "./TokenizerService";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
@@ -81,7 +81,7 @@ export default usModule((require, exports) => {
     origin: FragmentAssembly,
     encodeResult: EncodeResult,
     split: TrimResult["split"],
-    codec: TokenCodec
+    codec: AugmentedTokenCodec
   ): Promise<TrimResult> => {
     const { fragments, tokens } = encodeResult;
     assert("Expected at least one text fragment.", fragments.length > 0);

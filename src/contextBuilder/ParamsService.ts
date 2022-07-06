@@ -6,6 +6,7 @@ import $TokenizerService from "./TokenizerService";
 import type { StoryContent, StoryState } from "@nai/EventModule";
 import type { TokenCodec } from "@nai/TokenizerCodec";
 import type { LorebookConfig } from "@nai/Lorebook";
+import type { AugmentedTokenCodec } from "./TokenizerService";
 
 export interface ContextParams {
   /** The provided story content. */
@@ -17,8 +18,8 @@ export interface ContextParams {
   readonly storyLength: number;
   /** The maximum size of the context. */
   readonly contextSize: number;
-  /** The {@link TokenCodec} to use for token counting. */
-  readonly tokenCodec: TokenCodec;
+  /** The {@link AugmentedTokenCodec} to use for token counting. */
+  readonly tokenCodec: AugmentedTokenCodec;
   /** Whether comment removal was requested. */
   readonly removeComments: boolean;
   /** Corresponds to the same value of the lorebook config. */

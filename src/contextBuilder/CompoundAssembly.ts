@@ -5,7 +5,6 @@ import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain } from "@utils/iterables";
 import $SearchService from "./SearchService";
-import $TokenizerService from "./TokenizerService";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
@@ -15,7 +14,7 @@ import type { ContextContent } from "./ContextContent";
 import type { FragmentAssembly, FragmentCursor, InsertionPosition, IterDirection, PositionResult } from "./FragmentAssembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
 import type { AssemblyResultMap } from "./SearchService";
-import type { TokenCodec, Tokens } from "./TokenizerService";
+import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
 
 type InsertableField = Pick<
   LoreEntry,
@@ -80,7 +79,6 @@ const REJECTED_INSERT: InsertionResult = Object.freeze({
 
 const theModule = usModule((require, exports) => {
   const { findHighestIndex } = $SearchService(require);
-  const { mendTokens } = $TokenizerService(require);
 
   const toTokens = (f: AssemblyLike) => f.tokens;
 
@@ -92,7 +90,7 @@ const theModule = usModule((require, exports) => {
    * This is essentially a collection of {@link TokenizedAssembly}.
    */
   class CompoundAssembly {
-    constructor(codec: TokenCodec, tokenBudget: number) {
+    constructor(codec: AugmentedTokenCodec, tokenBudget: number) {
       this.#codec = codec;
       this.#tokenBudget = tokenBudget;
 
@@ -102,7 +100,7 @@ const theModule = usModule((require, exports) => {
       this.#textToSource = new Map();
     }
 
-    #codec: TokenCodec;
+    #codec: AugmentedTokenCodec;
     #fragments: AssemblyLike[];
     #knownSources: Set<BudgetedSource>;
     #textToSource: Map<FragmentAssembly, BudgetedSource>;
@@ -256,12 +254,11 @@ const theModule = usModule((require, exports) => {
       assert("Expected `index` to be in range.", index >= 0);
       assert("Expected `index` to be in range.", index <= oldFrags.length);
 
-      const mendingFn = mendTokens(this.#codec);
       const fragsBefore = oldFrags.slice(0, index);
       const fragsAfter = oldFrags.slice(index);
 
       const newFrags = [...fragsBefore, inserted, ...fragsAfter];
-      const tokens = await mendingFn(...newFrags.map(toTokens));
+      const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
 
       const target = this.#makeTarget(iterState);
       const tokensUsed = this.#updateState(newFrags, tokens, source, inserted);
@@ -327,7 +324,6 @@ const theModule = usModule((require, exports) => {
       assert("Expected `index` to be in range.", index >= 0);
       assert("Expected `index` to be in range.", index < oldFrags.length);
 
-      const mendingFn = mendTokens(this.#codec);
       const fragsBefore = oldFrags.slice(0, index);
       const fragsAfter = oldFrags.slice(index + 1);
 
@@ -351,7 +347,7 @@ const theModule = usModule((require, exports) => {
 
         const [splitBefore, splitAfter] = splitResult;
         const newFrags = [...fragsBefore, splitBefore, inserted, splitAfter, ...fragsAfter];
-        const tokens = await mendingFn(...newFrags.map(toTokens));
+        const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
 
         const tokensUsed = this.#updateState(newFrags, tokens, source, inserted);
         return { type: "inside", target, tokensUsed, shunted: 0 };

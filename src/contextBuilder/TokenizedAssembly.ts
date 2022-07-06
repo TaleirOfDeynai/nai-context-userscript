@@ -4,7 +4,6 @@ import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { toImmutable } from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
-import $TokenizerService from "./TokenizerService";
 import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
 
@@ -13,11 +12,11 @@ import type { TokenCodec } from "@nai/TokenizerCodec";
 import type { TextFragment } from "./TextSplitterService";
 import type { FragmentAssembly, FragmentCursor } from "./FragmentAssembly";
 import type { ContinuityOptions } from "./ContentAssembly";
-import type { Tokens } from "./TokenizerService";
+import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
 
 export interface DerivedOptions extends ContinuityOptions {
   /** Required when not deriving from another `TokenizedAssembly`. */
-  codec?: TokenCodec;
+  codec?: AugmentedTokenCodec;
   /** The tokens for the derived assembly. */
   tokens?: Tokens;
 }
@@ -30,19 +29,18 @@ const theModule = usModule((require, exports) => {
   const { beforeFragment, afterFragment } = splitterService;
   const { FragmentAssembly, splitSequenceAt, makeCursor } = $FragmentAssembly(require);
   const { ContentAssembly } = $ContentAssembly(require);
-  const { tokensOfOffset, mendTokens } = $TokenizerService(require);
 
   // I'm reminded why I absolutely HATE classes...  HATE!  HATE!
   // If the word "hate" were written on every micro-angstrom of my...
 
   const getTokensForSplit = async (
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     offset: number,
     tokens: Tokens
   ): Promise<[Tokens, Tokens]> => {
     const result = assertExists(
       "Expected to locate the cursor in the tokens.",
-      await tokensOfOffset(codec, tokens, offset)
+      await codec.findOffset(tokens, offset)
     );
 
     if (result.type === "double") {
@@ -63,10 +61,9 @@ const theModule = usModule((require, exports) => {
       const right = splitToken.slice(result.remainder);
 
       const index = result.data.index;
-      const mendingFn = mendTokens(codec, TOKEN_MENDING_RANGE);
       return Promise.all([
-        mendingFn(tokens.slice(0, index), left),
-        mendingFn(right, tokens.slice(index + 1))
+        codec.mendTokens([tokens.slice(0, index), left], TOKEN_MENDING_RANGE),
+        codec.mendTokens([right, tokens.slice(index + 1)], TOKEN_MENDING_RANGE)
       ]);
     }
   }
@@ -91,7 +88,7 @@ const theModule = usModule((require, exports) => {
       content: Iterable<TextFragment>,
       suffix: TextFragment,
       tokens: Tokens,
-      codec: TokenCodec,
+      codec: AugmentedTokenCodec,
       isContiguous: boolean,
       source: FragmentAssembly | null
     ) {
@@ -189,7 +186,7 @@ const theModule = usModule((require, exports) => {
     readonly #tokens: Tokens;
 
     /** The codec we're using for manipulation. */
-    readonly #codec: TokenCodec;
+    readonly #codec: AugmentedTokenCodec;
 
     /**
      * Given a cursor placed within this assembly's content, splits this

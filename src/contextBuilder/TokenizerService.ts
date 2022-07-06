@@ -5,16 +5,15 @@ import { assert } from "@utils/assert";
 import { isArray, isFunction, isObject } from "@utils/is";
 import { defer } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
+import { createLogger } from "@utils/logging";
 import $TokenizerCodec from "@nai/TokenizerCodec";
 import $TextSplitterService from "./TextSplitterService";
-import { onEndContext } from "./rx/events";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { Deferred } from "@utils/functions";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextOrFragment, TextFragment } from "./TextSplitterService";
-
 
 export interface SyncTokenCodec {
   encode(text: string): number[];
@@ -64,7 +63,7 @@ export interface StreamEncodeOptions {
 export interface StreamEncodeFn {
   (
     /** The {@link TokenCodec} to use for token encode/decode. */
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     /**
      * An iterable containing the text fragments to encode.
      * As this is a prepend encoder, these fragments should be provided
@@ -106,6 +105,31 @@ namespace TokenOffset {
 
 export type TokenOffsetResult = TokenOffset.Result;
 
+export interface AugmentedTokenCodec extends AsyncTokenCodec {
+  mendTokens(
+    /** The sections of tokens and strings to be mended together. */
+    inputSections: Array<Tokens | TextOrFragment>,
+    /** How many tokens at mending boundaries to re-encode. */
+    bufferSize?: number
+  ): Promise<Tokens>;
+
+  /**
+   * Searches the given `tokens` to locate a range of indices in `tokens`
+   * that contains the cursor at some `offset` number of characters.
+   * 
+   * It returns a range, since the offset could lie between two tokens.
+   * If it does not, both elements of the returned array will be equal.
+   * 
+   * @todo Investigate if a binary search would be more efficient.
+   */
+  findOffset(
+    /** The array of tokens to search. */
+    tokens: Tokens,
+    /** The character offset to locate. */
+    offset: number
+  ): Promise<UndefOr<TokenOffsetResult>>;
+}
+
 type ResumeTuple = [
   /** The tokens considered unstable. */
   wilderness: Tokens,
@@ -117,9 +141,13 @@ type ResumeTuple = [
 
 const UNSAFE_TOKEN_BUFFER = 10;
 
+const $$MarkOfAugmentation = Symbol("TokenizerService.tokenCodec");
+
 export default usModule((require, exports) => {
   const tokenizerCodec = require($TokenizerCodec);
   const textSplitter = $TextSplitterService(require);
+
+  const logger = createLogger("TokenizerService");
 
   // NovelAI's token codecs have a bit of a problem that makes handling
   // them efficiently challenging: they only work discretely.  You give
@@ -162,18 +190,16 @@ export default usModule((require, exports) => {
    * Creates a function that can mend together token arrays, strings, and
    * {@link TextFragment text fragments} into a single, uniform token array.
    */
-  const mendTokens = (
-    /** The token codec to use. */
-    codec: TokenCodec,
-    /** How many tokens at mending boundaries to re-encode. */
-    bufferSize: number = UNSAFE_TOKEN_BUFFER
+  const makeMendTokens = (
+    encode: TokenCodec["encode"],
+    decode: TokenCodec["decode"]
   ) => {
     type Section = string | Tokens;
 
     const isTokens = isArray as (v: Tokens | TextOrFragment) => v is Tokens;
 
     /** Splits the leading tokens into safe and unsafe portions. */
-    const leadingTokens = (tokens: Tokens): [Tokens, Tokens] => {
+    const leadingTokens = (bufferSize: number, tokens: Tokens): [Tokens, Tokens] => {
       if (tokens.length === 0) return [tokens, tokens];
 
       const left = tokens.slice(0, -bufferSize);
@@ -182,7 +208,7 @@ export default usModule((require, exports) => {
     };
 
     /** Splits the trailing tokens into unsafe and safe portions. */
-    const trailingTokens = (tokens: Tokens): [Tokens, Tokens] => {
+    const trailingTokens = (bufferSize: number, tokens: Tokens): [Tokens, Tokens] => {
       if (tokens.length === 0) return [tokens, tokens];
 
       const left = tokens.slice(0, bufferSize);
@@ -191,6 +217,8 @@ export default usModule((require, exports) => {
     };
 
     const doMending = async (
+      /** How many tokens at mending boundaries to re-encode. */
+      bufferSize: number,
       /** All the tokens we have encoded up to this point. */
       prevTokens: Tokens,
       /** The sections to be mended. */
@@ -204,10 +232,10 @@ export default usModule((require, exports) => {
       // mend and what is not.  We do not need to do an expensive
       // re-encoding when we can use just decode a smaller section
       // of tokens and encode that instead.
-      const [leadingLeft, leadingRight] = leadingTokens(prevTokens);
+      const [leadingLeft, leadingRight] = leadingTokens(bufferSize, prevTokens);
       // We need to handle the case that the last element was a string.
       const [trailingLeft, trailingRight]
-        = isTokens(lastSection) ? trailingTokens(lastSection)
+        = isTokens(lastSection) ? trailingTokens(bufferSize, lastSection)
         : [lastSection, [] as Tokens];
       
       // We've got the important portion of the last element in
@@ -215,11 +243,11 @@ export default usModule((require, exports) => {
       // We need to decode everything containing tokens now.
       const frags = await chain([leadingRight, ...skipRight(sections, 1), trailingLeft])
         .filter((v) => v.length > 0)
-        .map((v) => isTokens(v) ? codec.decode(v as any) : Promise.resolve(v))
+        .map((v) => isTokens(v) ? decode(v as any) : Promise.resolve(v))
         .value((promises) => Promise.all(Array.from(promises)));
 
       // And now we concat and encode.
-      const mendedTokens = await codec.encode(frags.join(""));
+      const mendedTokens = await encode(frags.join(""));
 
       // And rejoin the split tokens back into the re-encoded portion.
       return [...leadingLeft, ...mendedTokens, ...trailingRight];
@@ -232,7 +260,8 @@ export default usModule((require, exports) => {
      */
     const boundMendTokens = async (
       /** The sections of tokens and strings to be mended together. */
-      ...inputSections: Array<Tokens | TextOrFragment>
+      inputSections: Array<Tokens | TextOrFragment>,
+      bufferSize: number = UNSAFE_TOKEN_BUFFER
     ): Promise<Tokens> => {
       // Get everything into either an array of tokens or a string.
       // While we're at it, drop any empty sections; no reason to bother.
@@ -247,7 +276,7 @@ export default usModule((require, exports) => {
       if (sections.length === 1) {
         const [section] = sections;
         if (isTokens(section)) return toImmutable(section);
-        return Object.freeze(await codec.encode(section));
+        return Object.freeze(await encode(section));
       }
 
       // We want to process things in chunks, each containing zero-or-more
@@ -255,13 +284,84 @@ export default usModule((require, exports) => {
       // that says the final element can't be a string).
       let prevTokens = [] as Tokens;
       for (const bufSections of buffer(sections, isTokens))
-        prevTokens = await doMending(prevTokens, bufSections);
+        prevTokens = await doMending(bufferSize, prevTokens, bufSections);
       
       return toImmutable(prevTokens);
     };
 
     return boundMendTokens;
-  }
+  };
+
+  const makeFindOffset = (decode: TokenCodec["decode"]) => {
+    const theCache = new Map<number, Promise<string>>();
+
+    /**
+     * Gets the translated string for a single token.  This uses a cache
+     * that is reset after a context is generated.
+     */
+    const getTokenString = (
+      /** The token to translate. */
+      token: number
+    ): Promise<string> => {
+      let result = theCache.get(token);
+      if (!result) {
+        result = decode([token]);
+        theCache.set(token, result);
+      }
+      return result;
+    };
+
+    return async (
+      /** The array of tokens to search. */
+      tokens: Tokens,
+      /** The character offset to locate. */
+      offset: number
+    ): Promise<UndefOr<TokenOffsetResult>> => {
+      if (!tokens.length) return undefined;
+  
+      // Hopefully this won't be too rough with our tokenizer optimizations.
+      // A decode should be quite quick, but this is potentially several
+      // hundred decodes all at once.
+      const tokenTable = await chain(new Set(tokens))
+        .map(async (token) => [token, await getTokenString(token)] as const)
+        .value(async (promises) => new Map(await Promise.all([...promises])));
+      
+      let curOffset = 0;
+      let result = [] as number[];
+  
+      for (let i = 0, len = tokens.length; i < len; i++) {
+        if (result.length === 2) break;
+        if (offset < curOffset) break;
+  
+        const token = tokens[i];
+        const value = tokenTable.get(token) as string;
+        curOffset += value.length;
+  
+        if (offset > curOffset) continue;
+        result.push(i);
+      }
+  
+      const getData = (index: number): TokenData => {
+        const token = tokens[index];
+        const value = tokenTable.get(token) as string;
+        return { index, token, value };
+      };
+  
+      switch (result.length) {
+        case 2: {
+          const min = getData(result[0]);
+          const max = getData(result[1]);
+          return { type: "double", min, max, remainder: 0 };
+        }
+        case 1: {
+          const data = getData(result[0]);
+          const remainder = data.value.length - (curOffset - offset);
+          return { type: "single", data, remainder };
+        }
+        default: return undefined;
+      }
+    };
+  };
 
   const bootstrapPrepend = async (
     codec: AsyncTokenCodec,
@@ -301,7 +401,7 @@ export default usModule((require, exports) => {
    */
   async function* prependEncoder(
     /** The {@link TokenCodec} to use for token encode/decode. */
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     /**
      * An iterable containing the text fragments to encode.
      * As this is a prepend encoder, these fragments should be provided
@@ -316,8 +416,6 @@ export default usModule((require, exports) => {
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
-    const mendingFn = mendTokens(codec, bufferSize);
-
     let [wilderness, safeHouse, encoded] = await bootstrapPrepend(
       codec, seedResult, suffix
     );
@@ -329,11 +427,11 @@ export default usModule((require, exports) => {
 
     for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
-      const toPrepend = await mendingFn(...theBuffer, wilderness);
+      const toPrepend = await codec.mendTokens([...theBuffer, wilderness], bufferSize);
 
       // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...theBuffer, ...encoded]);
-      const tokens = await mendingFn(prefix, [...toPrepend, ...safeHouse]);
+      const tokens = await codec.mendTokens([prefix, [...toPrepend, ...safeHouse]], bufferSize);
 
       // The first `bufferSize` tokens are considered unverified.
       wilderness = Object.freeze(toPrepend.slice(0, bufferSize));
@@ -389,7 +487,7 @@ export default usModule((require, exports) => {
    */
   async function* appendEncoder(
     /** The {@link TokenCodec} to use for token encode/decode. */
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     /** An iterable containing the text fragments to encode. */
     toEncode: Iterable<TextFragment>,
     /** Options used to setup the encoder. */
@@ -399,8 +497,6 @@ export default usModule((require, exports) => {
     const suffix = options?.suffix ?? "";
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
-
-    const mendingFn = mendTokens(codec, bufferSize);
 
     let [wilderness, safeHouse, encoded] = await bootstrapAppend(
       codec, seedResult, prefix
@@ -412,11 +508,11 @@ export default usModule((require, exports) => {
 
     for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
-      const toAppend = await mendingFn(wilderness, ...theBuffer);
+      const toAppend = await codec.mendTokens([wilderness, ...theBuffer], bufferSize);
 
       // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...encoded, ...theBuffer]);
-      const tokens =  await mendingFn([...safeHouse, ...toAppend], suffix);
+      const tokens =  await codec.mendTokens([[...safeHouse, ...toAppend], suffix], bufferSize);
 
       // The last `bufferSize` tokens are considered unverified.
       wilderness = Object.freeze(toAppend.slice(-bufferSize));
@@ -445,8 +541,9 @@ export default usModule((require, exports) => {
   };
 
   /**
-   * Ensures `givenCodec` is a codec, or returns an appropriate global
-   * codec instance.
+   * Ensures `givenCodec` is a codec and wraps it to ensure it corresponds
+   * to an {@link AsyncTokenCodec}. Otherwise, it returns an appropriate
+   * global codec instance.
    */
   const getCodec = (type: TokenizerTypes, givenCodec?: SomeTokenCodec): TokenCodec => {
     // Wrap in a try/catch in case it is synchronous.
@@ -461,18 +558,21 @@ export default usModule((require, exports) => {
       }
     };
 
-    // I do not know why NovelAI keeps instantiating a new class for the
-    // global encoder like this, but I will do as they do.
+    // NovelAI keeps instantiating a new class for the global encoder, but it
+    // seems to work fine (and is much faster) reusing an instance so.
+    const globalEncoder = new tokenizerCodec.GlobalEncoder();
     return {
-      encode: (text) => new tokenizerCodec.GlobalEncoder().encode(text, type),
-      decode: (tokens) => new tokenizerCodec.GlobalEncoder().decode(tokens, type)
+      encode: (text) => globalEncoder.encode(text, type),
+      decode: (tokens) => globalEncoder.decode(tokens, type)
     };
   };
 
   /**
-   * Wraps the given `codec` in a task runner that will run two encode/decode
-   * tasks concurrently and buffer any more than that, favoring executing the
-   * latest task before older tasks.
+   * Augments the given codec with a few additional methods.
+   * 
+   * It also wraps the given `codec` in a task runner that will run two
+   * encode/decode tasks concurrently and buffer any more than that,
+   * favoring executing the latest task before older tasks.
    * 
    * This will hopefully utilize both the background worker and main thread
    * more efficiently, keeping the worker saturated and the main thread
@@ -483,23 +583,37 @@ export default usModule((require, exports) => {
    * its jobs after the current event loop ends...  But it will still be
    * better than no management at all.
    */
-  const wrapInTaskRunner = (codec: TokenCodec): TokenCodec => {
+  const augmentCodec = (codec: TokenCodec): AugmentedTokenCodec => {
+    // @ts-ignore - Preventing double augmentation.
+    if (codec[$$MarkOfAugmentation] === true) return codec;
+
     const jobSubject = new rx.Subject<Deferred<string| number[]>>();
 
     // This will execute deferred tasks as appropriate.
     jobSubject.pipe(rxop.taskRunner((v) => v.execute())).subscribe(rx.noop);
 
+    const encode = (text: string) => {
+      const def = defer(() => codec.encode(text));
+      jobSubject.next(def);
+      return def.promise;
+    };
+
+    const decode = (tokens: number[]) => {
+      const def = defer(() => codec.decode(tokens));
+      jobSubject.next(def);
+      return def.promise;
+    };
+
+    const mendTokens = makeMendTokens(encode, decode);
+    const findOffset = makeFindOffset(decode);
+
     return {
-      encode: (text) => {
-        const def = defer(() => codec.encode(text));
-        jobSubject.next(def);
-        return def.promise;
-      },
-      decode: (tokens) => {
-        const def = defer(() => codec.decode(tokens));
-        jobSubject.next(def);
-        return def.promise;
-      }
+      encode,
+      decode,
+      mendTokens: logger.measureFn(mendTokens, "mendTokens"),
+      findOffset: logger.measureFn(findOffset, "findOffset"),
+      // @ts-ignore - Don't care.  Doing it anyways.
+      [$$MarkOfAugmentation]: true
     };
   };
 
@@ -510,108 +624,12 @@ export default usModule((require, exports) => {
    */
   function codecFor(tokenizerType: TokenizerTypes, givenCodec?: SomeTokenCodec) {
     const codec = getCodec(tokenizerType, givenCodec);
-    return wrapInTaskRunner(codec);
+    return augmentCodec(codec);
   }
-
-  type TokenCache = Map<number, Promise<string>>;
-  const tokenCache = new Map<TokenCodec, TokenCache>();
-
-  onEndContext.subscribe(() => {
-    tokenCache.clear();
-  });
-
-  /**
-   * Gets the translated string for a single token.  This uses a cache
-   * that is reset after a context is generated.
-   */
-  const getTokenString = (
-    /** The token codec to use. */
-    codec: TokenCodec,
-    /** The token to translate. */
-    token: number
-  ): Promise<string> => {
-    let theCache = tokenCache.get(codec);
-    if (!theCache) {
-      theCache = new Map();
-      tokenCache.set(codec, theCache);
-    }
-
-    let result = theCache.get(token);
-    if (!result) {
-      result = codec.decode([token]);
-      theCache.set(token, result);
-    }
-    return result;
-  };
-
-  /**
-   * Searches the given `tokens` to locate a range of indices in `tokens`
-   * that contains the cursor at some `offset` number of characters.
-   * 
-   * It returns a range, since the offset could lie between two tokens.
-   * If it does not, both elements of the returned array will be equal.
-   * 
-   * @todo Investigate if a binary search would be more efficient.
-   */
-  const tokensOfOffset = async (
-    /** The token codec to use. */
-    codec: TokenCodec,
-    /** The array of tokens to search. */
-    tokens: Tokens,
-    /** The character offset to locate. */
-    offset: number
-  ): Promise<UndefOr<TokenOffsetResult>> => {
-    if (!tokens.length) return undefined;
-
-    // Hopefully this won't be too rough with our tokenizer optimizations.
-    // A decode should be quite quick, but this is potentially several
-    // hundred decodes all at once.
-    const tokenTable = await chain(new Set(tokens))
-      .map(async (token) => [token, await getTokenString(codec, token)] as const)
-      .value(async (promises) => new Map(await Promise.all([...promises])));
-    
-    let curOffset = 0;
-    let result = [] as number[];
-
-    for (let i = 0, len = tokens.length; i < len; i++) {
-      if (result.length === 2) break;
-      if (offset < curOffset) break;
-
-      const token = tokens[i];
-      const value = tokenTable.get(token) as string;
-      curOffset += value.length;
-
-      if (offset > curOffset) continue;
-      result.push(i);
-    }
-
-    const getData = (index: number): TokenData => {
-      const token = tokens[index];
-      const value = tokenTable.get(token) as string;
-      return { index, token, value };
-    };
-
-    switch (result.length) {
-      case 2: {
-        const min = getData(result[0]);
-        const max = getData(result[1]);
-        return { type: "double", min, max, remainder: 0 };
-      }
-      case 1: {
-        const data = getData(result[0]);
-        const remainder = data.value.length - (curOffset - offset);
-        return { type: "single", data, remainder };
-      }
-      default: return undefined;
-    }
-  };
 
   return Object.assign(exports, {
     isCodec,
     codecFor,
-    mendTokens,
-    getTokenString,
-    tokensOfOffset,
     prependEncoder,
     appendEncoder
   });

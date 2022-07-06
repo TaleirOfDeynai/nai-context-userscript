@@ -7,13 +7,13 @@ import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
 import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
 
 import { first, last } from "@utils/iterables";
-import $TokenizedAssembly from "./TokenizedAssembly";
 import AppConstants from "@nai/AppConstants";
+import $TokenizerService from "./TokenizerService";
+import $TokenizedAssembly from "./TokenizedAssembly";
 
 import type { SpyInstance } from "jest-mock";
 import type { AssemblyInit } from "@spec/helpers-assembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
-import type { Tokens } from "./TokenizerService";
 
 type SplitContent = [TokenizedAssembly, TokenizedAssembly];
 
@@ -28,6 +28,7 @@ const fakeRequire: any = (module: any) => {
 };
 
 const { TokenizedAssembly } = $TokenizedAssembly(fakeRequire);
+const { codecFor } = $TokenizerService(fakeRequire);
 
 const initAssembly = async (data: AssemblyInit) => {
   const fullText = [data.prefix, ...data.content, data.suffix]
@@ -39,7 +40,7 @@ const initAssembly = async (data: AssemblyInit) => {
     data.content,
     data.suffix,
     await mockCodec.encode(fullText),
-    mockCodec,
+    codecFor(0, mockCodec),
     data.isContiguous ?? true,
     data.source ?? null
   );
