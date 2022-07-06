@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { isThenable } from "./is";
 import * as rx from "./rx";
 import * as rxop from "./rxop";
@@ -42,6 +42,8 @@ interface MeasureStreamOperator<T> extends rx.OperatorFunction<T, T> {
   ): rx.OperatorFunction<U, U>;
 }
 
+/** The functional reactive nature of this logger offends Jest. */
+const CAN_ASYNC_LOG = usConfig.debugLogging && !usConfig.testLogging;
 const omegaLogger = new rx.Subject<LoggerMessage>();
 
 class Logger {
@@ -55,23 +57,23 @@ class Logger {
   }
 
   info = (...data: any[]) => {
-    if (!userScriptConfig.debugLogging) return;
+    if (!CAN_ASYNC_LOG) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   warn = (...data: any[]) => {
-    if (!userScriptConfig.debugLogging) return;
+    if (!CAN_ASYNC_LOG) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   error = (...data: any[]) => {
-    if (!userScriptConfig.debugLogging) return;
+    if (!CAN_ASYNC_LOG) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   dir = (...data: Parameters<Console["dir"]>) => {
-    if (!userScriptConfig.debugLogging) return;
+    if (!CAN_ASYNC_LOG) return;
     this.#stream.next({ origin: this.#origin, type: "info", data });
   };
   mark = (name: string) => {
-    if (!userScriptConfig.debugLogging) return;
+    if (!CAN_ASYNC_LOG) return;
     performance.mark(`[${this.#origin}] ${name}`);
   };
 
@@ -83,7 +85,7 @@ class Logger {
     /** The name of this measurement. */
     name: string
   ): StopWatch {
-    if (!userScriptConfig.debugLogging) return {
+    if (!CAN_ASYNC_LOG) return {
       start: rx.noop,
       stop: rx.noop,
       stopAndReport: rx.noop as StopWatch["stopAndReport"]
@@ -125,9 +127,9 @@ class Logger {
     fn: T,
     name: string = fn.name || "<anonymous>"
   ): T {
-    if (!userScriptConfig.debugLogging) return fn;
-    const self = this;
+    if (!CAN_ASYNC_LOG) return fn;
 
+    const self = this;
     const wrappedName = `measured ${name}`;
     const aggregator = new rx.Subject<PerformanceMeasure>();
 
@@ -193,7 +195,7 @@ class Logger {
     /** A zero-arity function to call after measurement has begun. */
     task: () => Promise<T>
   ): Promise<T> {
-    if (!userScriptConfig.debugLogging) return await task();
+    if (!CAN_ASYNC_LOG) return await task();
 
     const stopWatch = this.stopWatch(name);
     stopWatch.start();
@@ -205,7 +207,7 @@ class Logger {
   measureStream<T>(
     name: string
   ): MeasureStreamOperator<T> {
-    if (!userScriptConfig.debugLogging) {
+    if (!CAN_ASYNC_LOG) {
       return Object.assign((source) => source, {
         markItems: () => (source) => source
       });
