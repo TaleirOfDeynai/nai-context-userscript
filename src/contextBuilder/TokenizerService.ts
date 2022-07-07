@@ -196,6 +196,9 @@ export default usModule((require, exports) => {
   ) => {
     type Section = string | Tokens;
 
+    /** To reduce object instantiations. */
+    const NO_TOKENS: Tokens = Object.freeze([]);
+
     const isTokens = isArray as (v: Tokens | TextOrFragment) => v is Tokens;
 
     /** Splits the leading tokens into safe and unsafe portions. */
@@ -224,33 +227,50 @@ export default usModule((require, exports) => {
       /** The sections to be mended. */
       sections: Section[]
     ) => {
+      // Be aware: this is a private function and `boundMendTokens`
+      // will have filtered out empty sections for it.  No need to
+      // check for those.
+
       // We need at least one section.
       const lastSection = last(sections);
       if (!lastSection) return prevTokens;
 
+      // Fast-path: With empty `prevTokens`, no need to mend when
+      // we only have one element in `sections`.
+      if (!prevTokens.length && sections.length === 1) {
+        // Clone the tokens if needed and just use them directly.
+        if (isTokens(lastSection)) return toImmutable(lastSection);
+        // We just need to do an `encode` on a single string.
+        return await encode(lastSection);
+      }
+
       // We need to figure out what is going to be involved in the
       // mend and what is not.  We do not need to do an expensive
       // re-encoding when we can use just decode a smaller section
-      // of tokens and encode that instead.
-      const [leadingLeft, leadingRight] = leadingTokens(bufferSize, prevTokens);
+      // of tokens and encode that smaller portion instead.
+      const [tokensBefore, leading] = leadingTokens(bufferSize, prevTokens);
       // We need to handle the case that the last element was a string.
-      const [trailingLeft, trailingRight]
+      const [trailing, tokensAfter]
         = isTokens(lastSection) ? trailingTokens(bufferSize, lastSection)
-        : [lastSection, [] as Tokens];
+        : [lastSection, NO_TOKENS];
+      // `trailing` already has the contribution from the last section,
+      // so we'll use `skipRight` to remove it and get the sections
+      // in between.
+      const between = skipRight(sections, 1);
       
-      // We've got the important portion of the last element in
-      // `trailingLeft`, so we'll use `skipRight` to replace it.
       // We need to decode everything containing tokens now.
-      const frags = await chain([leadingRight, ...skipRight(sections, 1), trailingLeft])
+      // Because `prevTokens` could have been empty, we do still have
+      // to filter empty items.  This doubles as a sanity check too.
+      const theText = await chain([leading, ...between, trailing])
         .filter((v) => v.length > 0)
-        .map((v) => isTokens(v) ? decode(v as any) : Promise.resolve(v))
+        .map((v) => isTokens(v) ? decode(v as any) : v)
         .value((promises) => Promise.all(Array.from(promises)));
 
       // And now we concat and encode.
-      const mendedTokens = await encode(frags.join(""));
+      const tokensMended = await encode(theText.join(""));
 
       // And rejoin the split tokens back into the re-encoded portion.
-      return [...leadingLeft, ...mendedTokens, ...trailingRight];
+      return [...tokensBefore, ...tokensMended, ...tokensAfter];
     };
 
     /**
@@ -269,10 +289,10 @@ export default usModule((require, exports) => {
         .map((v) => isTokens(v) ? v : textSplitter.asContent(v))
         .filter((v) => v.length > 0);
 
-      // If empty, our result is also empty.
-      if (sections.length === 0) return Object.freeze([]);
+      // Fast-path: If empty, our result is also empty.
+      if (sections.length === 0) return NO_TOKENS;
 
-      // If we have only one thing, we just make sure its tokens.
+      // Fast-path: If we have only one thing, we just make sure its tokens.
       if (sections.length === 1) {
         const [section] = sections;
         if (isTokens(section)) return toImmutable(section);
@@ -282,7 +302,7 @@ export default usModule((require, exports) => {
       // We want to process things in chunks, each containing zero-or-more
       // strings and ended by an array of tokens (possibly; there is nothing
       // that says the final element can't be a string).
-      let prevTokens = [] as Tokens;
+      let prevTokens = NO_TOKENS;
       for (const bufSections of buffer(sections, isTokens))
         prevTokens = await doMending(bufferSize, prevTokens, bufSections);
       
