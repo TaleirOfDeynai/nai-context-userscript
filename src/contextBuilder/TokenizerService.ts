@@ -3,14 +3,14 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { isArray, isFunction, isObject } from "@utils/is";
-import { defer } from "@utils/functions";
+import { defer, future } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import $TokenizerCodec from "@nai/TokenizerCodec";
 import $TextSplitterService from "./TextSplitterService";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { Deferred } from "@utils/functions";
+import type { Deferred, Future } from "@utils/functions";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextOrFragment, TextFragment } from "./TextSplitterService";
@@ -195,11 +195,38 @@ export default usModule((require, exports) => {
     decode: TokenCodec["decode"]
   ) => {
     type Section = string | Tokens;
+    type TokensFuture = Future<Tokens> & { isNew: boolean };
 
     /** To reduce object instantiations. */
     const NO_TOKENS: Tokens = Object.freeze([]);
 
     const isTokens = isArray as (v: Tokens | TextOrFragment) => v is Tokens;
+    const isLengthy = (v: Section) => v.length > 0;
+    const toDecoded = (v: Section) => isTokens(v) ? decode(v as any) : v;
+
+    // We're going to be lazy; when doing assembly and inserting new tokens
+    // into the context's token array, rather than try and figure out which
+    // tokens were unaffected and which need mending, we're just going throw
+    // all the tokens back into `mendTokens`.  When it's mending two pairs
+    // of token arrays together, it can check to see if it's done that pair
+    // before and pull from cache if so.
+    const binaryCache = new Map<string, TokensFuture>();
+    
+    /** For mending pairs of tokens, this will draw from the cache. */
+    const getBinaryFuture = (v: Section[]): UndefOr<TokensFuture> => {
+      if (v.length !== 2 || !v.every(isTokens)) return undefined;
+      const key = JSON.stringify(v);
+
+      let theFuture = binaryCache.get(key);
+      if (theFuture) {
+        theFuture.isNew = false;
+        return theFuture;
+      }
+
+      theFuture = Object.assign(future<Tokens>(), { isNew: true });
+      binaryCache.set(key, theFuture);
+      return theFuture;
+    };
 
     /** Splits the leading tokens into safe and unsafe portions. */
     const leadingTokens = (bufferSize: number, tokens: Tokens): [Tokens, Tokens] => {
@@ -257,20 +284,37 @@ export default usModule((require, exports) => {
       // so we'll use `skipRight` to remove it and get the sections
       // in between.
       const between = skipRight(sections, 1);
-      
-      // We need to decode everything containing tokens now.
+
       // Because `prevTokens` could have been empty, we do still have
       // to filter empty items.  This doubles as a sanity check too.
-      const theText = await chain([leading, ...between, trailing])
-        .filter((v) => v.length > 0)
-        .map((v) => isTokens(v) ? decode(v as any) : v)
-        .value((promises) => Promise.all(Array.from(promises)));
+      const theSections = [leading, ...between, trailing].filter(isLengthy);
 
-      // And now we concat and encode.
-      const tokensMended = await encode(theText.join(""));
+      // If this is just mending two token arrays, let's see if we have
+      // stored a result for this one already.  If we get one and it
+      // isn't new, we'll use it.  Otherwise, we will need to do the
+      // mend during this call, and potentially fulfill it.
+      const maybeBinary = getBinaryFuture(theSections);
+      if (maybeBinary?.isNew === false) {
+        const fromCache = await maybeBinary.promise;
+        return [...tokensBefore, ...fromCache, ...tokensAfter];
+      }
+      
+      try {
+        // Decode as needed, then encode.
+        const theText = await Promise.all(theSections.map(toDecoded));
+        const tokensMended = await encode(theText.join(""));
 
-      // And rejoin the split tokens back into the re-encoded portion.
-      return [...tokensBefore, ...tokensMended, ...tokensAfter];
+        // Resolve the binary future if we need to.
+        maybeBinary?.resolve(Object.freeze(tokensMended));
+
+        // And rejoin the split tokens back into the re-encoded portion.
+        return [...tokensBefore, ...tokensMended, ...tokensAfter];
+      }
+      catch (err) {
+        // Just in case the error happened during the re-join above.
+        if (maybeBinary?.isFulfilled === false) maybeBinary.reject(err);
+        throw err;
+      }
     };
 
     /**
@@ -287,7 +331,7 @@ export default usModule((require, exports) => {
       // While we're at it, drop any empty sections; no reason to bother.
       const sections = inputSections
         .map((v) => isTokens(v) ? v : textSplitter.asContent(v))
-        .filter((v) => v.length > 0);
+        .filter(isLengthy);
 
       // Fast-path: If empty, our result is also empty.
       if (sections.length === 0) return NO_TOKENS;
