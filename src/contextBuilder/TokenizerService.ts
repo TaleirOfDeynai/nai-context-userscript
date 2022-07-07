@@ -590,7 +590,7 @@ export default usModule((require, exports) => {
   /**
    * Augments the given codec with a few additional methods.
    * 
-   * It also wraps the given `codec` in a task runner that will run two
+   * It also wraps the given `codec` in a task runner that will run three
    * encode/decode tasks concurrently and buffer any more than that,
    * favoring executing the latest task before older tasks.
    * 
@@ -600,8 +600,8 @@ export default usModule((require, exports) => {
    * 
    * The task management would be better placed into the actual background
    * worker, since a task-runner on the main thread can only actually advance
-   * its jobs after the current event loop ends...  But it will still be
-   * better than no management at all.
+   * the worker's jobs after the current event loop ends...  But it will
+   * still be better than no management at all.
    */
   const augmentCodec = (codec: TokenCodec): AugmentedTokenCodec => {
     // @ts-ignore - Preventing double augmentation.
@@ -610,7 +610,7 @@ export default usModule((require, exports) => {
     const jobSubject = new rx.Subject<Deferred<string| number[]>>();
 
     // This will execute deferred tasks as appropriate.
-    jobSubject.pipe(rxop.taskRunner((v) => v.execute())).subscribe(rx.noop);
+    jobSubject.pipe(rxop.taskRunner((v) => v.execute(), 3)).subscribe(rx.noop);
 
     const encode = (text: string) => {
       const def = defer(() => codec.encode(text));
