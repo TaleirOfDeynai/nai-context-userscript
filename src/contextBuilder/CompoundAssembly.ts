@@ -1,7 +1,7 @@
 import userScriptConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { isFunction } from "@utils/is";
-import { assert, assertExists } from "@utils/assert";
+import { assert, assertExists, assertInBounds } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain } from "@utils/iterables";
 import $SearchService from "./SearchService";
@@ -11,7 +11,8 @@ import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { BudgetedSource } from "./rx/3-selection/_shared";
 import type { ContextContent } from "./ContextContent";
-import type { FragmentAssembly, FragmentCursor, InsertionPosition, IterDirection, PositionResult } from "./FragmentAssembly";
+import type * as FA from "./FragmentAssembly";
+import type { FragmentAssembly } from "./FragmentAssembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
 import type { AssemblyResultMap } from "./SearchService";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
@@ -34,9 +35,29 @@ interface AssemblyLike {
   splitAt?: TokenizedAssembly["splitAt"];
 }
 
+/** The bare minimum needed for content. */
+interface ContentLike {
+  readonly field: IContextField;
+  readonly fieldConfig: Record<string, unknown>;
+  readonly contextConfig: ContextContent["contextConfig"];
+  readonly trimmed: ContextContent["trimmed"];
+
+  rebudget?: ContextContent["rebudget"];
+  finalize?: ContextContent["finalize"];
+}
+
+/** The bare minimum needed for the source. */
+interface SourceLike {
+  readonly identifier: BudgetedSource["identifier"];
+  readonly type: BudgetedSource["type"];
+  readonly activations: BudgetedSource["activations"];
+  readonly budgetStats: BudgetedSource["budgetStats"];
+  readonly entry: ContentLike;
+}
+
 export type ShuntingMode = "nearest" | "inDirection";
 
-export interface InsertionIterationState extends InsertionPosition {
+export interface InsertionIterationState extends FA.InsertionPosition {
   index: number;
 }
 
@@ -44,7 +65,7 @@ namespace Insertion {
   export interface Target {
     readonly index: number;
     readonly assembly: AssemblyLike;
-    readonly source: UndefOr<BudgetedSource>;
+    readonly source: UndefOr<SourceLike>;
   }
 
   interface RejectedResult {
@@ -60,7 +81,7 @@ namespace Insertion {
   }
   
   interface MainResult {
-    readonly type: Exclude<PositionResult["type"], IterDirection>;
+    readonly type: Exclude<FA.PositionResult["type"], FA.IterDirection>;
     readonly target: Target;
     readonly tokensUsed: number;
     readonly shunted: number;
@@ -102,8 +123,8 @@ const theModule = usModule((require, exports) => {
 
     #codec: AugmentedTokenCodec;
     #fragments: AssemblyLike[];
-    #knownSources: Set<BudgetedSource>;
-    #textToSource: Map<FragmentAssembly, BudgetedSource>;
+    #knownSources: Set<SourceLike>;
+    #textToSource: Map<FragmentAssembly, SourceLike>;
 
     /** The full, concatenated text of the assembly. */
     get fullText(): string {
@@ -124,10 +145,10 @@ const theModule = usModule((require, exports) => {
       return Math.max(0, this.tokenBudget - this.tokens.length);
     }
 
-    #updateState(
+    async #updateState(
       newFrags: AssemblyLike[],
       tokens: Tokens,
-      source: BudgetedSource,
+      source: SourceLike,
       inserted: AssemblyLike
     ) {
       const diffLength = tokens.length - this.#tokens.length;
@@ -137,31 +158,34 @@ const theModule = usModule((require, exports) => {
       this.#knownSources.add(source);
       this.#textToSource.set(inserted.source, source);
 
+      // Make sure we clean up the entry.
+      await source.entry.finalize?.();
+
       return diffLength;
     }
 
-    #getActivator(source: BudgetedSource, target: BudgetedSource): UndefOr<AssemblyResultMap> {
+    #getActivator(source: SourceLike, target: SourceLike): UndefOr<AssemblyResultMap> {
       const { activations } = source;
       if (target.type === "story") return activations.get("keyed");
       return activations.get("cascade")?.matches.get(target.entry.field);
     }
 
-    #findStart(source: BudgetedSource): UndefOr<InsertionIterationState> {
+    #findStart(source: SourceLike): UndefOr<InsertionIterationState> {
       assert(
         "Must have at least one text to find a starting location.",
         this.#fragments.length > 0
       );
 
-      const { insertionPosition } = source.entry.contextConfig;
+      const { fieldConfig, contextConfig: { insertionPosition } } = source.entry;
       const direction = insertionPosition < 0 ? "toTop" : "toBottom";
       const remOffset = direction === "toTop" ? 1 : 0;
-      const fieldConfig = source.entry.fieldConfig as any;
+      const isKeyRelative = Boolean(fieldConfig.keyRelative ?? false);
 
-      if (fieldConfig.keyRelative === true) {
+      if (isKeyRelative === true) {
         // We want to find the match closest to the bottom of all content
         // currently in the assembly.
         const matches = chain(this.#knownSources)
-          .collect((origin: BudgetedSource) => {
+          .collect((origin: SourceLike) => {
             const activator = this.#getActivator(source, origin);
             if (!activator) return undefined;
 
@@ -212,7 +236,7 @@ const theModule = usModule((require, exports) => {
     }
 
     /** Assumes that token reservations should be adhered to. */
-    #determineBudget(source: BudgetedSource): number {
+    #determineBudget(source: SourceLike): number {
       const { actualReservedTokens, reservedTokens, tokenBudget } = source.budgetStats;
       if (actualReservedTokens > 0) {
         // Use at least our reserved tokens, more if we have the room.
@@ -221,6 +245,17 @@ const theModule = usModule((require, exports) => {
       }
 
       return Math.min(tokenBudget, this.availableTokens);
+    }
+
+    async #getAssembly(content: ContentLike, budget: number) {
+      if (isFunction(content.rebudget)) return await content.rebudget(budget);
+
+      // If it can't rebudget, the `trimmed` assembly must both exist
+      // and fit within the given budget.
+      const assembly = await content.trimmed;
+      if (!assembly) return undefined;
+      if (assembly.tokens.length > budget) return undefined;
+      return assembly;
     }
 
     #makeTarget(iterState: InsertionIterationState): Insertion.Target {
@@ -233,26 +268,31 @@ const theModule = usModule((require, exports) => {
       return Object.freeze({ index, assembly, source });
     }
 
-    #doInsertInitial(
-      source: BudgetedSource,
+    async #doInsertInitial(
+      source: SourceLike,
       inserted: AssemblyLike
-    ): InsertionResult {
+    ): Promise<InsertionResult> {
       assert("Expected to be empty.", this.#fragments.length === 0);
-      const tokensUsed = this.#updateState([inserted], inserted.tokens, source, inserted);
+      const tokensUsed = await this.#updateState(
+        [inserted], inserted.tokens, source, inserted
+      );
+
       return { type: "initial", tokensUsed, shunted: 0 };
     }
 
     /** Inserts before `index`. */
     async #doInsertBefore(
       iterState: InsertionIterationState,
-      source: BudgetedSource,
+      source: SourceLike,
       inserted: AssemblyLike
     ): Promise<InsertionResult> {
       const { index } = iterState;
       const oldFrags = this.#fragments;
 
-      assert("Expected `index` to be in range.", index >= 0);
-      assert("Expected `index` to be in range.", index <= oldFrags.length);
+      assertInBounds(
+        "Expected `index` to be in bounds of `fragments` or one after.",
+        index, oldFrags, true
+      );
 
       const fragsBefore = oldFrags.slice(0, index);
       const fragsAfter = oldFrags.slice(index);
@@ -260,8 +300,10 @@ const theModule = usModule((require, exports) => {
       const newFrags = [...fragsBefore, inserted, ...fragsAfter];
       const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
 
+      // FIXME: This throws an error if `insertAfter` is trying to insert
+      // at the index after the end of `fragments`.
       const target = this.#makeTarget(iterState);
-      const tokensUsed = this.#updateState(newFrags, tokens, source, inserted);
+      const tokensUsed = await this.#updateState(newFrags, tokens, source, inserted);
 
       return { type: "insertBefore", target, tokensUsed, shunted: 0 };
     }
@@ -269,7 +311,7 @@ const theModule = usModule((require, exports) => {
     /** Inserts after `index`. */
     async #doInsertAfter(
       iterState: InsertionIterationState,
-      source: BudgetedSource,
+      source: SourceLike,
       inserted: AssemblyLike
     ): Promise<InsertionResult> {
       const target = this.#makeTarget(iterState);
@@ -288,14 +330,16 @@ const theModule = usModule((require, exports) => {
 
     async #doShuntOut(
       iterState: InsertionIterationState,
-      cursor: FragmentCursor,
-      source: BudgetedSource,
+      cursor: FA.FragmentCursor,
+      source: SourceLike,
       inserted: AssemblyLike
     ): Promise<InsertionResult> {
       const { index } = iterState;
 
-      assert("Expected `index` to be in range.", index >= 0);
-      assert("Expected `index` to be in range.", index < this.#fragments.length);
+      assertInBounds(
+        "Expected `index` to be in bounds of `fragments`.",
+        index, this.#fragments
+      );
 
       // TODO: add shunting to all this shit.
       const direction = shuntingMode === "inDirection" ? iterState.direction : "nearest";
@@ -314,8 +358,8 @@ const theModule = usModule((require, exports) => {
     /** Inserts into the fragment at `index`. */
     async #doInsertInside(
       iterState: InsertionIterationState,
-      cursor: FragmentCursor,
-      source: BudgetedSource,
+      cursor: FA.FragmentCursor,
+      source: SourceLike,
       inserted: AssemblyLike
     ): Promise<InsertionResult> {
       const { index } = iterState;
@@ -349,7 +393,7 @@ const theModule = usModule((require, exports) => {
         const newFrags = [...fragsBefore, splitBefore, inserted, splitAfter, ...fragsAfter];
         const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
 
-        const tokensUsed = this.#updateState(newFrags, tokens, source, inserted);
+        const tokensUsed = await this.#updateState(newFrags, tokens, source, inserted);
         return { type: "inside", target, tokensUsed, shunted: 0 };
       }
 
@@ -358,7 +402,7 @@ const theModule = usModule((require, exports) => {
     }
 
     async insert(
-      source: BudgetedSource,
+      source: SourceLike,
       budget: number = this.#determineBudget(source)
     ): Promise<InsertionResult> {
       // Fast-path: no budget, instant rejection.
@@ -366,10 +410,10 @@ const theModule = usModule((require, exports) => {
 
       // Fast-path: no fancy stuff for the first thing inserted.
       if (!this.#fragments.length) {
-        const inserted = await source.entry.rebudget(budget);
+        const inserted = await this.#getAssembly(source.entry, budget);
         if (!inserted) return REJECTED_INSERT;
 
-        return this.#doInsertInitial(source, inserted);
+        return await this.#doInsertInitial(source, inserted);
       }
 
       // Can we locate a place to start our search for its insertion location?
@@ -377,7 +421,7 @@ const theModule = usModule((require, exports) => {
       if (!iterState) return REJECTED_INSERT;
 
       // Can we fit it into the budget?
-      const inserted = await source.entry.rebudget(budget);
+      const inserted = await this.#getAssembly(source.entry, budget);
       if (!inserted) return REJECTED_INSERT;
 
       const { insertionType } = source.entry.contextConfig;
@@ -415,9 +459,9 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Maps an assembly back to its {@link BudgetedSource}.
+     * Maps an assembly back to its {@link SourceLike}.
      */
-    findSource(text: AssemblyLike): UndefOr<BudgetedSource> {
+    findSource(text: AssemblyLike): UndefOr<SourceLike> {
       return this.#textToSource.get(text.source);
     }
 
@@ -427,11 +471,11 @@ const theModule = usModule((require, exports) => {
      * runs those checks.
      */
     canSplitInto(
-      toInsert: ContextContent<InsertableField>,
-      toSplit: ContextContent<InsertableField>
+      toInsert: ContentLike,
+      toSplit: ContentLike
     ): boolean {
-      const canInsert = toInsert.fieldConfig?.allowInnerInsertion ?? true;
-      const canSplit = toSplit.fieldConfig?.allowInsertionInside ?? false;
+      const canInsert = Boolean(toInsert.fieldConfig.allowInnerInsertion ?? true);
+      const canSplit = Boolean(toSplit.fieldConfig.allowInsertionInside ?? false);
       return canInsert && canSplit;
     }
   }

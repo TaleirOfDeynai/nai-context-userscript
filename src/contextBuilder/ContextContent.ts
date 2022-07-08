@@ -396,8 +396,8 @@ const theModule = usModule((require, exports) => {
     /**
      * Invokes the trimmer, calculating a result that fits the `newBudget`.
      * 
-     * This method will also update the {@link ContextContent.trimmed trimmed}
-     * property with a promise that will be the result of the job.
+     * This method will also update the {@link trimmed} property with a
+     * promise that will be the result of the job.
      * 
      * If `newBudget` is not provided, it will use the current budget, which
      * will generally only kick of a trimming job when needed.
