@@ -223,6 +223,7 @@ export default usModule((require, exports) => {
     const isTokens = isArray as (v: Tokens | TextOrFragment) => v is Tokens;
     const isLengthy = (v: Section) => v.length > 0;
     const toDecoded = (v: Section) => isTokens(v) ? decode(v as any) : v;
+    const doSum = (acc: number, v: Tokens) => acc + v.length;
 
     // We're going to be lazy; when doing assembly and inserting new tokens
     // into the context's token array, rather than try and figure out which
@@ -233,10 +234,16 @@ export default usModule((require, exports) => {
     const binaryCache = new Map<string, TokensFuture>();
     
     /** For mending pairs of tokens, this will draw from the cache. */
-    const getBinaryFuture = (v: Section[]): UndefOr<TokensFuture> => {
-      if (v.length !== 2 || !v.every(isTokens)) return undefined;
-      const key = JSON.stringify(v);
+    const getBinaryFuture = (sections: Section[]): UndefOr<TokensFuture> => {
+      // Only applicable to `[Tokens, Tokens]`.
+      if (sections.length !== 2 || !sections.every(isTokens)) return undefined;
+      // We're not going to use the cache for larger sequences.
+      if (sections.reduce(doSum, 0) > UNSAFE_TOKEN_BUFFER * 2) return undefined;
 
+      // We can flatten the tokens to build the cache-key as their
+      // re-encoded result will be the same, regardless of which side
+      // of the mend the tokens came from.
+      const key = sections.flat().join(":");
       let theFuture = binaryCache.get(key);
       if (theFuture) {
         theFuture.isNew = false;
@@ -293,8 +300,8 @@ export default usModule((require, exports) => {
 
       // We need to figure out what is going to be involved in the
       // mend and what is not.  We do not need to do an expensive
-      // re-encoding when we can use just decode a smaller section
-      // of tokens and encode that smaller portion instead.
+      // re-encoding when we can just decode a smaller section of
+      // tokens and encode that smaller portion instead.
       const [tokensBefore, leading] = leadingTokens(bufferSize, prevTokens);
       // We need to handle the case that the last element was a string.
       const [trailing, tokensAfter]
