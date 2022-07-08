@@ -177,6 +177,16 @@ export default usModule((require, exports) => {
   const afterFragment = (f: TextFragment) => f.offset + f.content.length;
 
   /**
+   * Checks if a given cursor's offset appears to be inside a given
+   * fragment.
+   */
+  const isOffsetInside = (offset: number, fragment: TextFragment) => {
+    if (offset < beforeFragment(fragment)) return false;
+    if (offset > afterFragment(fragment)) return false;
+    return true;
+  };
+
+  /**
    * Checks if the given collection of fragments is contiguous; this means
    * the collection has no gaps and all fragments are not out-of-order.
    * 
@@ -497,6 +507,7 @@ export default usModule((require, exports) => {
     asContent,
     beforeFragment,
     afterFragment,
+    isOffsetInside,
     mergeFragments,
     isContiguous,
     splitFragmentAt,

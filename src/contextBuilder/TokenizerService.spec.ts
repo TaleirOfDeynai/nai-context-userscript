@@ -5,7 +5,7 @@ import * as helpers from "@spec/helpers-tokenizer";
 import * as mockStory from "@spec/mock-story";
 
 import { dew } from "@utils/dew";
-import { iterReverse, interweave } from "@utils/iterables";
+import { chain, iterReverse, interweave, iterPosition } from "@utils/iterables";
 import { skip, take, skipRight, takeRight } from "@utils/iterables";
 import * as AI from "@utils/asyncIterables";
 import $TokenizerService, { AugmentedTokenCodec } from "./TokenizerService";
@@ -118,22 +118,22 @@ describe("AugmentedTokenCodec", () => {
       const fooResult = await findOffset(tokens, 2);
       expect(fooResult).toEqual({
         type: "single",
-        data: {
+        data: expect.objectContaining({
           index: 0,
           token: 301,
           value: "foo"
-        },
+        }),
         remainder: 2
       });
   
       const barResult = await findOffset(tokens, 5);
       expect(barResult).toEqual({
         type: "single",
-        data: {
+        data: expect.objectContaining({
           index: 2,
           token: 302,
           value: "bar"
-        },
+        }),
         remainder: 1
       });
     });
@@ -144,34 +144,133 @@ describe("AugmentedTokenCodec", () => {
       const fooResult = await findOffset(tokens, 3);
       expect(fooResult).toEqual({
         type: "double",
-        min: {
+        min: expect.objectContaining({
           index: 0,
           token: 301,
           value: "foo"
-        },
-        max: {
+        }),
+        max: expect.objectContaining({
           index: 1,
           token: 1,
           value: " "
-        },
+        }),
         remainder: 0
       });
   
       const barResult = await findOffset(tokens, 4);
       expect(barResult).toEqual({
         type: "double",
-        min: {
+        min: expect.objectContaining({
           index: 1,
           token: 1,
           value: " "
-        },
-        max: {
+        }),
+        max: expect.objectContaining({
           index: 2,
           token: 302,
           value: "bar"
-        },
+        }),
         remainder: 0
       });
+    });
+
+    it("should work with a given `sourceText`", async () => {
+      // It does not directly validate the tokens versus the text.
+      // There is an indirect check that it does when it performs
+      // the binary search, but it requires `debugLogging` to be
+      // enabled.
+
+      const tokens = [301, 1, 302]; // "foo bar"
+      const sourceText = await mockCodec.decode(tokens);
+
+      const result = await findOffset(tokens, 5, sourceText);
+      expect(result).toEqual({
+        type: "single",
+        data: expect.objectContaining({
+          index: 2,
+          token: 302,
+          value: "bar"
+        }),
+        remainder: 1
+      });
+    });
+
+    it("should work with the offset being dead center", async () => {
+      // This is a bit of a gotcha.  When doing a binary search,
+      // it is possible for the offset to be in both halves because
+      // the offset happens to be between those fragments.
+      const tokens = [211, 212, 213, 211, 212, 213]; // "112233112233"
+
+      const result = await findOffset(tokens, 6);
+      expect(result).toEqual({
+        type: "double",
+        min: expect.objectContaining({
+          index: 2,
+          token: 213,
+          value: "33"
+        }),
+        max: expect.objectContaining({
+          index: 3,
+          token: 211,
+          value: "11"
+        }),
+        remainder: 0
+      });
+    });
+
+    it("should work with a large amount of tokens", async () => {
+      const sourceText = mockStory.mockStory;
+      const tokens = await mockCodec.encode(sourceText);
+
+      // There are 14 `"2222"` tokens in there.  We're going to find
+      // the index of of the 8th one.
+      const manyTwos = chain(tokens)
+        .thru(iterPosition)
+        .filter(([i, t]) => t === 232)
+        .toArray();
+      
+      // Sanity check this test.
+      expect(manyTwos.length).toBe(14);
+
+      // Pull the 8th one and determine its offset.
+      const [index] = manyTwos[7];
+      const baseOffset = (await mockCodec.decode(tokens.slice(0, index))).length;
+
+      const borderResult = await findOffset(tokens, baseOffset + 4, sourceText);
+      expect(borderResult).toEqual({
+        type: "double",
+        min: expect.objectContaining({
+          index: index,
+          token: 232,
+          value: "2222"
+        }),
+        max: expect.objectContaining({
+          index: index + 1,
+          token: 312,
+          value: " bar"
+        }),
+        remainder: 0
+      });
+
+      const insideResult = await findOffset(tokens, baseOffset + 2, sourceText);
+      expect(insideResult).toEqual({
+        type: "single",
+        data: expect.objectContaining({
+          index: index,
+          token: 232,
+          value: "2222"
+        }),
+        remainder: 2
+      });
+    });
+
+    it("should fail when `offset` is out of range of the string", async () => {
+      const tokens = [301, 1, 302]; // "foo bar"
+      const tooLo = () => findOffset(tokens, -3);
+      const tooHi = () => findOffset(tokens, 9);
+
+      await expect(tooLo()).rejects.toThrow();
+      await expect(tooHi()).rejects.toThrow();
     });
   });
 });

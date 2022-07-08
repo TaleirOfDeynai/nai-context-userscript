@@ -8,7 +8,6 @@ import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { TokenCodec } from "@nai/TokenizerCodec";
 import type { TextFragment } from "./TextSplitterService";
 import type { FragmentAssembly, FragmentCursor } from "./FragmentAssembly";
 import type { ContinuityOptions } from "./ContentAssembly";
@@ -36,11 +35,12 @@ const theModule = usModule((require, exports) => {
   const getTokensForSplit = async (
     codec: AugmentedTokenCodec,
     offset: number,
-    tokens: Tokens
+    tokens: Tokens,
+    fullText: string
   ): Promise<[Tokens, Tokens]> => {
     const result = assertExists(
       "Expected to locate the cursor in the tokens.",
-      await codec.findOffset(tokens, offset)
+      await codec.findOffset(tokens, offset, fullText)
     );
 
     if (result.type === "double") {
@@ -225,7 +225,8 @@ const theModule = usModule((require, exports) => {
       const [beforeTokens, afterTokens] = await getTokensForSplit(
         this.#codec,
         this.toFullText(usedCursor).offset,
-        this.#tokens
+        this.#tokens,
+        this.fullText
       );
 
       // If we're splitting this assembly, it doesn't make sense to preserve
@@ -276,7 +277,8 @@ const theModule = usModule((require, exports) => {
         const [, theTokens] = await getTokensForSplit(
           this.#codec,
           ftCursor.offset,
-          tokensIn
+          tokensIn,
+          this.fullText
         );
         return [createFragment("", 0, prefix), theTokens];
       });
@@ -291,7 +293,8 @@ const theModule = usModule((require, exports) => {
         const [theTokens] = await getTokensForSplit(
           this.#codec,
           ftCursor.offset - prefix.content.length,
-          tokensIn
+          tokensIn,
+          [...this.content, this.suffix].join("")
         );
         return [createFragment("", 0, suffix), theTokens];
       });

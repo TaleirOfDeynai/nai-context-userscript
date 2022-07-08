@@ -1,7 +1,8 @@
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { assert } from "@utils/assert";
+import { assert, assertInBounds } from "@utils/assert";
 import { isArray, isFunction, isObject } from "@utils/is";
 import { defer, future } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
@@ -17,7 +18,7 @@ import type { TextOrFragment, TextFragment } from "./TextSplitterService";
 
 export interface SyncTokenCodec {
   encode(text: string): number[];
-  decode(tokens: number[]): string;
+  decode(tokens: readonly number[]): string;
 }
 
 export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
@@ -126,7 +127,9 @@ export interface AugmentedTokenCodec extends AsyncTokenCodec {
     /** The array of tokens to search. */
     tokens: Tokens,
     /** The character offset to locate. */
-    offset: number
+    offset: number,
+    /** The source text of the `tokens`. */
+    sourceText?: string
   ): Promise<UndefOr<TokenOffsetResult>>;
 }
 
@@ -189,6 +192,23 @@ export default usModule((require, exports) => {
   /**
    * Creates a function that can mend together token arrays, strings, and
    * {@link TextFragment text fragments} into a single, uniform token array.
+   * 
+   * There's two major performance sinks when working with the tokenizer:
+   * - The high cost of encoding a string into tokens.
+   * - The cost of marshalling the tokenizer's background worker.
+   * 
+   * Because decoding tokens is relatively cheap, we can minimize the size
+   * of strings sent to the encoder when joining them together if we have
+   * a previously encoded sample of the string.
+   * 
+   * By taking only the tokens at the boundaries where they need to be
+   * mended together and decoding those and re-encoding the concatenation
+   * of those strings, we can significantly reduce how long we're waiting
+   * on the encoder.
+   * 
+   * There is a balance to be struck here, however.  The extra decoding
+   * step means we have performance losses due to worker marshalling to
+   * cope with, but we can mitigate that to a degree with some braining.
    */
   const makeMendTokens = (
     encode: TokenCodec["encode"],
@@ -356,73 +376,171 @@ export default usModule((require, exports) => {
     return boundMendTokens;
   };
 
+  /**
+   * Creates a function that can locate where a string offset would be
+   * located in a token array if it were decoded.
+   * 
+   * This is needed for figuring out how to quickly split tokens into
+   * two when splitting a tokenized text fragment into two.
+   * 
+   * Because token mending can fuse two tokens from different fragments
+   * together into a single token, it is unsafe to assume that an index
+   * from one fragment can map to its mended version.
+   * 
+   * When we want to figure out how to map from a token array to an
+   * offset in its decoded string, we got some problems:
+   * - Due to mending, we can't really use the source fragments to
+   *   assume anything about the mended token array.
+   * - We have no easy way to map from "position in string" to "index
+   *   of token array" without breaking it down into individual tokens.
+   * - When the offset we want happens to be inside a token, that sucks.
+   * 
+   * So, to locate a position in the decoded token array, we need to
+   * actually decode its individual tokens...  Or do we!?
+   * 
+   * Unfortunately, the tokenizer has no "convert this array of tokens
+   * into an array of its decoded strings" task.  But decoding is actually
+   * pretty fast (it's literally looking up a number in a hash-table),
+   * the cost of decoding individual tokens is more in marshalling the
+   * tokenizer's worker.
+   * 
+   * So, it is actually faster to just use a binary search; we'll decode
+   * the same tokens multiple times, but we'll overall reduce how much
+   * time we spend doing `postMessage` and `setTimeout` stuff.
+   */
   const makeFindOffset = (decode: TokenCodec["decode"]) => {
-    const theCache = new Map<number, Promise<string>>();
+    const { createFragment, isOffsetInside } = textSplitter;
 
-    /**
-     * Gets the translated string for a single token.  This uses a cache
-     * that is reset after a context is generated.
-     */
-    const getTokenString = (
-      /** The token to translate. */
-      token: number
-    ): Promise<string> => {
-      let result = theCache.get(token);
-      if (!result) {
-        result = decode([token]);
-        theCache.set(token, result);
-      }
-      return result;
+    interface WithFragment {
+      fragment: TextFragment;
+    }
+
+    interface TokenPart extends WithFragment {
+      indexOffset: number;
+      tokens: Tokens;
+    }
+
+    const toPart = (
+      source: TokenPart,
+      tokens: Tokens,
+      tokensOffset: number,
+      text: string,
+      textOffset: number
+    ): TokenPart => {
+      const indexOffset = source.indexOffset + tokensOffset;
+      const fragment = createFragment(text, textOffset, source.fragment);
+      return { indexOffset, tokens, fragment };
+    };
+
+    const bifurcate = async (
+      givenPart: TokenPart
+    ): Promise<[TokenPart, TokenPart]> => {
+      const { tokens, fragment } = givenPart;
+      // We should switch to a per-token strategy for 3 or fewer tokens.
+      assert("Will not bifurcate; too small!", tokens.length > 3);
+      const splitIndex = (tokens.length / 2) | 0;
+
+      const leftTokens = tokens.slice(0, splitIndex) as Tokens;
+      const rightTokens = tokens.slice(splitIndex) as Tokens;
+
+      // We only need one of these; we can infer the other.
+      const leftText = await decode(leftTokens);
+      const rightText = fragment.content.slice(leftText.length);
+
+      if (usConfig.debugLogging) assert(
+        "Expected `leftText` to be the start of `fragment`.",
+        fragment.content.startsWith(leftText)
+      );
+
+      return [
+        toPart(givenPart, leftTokens, 0, leftText, 0),
+        toPart(givenPart, rightTokens, leftTokens.length, rightText, leftText.length)
+      ];
+    };
+
+    const getData = async (part: TokenPart, tokenIndex: number): Promise<TokenData> => {
+      const index = part.indexOffset + tokenIndex;
+      const token = part.tokens[tokenIndex];
+      const value = await decode([token]);
+      return { index, token, value };
     };
 
     return async (
       /** The array of tokens to search. */
       tokens: Tokens,
       /** The character offset to locate. */
-      offset: number
+      offset: number,
+      /** The source text of the `tokens`. */
+      sourceText?: string
     ): Promise<UndefOr<TokenOffsetResult>> => {
       if (!tokens.length) return undefined;
-  
-      // Hopefully this won't be too rough with our tokenizer optimizations.
-      // A decode should be quite quick, but this is potentially several
-      // hundred decodes all at once.
-      const tokenTable = await chain(new Set(tokens))
-        .map(async (token) => [token, await getTokenString(token)] as const)
-        .value(async (promises) => new Map(await Promise.all([...promises])));
-      
-      let curOffset = 0;
-      let result = [] as number[];
-  
-      for (let i = 0, len = tokens.length; i < len; i++) {
-        if (result.length === 2) break;
-        if (offset < curOffset) break;
-  
-        const token = tokens[i];
-        const value = tokenTable.get(token) as string;
-        curOffset += value.length;
-  
-        if (offset > curOffset) continue;
-        result.push(i);
+
+      // If we were not given the source text, we'll need to decode it.
+      sourceText = sourceText != null ? sourceText : await decode(tokens);
+
+      assertInBounds(
+        "Expected `offset` to be in bounds of the source text.",
+        offset, sourceText
+      );
+
+      // Setup our initial part.
+      let curPart: TokenPart = {
+        indexOffset: 0,
+        tokens,
+        fragment: textSplitter.createFragment(sourceText, 0)
+      };
+
+      while (curPart.tokens.length > 3) {
+        const [leftPart, rightPart] = await bifurcate(curPart);
+        const inLeft = isOffsetInside(offset, leftPart.fragment);
+        const inRight = isOffsetInside(offset, rightPart.fragment);
+
+        // Fast-path: This is an exceptional situation, but it basically
+        // means its between the last token of the left part and the first
+        // token of the right part.  We can use this information to spit
+        // out a faster result.
+        if (inLeft && inRight) {
+          const [min, max] = await Promise.all([
+            getData(leftPart, leftPart.tokens.length - 1),
+            getData(rightPart, 0)
+          ]);
+          return { type: "double", min, max, remainder: 0 };
+        }
+
+        curPart = inLeft ? leftPart : rightPart;
       }
   
-      const getData = (index: number): TokenData => {
-        const token = tokens[index];
-        const value = tokenTable.get(token) as string;
-        return { index, token, value };
-      };
+      // When we get here, we should be down to 2 or 3 tokens.  We just
+      // need to decide which tokens contain our offset.
+
+      const processor = rx.from(curPart.tokens.keys()).pipe(
+        rxop.mergeMap((i) => getData(curPart, i)),
+        rxop.scan<TokenData, TokenData & WithFragment, WithFragment>(
+          (a, d) => {
+            const prev = a.fragment;
+            const fragment = createFragment(d.value, prev.offset + prev.content.length);
+            return Object.assign(d, { fragment });
+          },
+          { fragment: createFragment("", 0, curPart.fragment) }
+        ),
+        rxop.filter((d) => isOffsetInside(offset, d.fragment)),
+        rxop.toArray()
+      );
+
+      const result = await rx.lastValueFrom(processor);
   
       switch (result.length) {
         case 2: {
-          const min = getData(result[0]);
-          const max = getData(result[1]);
+          const [min, max] = result;
           return { type: "double", min, max, remainder: 0 };
         }
         case 1: {
-          const data = getData(result[0]);
-          const remainder = data.value.length - (curOffset - offset);
+          const [data] = result;
+          const remainder = offset - data.fragment.offset;
           return { type: "single", data, remainder };
         }
-        default: return undefined;
+        default:
+          throw new Error("Expected to have either 1 or 2 elements.");
       }
     };
   };
@@ -627,7 +745,7 @@ export default usModule((require, exports) => {
     const globalEncoder = new tokenizerCodec.GlobalEncoder();
     return {
       encode: (text) => globalEncoder.encode(text, type),
-      decode: (tokens) => globalEncoder.decode(tokens, type)
+      decode: (tokens) => globalEncoder.decode(tokens as any, type)
     };
   };
 
@@ -651,7 +769,7 @@ export default usModule((require, exports) => {
     // @ts-ignore - Preventing double augmentation.
     if (codec[$$MarkOfAugmentation] === true) return codec;
 
-    const jobSubject = new rx.Subject<Deferred<string| number[]>>();
+    const jobSubject = new rx.Subject<Deferred<string | Tokens>>();
 
     // This will execute deferred tasks as appropriate.
     jobSubject.pipe(rxop.taskRunner((v) => v.execute(), 3)).subscribe(rx.noop);
@@ -662,7 +780,7 @@ export default usModule((require, exports) => {
       return def.promise;
     };
 
-    const decode = (tokens: number[]) => {
+    const decode = (tokens: Tokens) => {
       const def = defer(() => codec.decode(tokens));
       jobSubject.next(def);
       return def.promise;
@@ -672,10 +790,8 @@ export default usModule((require, exports) => {
     const findOffset = makeFindOffset(decode);
 
     return {
-      encode,
-      decode,
-      mendTokens: logger.measureFn(mendTokens, "mendTokens"),
-      findOffset: logger.measureFn(findOffset, "findOffset"),
+      encode, decode,
+      mendTokens, findOffset,
       // @ts-ignore - Don't care.  Doing it anyways.
       [$$MarkOfAugmentation]: true
     };

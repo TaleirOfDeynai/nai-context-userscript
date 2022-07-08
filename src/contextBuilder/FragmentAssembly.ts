@@ -94,7 +94,7 @@ const thoroughChecks = userScriptConfig.debugLogging || userScriptConfig.testLog
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
-  const { createFragment, hasWords } = splitterService;
+  const { createFragment, isOffsetInside, hasWords } = splitterService;
   const { beforeFragment, afterFragment } = splitterService;
   const { getSequencersFrom } = $TrimmingProviders(require);
 
@@ -117,12 +117,8 @@ const theModule = usModule((require, exports) => {
    * fragment.  Use {@link FragmentAssembly.positionOf} to interrogate
    * the assembly the fragment came from for that.
    */
-  const isCursorInside = (cursor: AnyCursor, fragment: TextFragment) => {
-    const { offset } = cursor;
-    if (offset < beforeFragment(fragment)) return false;
-    if (offset > afterFragment(fragment)) return false;
-    return true;
-  };
+  const isCursorInside = (cursor: AnyCursor, fragment: TextFragment) =>
+    isOffsetInside(cursor.offset, fragment);
 
   /** Ensures the given cursor is an {@link FragmentCursor}. */
   const asFragmentCursor = (cursor: AnyCursor): FragmentCursor => {
