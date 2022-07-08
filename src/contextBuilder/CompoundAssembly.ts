@@ -1,5 +1,6 @@
 import userScriptConfig from "@config";
 import { usModule } from "@utils/usModule";
+import { dew } from "@utils/dew";
 import { isFunction } from "@utils/is";
 import { assert, assertExists, assertInBounds } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
@@ -40,7 +41,7 @@ interface ContentLike {
   readonly field: IContextField;
   readonly fieldConfig: Record<string, unknown>;
   readonly contextConfig: ContextContent["contextConfig"];
-  readonly trimmed: ContextContent["trimmed"];
+  readonly trimmed: Promise<UndefOr<AssemblyLike>>;
 
   rebudget?: ContextContent["rebudget"];
   finalize?: ContextContent["finalize"];
@@ -68,25 +69,38 @@ namespace Insertion {
     readonly source: UndefOr<SourceLike>;
   }
 
-  interface RejectedResult {
+  export interface RejectedResult {
     readonly type: "rejected";
     readonly tokensUsed: 0;
     readonly shunted: 0;
   }
 
-  interface InitResult {
+  export interface InitResult {
     readonly type: "initial";
     readonly tokensUsed: number;
     readonly shunted: 0;
   }
-  
-  interface MainResult {
+
+  interface MainBase {
     readonly type: Exclude<FA.PositionResult["type"], FA.IterDirection>;
     readonly target: Target;
     readonly tokensUsed: number;
     readonly shunted: number;
   }
 
+  export interface InsertResult extends MainBase {
+    readonly type: "inside"
+  }
+
+  export interface BeforeResult extends MainBase {
+    readonly type: "insertBefore"
+  }
+  
+  export interface AfterResult extends MainBase {
+    readonly type: "insertAfter"
+  }
+
+  type MainResult = InsertResult | BeforeResult | AfterResult;
   export type Result = RejectedResult | InitResult | MainResult;
 }
 
@@ -94,7 +108,7 @@ export type InsertionResult = Insertion.Result;
 
 const { shuntingMode } = userScriptConfig.assembly;
 
-const REJECTED_INSERT: InsertionResult = Object.freeze({
+const REJECTED_INSERT: Insertion.RejectedResult = Object.freeze({
   type: "rejected", tokensUsed: 0, shunted: 0
 });
 
@@ -271,7 +285,7 @@ const theModule = usModule((require, exports) => {
     async #doInsertInitial(
       source: SourceLike,
       inserted: AssemblyLike
-    ): Promise<InsertionResult> {
+    ): Promise<Insertion.InitResult> {
       assert("Expected to be empty.", this.#fragments.length === 0);
       const tokensUsed = await this.#updateState(
         [inserted], inserted.tokens, source, inserted
@@ -280,12 +294,28 @@ const theModule = usModule((require, exports) => {
       return { type: "initial", tokensUsed, shunted: 0 };
     }
 
+    /** Special override exclusively for `doInsertAfter`. */
+    async #doInsertBefore(
+      iterState: InsertionIterationState,
+      source: SourceLike,
+      inserted: AssemblyLike,
+      overrides: Pick<Insertion.AfterResult, "type" | "target">
+    ): Promise<Insertion.AfterResult>;
     /** Inserts before `index`. */
     async #doInsertBefore(
       iterState: InsertionIterationState,
       source: SourceLike,
       inserted: AssemblyLike
+    ): Promise<Insertion.BeforeResult>;
+    async #doInsertBefore(
+      iterState: InsertionIterationState,
+      source: SourceLike,
+      inserted: AssemblyLike,
+      overrides?: Pick<Insertion.AfterResult, "type" | "target">
     ): Promise<InsertionResult> {
+      const type = overrides?.type ?? "insertBefore";
+      const target = overrides?.target ?? this.#makeTarget(iterState);
+
       const { index } = iterState;
       const oldFrags = this.#fragments;
 
@@ -300,12 +330,8 @@ const theModule = usModule((require, exports) => {
       const newFrags = [...fragsBefore, inserted, ...fragsAfter];
       const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
 
-      // FIXME: This throws an error if `insertAfter` is trying to insert
-      // at the index after the end of `fragments`.
-      const target = this.#makeTarget(iterState);
       const tokensUsed = await this.#updateState(newFrags, tokens, source, inserted);
-
-      return { type: "insertBefore", target, tokensUsed, shunted: 0 };
+      return { type, target, tokensUsed, shunted: 0 };
     }
 
     /** Inserts after `index`. */
@@ -313,26 +339,22 @@ const theModule = usModule((require, exports) => {
       iterState: InsertionIterationState,
       source: SourceLike,
       inserted: AssemblyLike
-    ): Promise<InsertionResult> {
-      const target = this.#makeTarget(iterState);
-
+    ): Promise<Insertion.AfterResult> {
       // Yeah, just insert it before the next one.  Don't have to do
       // two separate implementations this way.  :P
-      const { tokensUsed } = await this.#doInsertBefore(
+      return await this.#doInsertBefore(
         { ...iterState, index: iterState.index + 1 },
         source,
-        inserted
+        inserted,
+        { type: "insertAfter", target: this.#makeTarget(iterState) }
       );
-
-      // We do need to sort out the target, though.
-      return { type: "insertAfter", target, tokensUsed, shunted: 0 };
     }
 
     async #doShuntOut(
       iterState: InsertionIterationState,
-      cursor: FA.FragmentCursor,
       source: SourceLike,
-      inserted: AssemblyLike
+      inserted: AssemblyLike,
+      shuntRef: FA.FragmentCursor | FA.PositionResult
     ): Promise<InsertionResult> {
       const { index } = iterState;
 
@@ -341,13 +363,21 @@ const theModule = usModule((require, exports) => {
         index, this.#fragments
       );
 
-      // TODO: add shunting to all this shit.
-      const direction = shuntingMode === "inDirection" ? iterState.direction : "nearest";
-      const result = this.#fragments[index].shuntOut(cursor, direction);
+      const result = dew(() => {
+        if (shuntRef.type !== "fragment") return shuntRef;
+        const direction = shuntingMode === "inDirection" ? iterState.direction : "nearest";
+        return this.#fragments[index].shuntOut(shuntRef, direction);
+      });
 
       switch (result.type) {
-        case "insertBefore": return await this.#doInsertBefore(iterState, source, inserted);
-        case "insertAfter": return await this.#doInsertAfter(iterState, source, inserted);
+        case "insertBefore": return {
+          ...await this.#doInsertBefore(iterState, source, inserted),
+          shunted: result.shunted
+        };
+        case "insertAfter": return {
+          ...await this.#doInsertAfter(iterState, source, inserted),
+          shunted: result.shunted
+        };
         // This should not be possible unless the implementation of `shuntOut`
         // changes to allow it...  In which case, this error will hopefully
         // let us know something needs to change here.
@@ -398,7 +428,7 @@ const theModule = usModule((require, exports) => {
       }
 
       // If we got kicked out of the `checks` block, we must do a shunt.
-      return await this.#doShuntOut(iterState, cursor, source, inserted);
+      return await this.#doShuntOut(iterState, source, inserted, cursor);
     }
 
     async insert(
@@ -432,9 +462,8 @@ const theModule = usModule((require, exports) => {
         const result = frag.locateInsertion(insertionType, iterState);
         switch (result.type) {
           case "insertBefore":
-            return await this.#doInsertBefore(iterState, source, inserted);
           case "insertAfter":
-            return await this.#doInsertAfter(iterState, source, inserted);
+            return await this.#doShuntOut(iterState, source, inserted, result);
           case "inside":
             return await this.#doInsertInside(iterState, result.cursor, source, inserted);
           case "toTop":
