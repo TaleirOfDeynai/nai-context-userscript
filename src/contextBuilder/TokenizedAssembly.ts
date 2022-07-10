@@ -24,7 +24,7 @@ const TOKEN_MENDING_RANGE = 5;
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
-  const { createFragment, isContiguous } = splitterService;
+  const { createFragment, isContiguous, asContent } = splitterService;
   const { beforeFragment, afterFragment } = splitterService;
   const { FragmentAssembly, splitSequenceAt, makeCursor } = $FragmentAssembly(require);
   const { ContentAssembly } = $ContentAssembly(require);
@@ -294,7 +294,7 @@ const theModule = usModule((require, exports) => {
           this.#codec,
           ftCursor.offset - prefix.content.length,
           tokensIn,
-          [...this.content, this.suffix].join("")
+          [...this.content, this.suffix].map(asContent).join("")
         );
         return [createFragment("", 0, suffix), theTokens];
       });
