@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isNumber } from "@utils/is";
@@ -93,7 +93,7 @@ const theModule = usModule((require, exports) => {
   ) => {
     switch (true as boolean) {
       case !contextParams.removeComments:
-      case forSearch && userScriptConfig.comments.searchComments:
+      case forSearch && usConfig.comments.searchComments:
         return providers.basic[trimDirection];
       default:
         return providers.removeComments[trimDirection];
@@ -169,7 +169,7 @@ const theModule = usModule((require, exports) => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);
-      const keepAffix = !forStory ? true : userScriptConfig.story.standardizeHandling;
+      const keepAffix = !forStory ? true : usConfig.story.standardizeHandling;
       return keepAffix ? result : await result.asOnlyContent();
     }
   });

@@ -348,8 +348,15 @@ const postProcess = {
 const config = {
   /** Enables debug logging for the user-script. */
   debugLogging: true,
-  /** Similar to the above, but an override for tests. */
-  testLogging: globalThis?.process?.env?.["NODE_ENV"] === "test",
+  /**
+   * Whether we're in a test environment.
+   * 
+   * See `spec-resources/_setup.cts` to see where this gets overridden.
+   * This is set to `false` here rather than sniffing out for
+   * `process.env.NODE_ENV` so the bundler can optimize out certain
+   * branches.
+   */
+  inTestEnv: false,
   /** Configuration options affecting comment removal. */
   comments,
   /** Configuration options affecting the story entry. */

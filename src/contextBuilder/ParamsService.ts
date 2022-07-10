@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import TokenizerHelpers from "@nai/TokenizerHelpers";
 import $TokenizerService from "./TokenizerService";
@@ -46,7 +46,7 @@ export default usModule((require, exports) => {
 
     // Since I'm not sure when NovelAI would NOT request comments
     // be removed, you can just force it using the config.
-    removeComments = userScriptConfig.comments.alwaysRemove || removeComments;
+    removeComments = usConfig.comments.alwaysRemove || removeComments;
 
     return Object.freeze({
       storyContent,

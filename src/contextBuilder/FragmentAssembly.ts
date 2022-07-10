@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isArray } from "@utils/is";
@@ -88,9 +88,6 @@ namespace Position {
 }
 
 export type PositionResult = Position.Result;
-
-/** If thorough assertions should be run. */
-const thoroughChecks = userScriptConfig.debugLogging || userScriptConfig.testLogging;
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
@@ -301,7 +298,7 @@ const theModule = usModule((require, exports) => {
       this.#isAffixed = Boolean(prefix.content || suffix.content);
       this.#isContiguous = isContiguous;
 
-      if (thoroughChecks) {
+      if (usConfig.debugLogging || usConfig.inTestEnv) {
         // Because I'm tired of coding around this possibility.
         // Note: this does allow `content` to be empty, but if it contains
         // fragments, they must all be non-empty.

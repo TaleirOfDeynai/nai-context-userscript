@@ -4,7 +4,7 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { assert, assertInBounds } from "@utils/assert";
 import { isArray, isFunction, isObject } from "@utils/is";
-import { defer, future } from "@utils/functions";
+import { noop, defer, future } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import $TokenizerCodec from "@nai/TokenizerCodec";
@@ -779,7 +779,7 @@ export default usModule((require, exports) => {
     const jobSubject = new rx.Subject<Deferred<string | Tokens>>();
 
     // This will execute deferred tasks as appropriate.
-    jobSubject.pipe(rxop.taskRunner((v) => v.execute(), 3)).subscribe(rx.noop);
+    jobSubject.pipe(rxop.taskRunner((v) => v.execute(), 3)).subscribe(noop);
 
     const encode = (text: string) => {
       const def = defer(() => codec.encode(text));

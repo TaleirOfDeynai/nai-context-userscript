@@ -13,7 +13,7 @@
  * - Output ordering affected by `selection.ordering`.
  */
 
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -44,7 +44,7 @@ export default usModule((require, exports) => {
     storySource: rx.Observable<StorySource>
   ) => {
     /** Sorting functions we're going to use. */
-    const chosenSorters = chain(userScriptConfig.selection.insertionOrdering)
+    const chosenSorters = chain(usConfig.selection.insertionOrdering)
       // Force the natural sorters to be the last ones.
       .filter((k) => k !== "naturalByPosition" && k !== "naturalByType")
       .concat<SorterKey>("naturalByType", "naturalByPosition")

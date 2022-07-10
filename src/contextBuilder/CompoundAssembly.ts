@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isFunction } from "@utils/is";
@@ -105,8 +105,6 @@ namespace Insertion {
 }
 
 export type InsertionResult = Insertion.Result;
-
-const { shuntingMode } = userScriptConfig.assembly;
 
 const REJECTED_INSERT: Insertion.RejectedResult = Object.freeze({
   type: "rejected", tokensUsed: 0, shunted: 0
@@ -365,6 +363,7 @@ const theModule = usModule((require, exports) => {
 
       const result = dew(() => {
         if (shuntRef.type !== "fragment") return shuntRef;
+        const { shuntingMode } = usConfig.assembly;
         const direction = shuntingMode === "inDirection" ? iterState.direction : "nearest";
         return this.#fragments[index].shuntOut(shuntRef, direction);
       });
