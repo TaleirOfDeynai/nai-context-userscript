@@ -604,6 +604,66 @@ export const bufferEagerly = function*<T extends Iterable<any>>(
 };
 
 /**
+ * Takes a sequence of elements and batches them into groups based on
+ * whether they're equal, according to `Object.is`.
+ * 
+ * Whenever the current value is found to not equal the previous, a new
+ * group is started.  Each group will contain elements considered equal.
+ */
+ export function batch<T extends Iterable<any>>(
+  iter: T
+): Iterable<ElementOf<T>[]>;
+/**
+ * Takes a sequence of elements and batches them into groups based on
+ * the results of a comparison function.
+ * 
+ * Whenever the current value is considered un-equal to the previous
+ * according to the `compareFn`, a new group is started.  Each group
+ * will contain elements that compare equitably.
+ */
+export function batch<T extends Iterable<any>>(
+  iter: T,
+  compareFn: (cur: ElementOf<T>, prev: ElementOf<T>) => boolean
+): Iterable<ElementOf<T>[]>;
+/**
+ * Takes a sequence of elements and batches them into groups based on
+ * the results of a comparison function.
+ * 
+ * Whenever the current value is considered un-equal to the previous
+ * according to the `compareFn`, a new group is started.  Each group
+ * will contain elements that compare equitably.
+ */
+export function batch<T extends Iterable<any>>(
+  iter: T,
+  compareFn: (cur: ElementOf<T>, prev: ElementOf<T>) => number
+): Iterable<ElementOf<T>[]>;
+export function* batch<T extends Iterable<any>>(
+  iter: T,
+  compareFn?: (cur: ElementOf<T>, prev: ElementOf<T>) => number | boolean
+): Iterable<ElementOf<T>[]> {
+  // By default, check if the current item is the same as the last item
+  // in the buffer using `Object.is`.
+  compareFn ??= Object.is;
+
+  let buffer: ElementOf<T>[] = [];
+  for (const item of iter) {
+    checks: {
+      if (buffer.length === 0) break checks;
+
+      const result = compareFn(item, buffer[buffer.length - 1]);
+      if (result === 0 || result === true) break checks;
+
+      yield buffer;
+      buffer = [];
+    }
+
+    buffer.push(item);
+  }
+
+  if (buffer.length) yield buffer;
+}
+
+/**
  * Calls the given function on each element of `iterable` and yields the
  * values, unchanged.
  */
