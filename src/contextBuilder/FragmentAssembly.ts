@@ -1,7 +1,7 @@
 import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
-import { isArray } from "@utils/is";
+import { isArray, isNumber } from "@utils/is";
 import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain, toImmutable } from "@utils/iterables";
@@ -60,22 +60,22 @@ export interface InsertionPosition {
   offset: number;
 }
 
-namespace Position {
+export namespace Position {
   /** No suitable place found; continue with next fragment. */
-  interface ContinueResult {
+  export interface ContinueResult {
     type: IterDirection;
     remainder: number;
   }
 
   /** Split the assembly at `cursor` and insert between them. */
-  interface SuccessResult {
+  export interface SuccessResult {
     type: "inside";
     /** The position to perform the split. */
     cursor: FragmentCursor;
   }
 
   /** Insert before/after the assembly. */
-  interface InsertResult {
+  export interface InsertResult {
     type: "insertBefore" | "insertAfter";
     /** 
      * The number of characters the entry was shunted from its
@@ -88,6 +88,9 @@ namespace Position {
 }
 
 export type PositionResult = Position.Result;
+
+const lineBatcher = (c: TextFragment, p: TextFragment) =>
+  c.content === p.content && c.content === "\n";
 
 const theModule = usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
@@ -384,6 +387,11 @@ const theModule = usModule((require, exports) => {
     }
     readonly #isContiguous: boolean;
 
+    /** Whether this assembly is entirely empty or not. */
+    get isEmpty() {
+      return !this.#isAffixed && !this.#content.length;
+    }
+
     /**
      * Iterator that yields all fragments that are not empty.  This can
      * include both the {@link FragmentAssembly.prefix prefix} and the
@@ -662,6 +670,17 @@ const theModule = usModule((require, exports) => {
       return makeCursor(this, newOffset);
     }
 
+    /** A helper function for {@link fragmentsFrom} and {@link locateInsertion}. */
+    #cursorForDir(
+      /** A cursor or selection marking the position of the iteration. */
+      position: FragmentCursor | FragmentSelection,
+      /** Which direction to iterate. */
+      direction: IterDirection
+    ): FragmentCursor {
+      if (!isArray(position)) return position as FragmentCursor;
+      return direction === "toTop" ? position[0] : position[1];
+    }
+
     /**
      * A helper function for {@link fragmentsFrom} to get the fragments
      * starting from the fragment identified by a `cursor` toward either
@@ -673,10 +692,8 @@ const theModule = usModule((require, exports) => {
       /** Which direction to iterate. */
       direction: IterDirection
     ): Iterable<TextFragment> {
-      const toBottom = direction === "toBottom";
-      const skipFn = toBottom ? IterOps.skipUntil : IterOps.skipRightUntil;
-      const theFrags = skipFn(this, (f) => isCursorInside(cursor, f));
-      return toBottom ? theFrags : IterOps.iterReverse(theFrags);
+      const theFrags = direction === "toBottom" ? this : IterOps.iterReverse(this);
+      return IterOps.skipUntil(theFrags, (f) => isCursorInside(cursor, f));
     }
 
     /**
@@ -703,6 +720,64 @@ const theModule = usModule((require, exports) => {
       const splitFrags = IterOps.flatMap(theFrags, sequencer.splitUp);
       // Recurse to split them up further until we're out of sequencers.
       return this.#sequenceFragments(cursor, splitFrags, restSeq);
+    }
+
+    /**
+     * Private implementation of {@link fragmentsFrom}.
+     */
+    #fragmentsFrom(
+      cursor: FragmentCursor,
+      splitType: TrimType,
+      direction: IterDirection
+    ): Iterable<TextFragment> {
+      const provider = direction === "toTop" ? "trimTop" : "trimBottom";
+      return this.#sequenceFragments(
+        cursor,
+        this.#fragsStartingFrom(cursor, direction),
+        getSequencersFrom(provider, splitType)
+      );
+    }
+
+    /**
+     * Takes the given `fragments` and converts them into valid positions.
+     */
+    #positionsFrom(
+      /** The fragments being iterated. */
+      fragments: Iterable<TextFragment>,
+      /** Which direction `fragments` is iterating. */
+      direction: IterDirection
+    ): Iterable<FragmentCursor> {
+      // The side of the fragment we want to position the cursor differs
+      // based on iteration direction.
+      const toFragOffset = direction === "toTop" ? beforeFragment : afterFragment;
+      // Prepare the function to get the multi-newline offset, which
+      // is the inverse of `toFragOffset`.
+      const toLineOffset = direction === "toTop" ? afterFragment : beforeFragment;
+
+      // There's really only three positions we care about for this process.
+      // - The position before a fragment containing words.
+      // - The position after a fragment containing words.
+      // - The zero-length position between two `\n` characters.
+      return chain(fragments)
+        // Group consecutive `\n` characters together.
+        .thru((iter) => IterOps.batch(iter, lineBatcher))
+        .thru((iter) => IterOps.flatMap(iter, (frags) => {
+          // If we don't have multiple fragments in the batch, nothing
+          // special needs to be done.
+          if (frags.length === 1) return frags;
+          // Let's give that zero-length position form.  Basically, we're
+          // putting an empty fragment between each `\n` and then removing
+          // the `\n` fragments, but cleverly.
+          return IterOps.mapIter(
+            IterOps.skip(frags, 1),
+            (f) => createFragment("", toLineOffset(f))
+          );
+        }))
+        // And now preserve the empty fragments and those with words.
+        .filter((f) => f.content.length === 0 || hasWords(f))
+        // Then convert them into cursors...
+        .map((f) => makeCursor(this, toFragOffset(f)))
+        .value();
     }
 
     /**
@@ -739,20 +814,12 @@ const theModule = usModule((require, exports) => {
       /** Which direction to iterate. */
       direction: IterDirection
     ): Iterable<TextFragment> {
-      if (isArray(position)) {
-        const realPos = direction === "toTop" ? position[0] : position[1];
-        return this.fragmentsFrom(realPos, splitType, direction);
-      }
+      if (this.isEmpty) return [];
 
       // In case the cursor points to no existing fragment, this will move
       // it to the next nearest fragment.
-      const cursor = this.findBest(position as FragmentCursor);
-
-      const initFrags = this.#fragsStartingFrom(cursor, direction);
-      const provider = direction === "toTop" ? "trimTop" : "trimBottom";
-      const sequencers = getSequencersFrom(provider, splitType);
-
-      return this.#sequenceFragments(cursor, initFrags, sequencers);
+      const cursor = this.findBest(this.#cursorForDir(position, direction));
+      return this.#fragmentsFrom(cursor, splitType, direction);
     }
 
     /**
@@ -779,84 +846,92 @@ const theModule = usModule((require, exports) => {
 
       assert("Expected `offset` to be a positive number.", offset >= 0);
 
-      const [remainder, frag] = dew(() => {
+      // Fast-path: If this assembly is empty, tell it to carry on.
+      if (this.isEmpty) return { type: direction, remainder: offset };
+
+      const initCursor = this.findBest(this.#cursorForDir(position, direction));
+
+      // Fast-path: If we're given an offset of 0, we don't need to move
+      // the cursor at all (though, `findBest` could have moved it).
+      if (offset === 0) return { type: "inside", cursor: initCursor };
+
+      const result = dew(() => {
         // Tracks how many elements we still need to pass.
         let remainder = offset;
 
-        // There's really only three positions we care about for this process.
-        // - The position before a fragment containing words.
-        // - The position after a fragment containing words.
-        // - The zero-length position between two `\n` characters.
-        // The `toCursor` function will get the right before/after position,
-        // so we just need to make sure we have the right fragments in here.
-        const fragments = chain(this.fragmentsFrom(position, insertionType, direction))
-          // Group consecutive `\n` characters together.
-          .thru((iter) => IterOps.buffer(iter, (f) => f.content !== "\n", true))
-          .thru((iter) => {
-            // Prepare the function to get the multi-newline offset, which
-            // differs based on iteration direction.
-            const toOffset = direction === "toTop" ? afterFragment : beforeFragment;
-
-            return IterOps.flatMap(iter, (frags) => {
-              // If we don't have multiple fragments in the buffer, nothing
-              // special needs to be done.
-              if (frags.length === 1) return frags;
-              // Let's give that zero-length position form.  Basically, we're
-              // putting an empty fragment between each `\n` and then removing
-              // the `\n` fragments, but cleverly.
-              return IterOps.mapIter(
-                IterOps.skip(frags, 1),
-                (f) => createFragment("", toOffset(f))
-              );
-            });
-          })
-          // And now preserve the empty fragments and those with words.
-          .filter((f) => f.content.length === 0 || hasWords(f))
+        const cursors = chain(this.#fragmentsFrom(initCursor, insertionType, direction))
+          // Convert into positions...
+          .thru((iter) => this.#positionsFrom(iter, direction))
+          // ...but if we find the initial cursor, skip it...
+          .thru((iter) => IterOps.skipUntil(iter, (c) => c.offset !== initCursor.offset))
+          // ...because we're adding it into the first position here.
+          .thru((cursors) => IterOps.concat(initCursor, cursors))
           .value();
 
-        for (const frag of fragments) {
-          if (remainder <= 0) return [remainder, frag] as const;
+        for (const cursor of cursors) {
+          if (remainder <= 0) return cursor;
           remainder -= 1;
         }
 
         // If we get here, we couldn't find a good fragment within the assembly.
-        return [remainder, undefined] as const;
+        return remainder;
       });
 
-      if (frag) {
-        // The side of the fragment we want to position the cursor also
-        // differs based on iteration direction.
-        const toOffset = direction === "toTop" ? beforeFragment : afterFragment;
-        const cursor = makeCursor(this, toOffset(frag));
+      // If we got a remainder, we tell it to carry on.
+      if (isNumber(result)) return { type: direction, remainder: result };
 
-        // We're not going to split on the prefix or suffix, just to avoid
-        // the complexity of it, so we need to check where we are.
-        switch (this.positionOf(cursor)) {
-          // This is the best case; everything is just fine, but this
-          // fragment will need to be split.
-          case "content": return { type: "inside", cursor };
-          // This tells it to insert before this fragment.
-          case "prefix": return {
-            type: "insertBefore",
-            shunted: cursor.offset - beforeFragment(this.prefix)
-          };
-          // And this after this fragment.
-          case "suffix": return {
-            type: "insertAfter",
-            shunted: afterFragment(this.suffix) - cursor.offset
-          };
-        }
+      // We're not going to split on the prefix or suffix, just to avoid
+      // the complexity of it, so we need to check where we are.
+      switch (this.positionOf(result)) {
+        // This is the best case; everything is just fine, but this
+        // fragment will need to be split.
+        case "content": return { type: "inside", cursor: result };
+        // This tells it to insert before this fragment.
+        case "prefix": return {
+          type: "insertBefore",
+          shunted: result.offset - beforeFragment(this.prefix)
+        };
+        // And this after this fragment.
+        case "suffix": return {
+          type: "insertAfter",
+          shunted: afterFragment(this.suffix) - result.offset
+        };
+        default: throw new Error("Unexpected position.");
       }
-
-      // In any other case, we tell it to carry on, whatever amount is left.
-      return { type: direction, remainder };
     }
 
     /**
      * Gets a cursor for entering this assembly during iteration.
      */
-    entryPosition(direction: IterDirection): FragmentCursor {
-      if (direction === "toTop") {
+    entryPosition(
+      /** Which direction to iterate. */
+      direction: IterDirection,
+      /**
+       * The type of insertion to be done.
+       * 
+       * This may be omitted to produce a cursor:
+       * - at the beginning of the assembly if `direction` is `"toBottom"`.
+       * - at the end of the assembly if `direction` is `"toTop"`.
+       * 
+       * When provided, it will provide a position valid for the
+       * insertion type:
+       * - the earliest possible position if `direction` is `"toBottom"`.
+       * - the latest possible position if `direction` is `"toTop"`.
+       * 
+       * If there is no valid position, it will return the same value as
+       * though it were omitted; this will be the case if the assembly is
+       * empty.  It should be the prefix or suffix, doing their job as
+       * positional anchors.
+       */
+      insertionType?: TrimType
+    ): FragmentCursor {
+      if (insertionType) {
+        const initCursor = this.entryPosition(direction);
+        return chain(this.#fragmentsFrom(initCursor, insertionType, direction))
+          .thru((iter) => this.#positionsFrom(iter, direction))
+          .value((c) => IterOps.first(c) ?? initCursor);
+      }
+      else if (direction === "toTop") {
         const suffix = this.suffix.content ? this.suffix : undefined;
         const frag = suffix ?? IterOps.last(this.content) ?? this.prefix;
         return makeCursor(this, afterFragment(frag));

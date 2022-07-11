@@ -238,6 +238,8 @@ const theModule = usModule((require, exports) => {
       }
       else {
         const index = direction === "toTop" ? this.#fragments.length - 1 : 0;
+        // We specifically want the position without the insertion type.
+        // This places the cursor at the start/end of all the text.
         const position = this.#fragments[index].entryPosition(direction);
 
         return {
@@ -478,7 +480,7 @@ const theModule = usModule((require, exports) => {
             }
 
             iterState.index = nextIndex;
-            iterState.position = nextFrag.entryPosition(result.type);
+            iterState.position = nextFrag.entryPosition(result.type, insertionType);
             iterState.offset = result.remainder;
             continue;
           }
