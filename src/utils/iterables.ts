@@ -388,32 +388,9 @@ export const skipRightUntil = function*<T extends Iterable<any>>(
     for (let i = 0; i <= cutOff; i++) yield iter[i];
   }
   else {
-    // We'll break this iterable up into chunks, separating it by which
-    // item satisfies the predicate.  Then, we'll just not yield the
-    // last chunk (unless we only got one chunk).
-    let holdOver: ElementOf<T>[] = [];
-    let yielded = false;
-    for (const items of buffer(iter, predicateFn, true)) {
-      if (holdOver.length) {
-        yield* holdOver;
-        yielded = true;
-      }
-      holdOver = items;
-    }
-
-    // If we yielded, there was more than one chunk, or the iterable
-    // was simply empty.
-    if (yielded || !holdOver.length) return;
-
-    // If we get here, one of two possible things happened.
-    // - The predicate triggered once on the very first element,
-    //   meaning we skip everything.
-    // - The predicate triggered once on the very last element,
-    //   meaning we skip nothing and yield everything.
-    // Since we know we have a non-empty have an array now, it's fast
-    // to just check if the first element; if it failed the predicate,
-    // we're in that latter possibility.
-    if (!predicateFn(holdOver[0])) yield* holdOver;
+    // Not really sure how to do this with an unbounded iterable.
+    // Just convert to an array and use the array version.
+    return skipRightUntil([...iter] as any, predicateFn);
   }
 };
 
