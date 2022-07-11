@@ -1,5 +1,6 @@
 import type { LorebookConfig as LC } from "@nai/Lorebook";
 import type { SorterKey } from "./contextBuilder/rx/3-selection/_sorters";
+import type { ShuntingMode } from "./contextBuilder/CompoundAssembly";
 
 /** Configuration options affecting comment removal. */
 const comments = {
@@ -21,7 +22,7 @@ const comments = {
    * the story.
    * 
    * If this is set to `true`, comments will be retained during the
-   * activation phase and removed during the insertion phase.
+   * activation phase and removed during the assembly phase.
    * 
    * Note that this won't work well with key-relative insertion,
    * since the key-relative entries need to be able to find a keyword
@@ -90,12 +91,28 @@ const lorebook = {
 /** Configuration options relating to the selection phase, in general. */
 const selection = {
   /**
+   * Defines the ordering of entries during the selection process.
+   * 
+   * This technically has more to do with how entries are grouped
+   * when {@link weightedRandom.groupBySelectionOrder} is active,
+   * as all entries that are considered equal by this ordering will
+   * be grouped into a selection group.
+   * 
+   * This is combined with {@link selection.insertionOrdering} to define
+   * the final insertion order that is given to the assembler.
+   * 
+   * The allowed sorters are found {@link SorterKey here}.
+   */
+  selectionOrdering: [
+    "budgetPriority"
+  ],
+  /**
    * Defines how to sort entries into formal insertion order.
    * 
    * Due to all the concurrency in this user-script, entries quickly get
    * rearranged and shuffled, sometimes in non-deterministic ways.  In
    * order to restore determinism, the entries get sorted prior to the
-   * insertion phase.
+   * assembly phase.
    * 
    * This array allows you to configure how the entries are to be sorted
    * back into a stable order.  The order you provide sorter keys in is
@@ -104,7 +121,7 @@ const selection = {
    * the tie will then be broken by sorting on whether the entry has a
    * reservation or not.
    * 
-   * The allowed keys are found {@link SorterKey here}.
+   * The allowed sorters are found {@link SorterKey here}.
    * 
    * To have vanilla style ordering, you should structure as so:
    * - `"budgetPriority"`
@@ -128,7 +145,7 @@ const selection = {
    * special and will be ignored if used here.  These are the fail-safe
    * sorters and help to make this user-script behave as NovelAI does.
    */
-  ordering: [
+  insertionOrdering: [
     "budgetPriority",
     "reservation",
     "activationEphemeral",
@@ -140,7 +157,7 @@ const selection = {
   ] as SorterKey[]
 } as const;
 
-/** Configuration options relating to sub-context construction. */
+/** Configuration options relating to sub-context assembly. */
 const subContext = {
   /**
    * Vanilla NovelAI pre-processes sub-contexts prior to final assembly,
@@ -187,7 +204,7 @@ const subContext = {
    * isolated from the root context, these entries cannot find their way
    * into the story.
    * 
-   * If this is set to `true` and `useGrouping` is also enabled, a
+   * If this is set to `true` and `groupedInsertion` is also enabled, a
    * different behavior will be used that will allow key-relative entries
    * belonging to a sub-context to be inserted into the root context
    * instead; they will not be compulsively grouped.
@@ -240,7 +257,7 @@ const weightedRandom = {
    * The behavior of {@link LC.orderByKeyLocations} will only apply to
    * insertion order; not selection order.
    */
-  groupByInsertionPriority: false,
+  groupBySelectionOrder: false,
   /**
    * A weighted selection group is created for entries that belong to the
    * same category sub-context.
@@ -255,14 +272,14 @@ const weightedRandom = {
    *    selection of the category's entries can begin.
    * 3) Within the sub-context, {@link CC.budgetPriority insertion priority}
    *    is ignored for all entries that qualify for random selection, even
-   *    if `groupByInsertionPriority` is enabled; the sub-context group
+   *    if `groupBySelectionOrder` is enabled; the sub-context group
    *    supersedes the insertion priority group.
    * 4) Non-qualifying entries are selected first, then random selection is
    *    performed.
    * 5) Selection is repeated until the sub-context's budget is satisfied
    *    or no entries remain for selection.
    * 
-   * If `groupByInsertionPriority` is also enabled, the whole sub-context is
+   * If `groupBySelectionOrder` is also enabled, the whole sub-context is
    * treated as a composite entry that is a member of the insertion priority
    * group corresponding to the sub-context's insertion priority.
    * - When `subCategory.groupedInsertion` is `false`:
@@ -283,6 +300,24 @@ const weightedRandom = {
    */
   groupBySubContext: false
 } as const;
+
+/** Configuration options relating to context assembly. */
+const assembly = {
+  /**
+   * When one entry wants to insert into another, but that just isn't
+   * going to happen for some reason or another, the alternative is
+   * to shunt the entry either before or after the entry that is
+   * rejecting it.
+   * 
+   * One of these options determines how that shunting happens:
+   * - `"inDirection"` - If the entry to insert had a positive insertion
+   *   position, it will place it after the entry.  If it was negative,
+   *   it will be placed before it.  If it was 0, it will be shunted
+   *   to the nearest end.
+   * - `"nearest"` - Always shunts the entry to the nearest end.
+   */
+  shuntingMode: "inDirection" as ShuntingMode
+};
 
 /** Configuration options relating to context post-processing. */
 const postProcess = {
@@ -313,8 +348,15 @@ const postProcess = {
 const config = {
   /** Enables debug logging for the user-script. */
   debugLogging: true,
-  /** Similar to the above, but an override for tests. */
-  testLogging: globalThis?.process?.env?.["NODE_ENV"] === "test",
+  /**
+   * Whether we're in a test environment.
+   * 
+   * See `spec-resources/_setup.cts` to see where this gets overridden.
+   * This is set to `false` here rather than sniffing out for
+   * `process.env.NODE_ENV` so the bundler can optimize out certain
+   * branches.
+   */
+  inTestEnv: false,
   /** Configuration options affecting comment removal. */
   comments,
   /** Configuration options affecting the story entry. */
@@ -323,10 +365,12 @@ const config = {
   lorebook,
   /** Configuration options relating to selection. */
   selection,
-  /** Configuration options relating to sub-context construction. */
+  /** Configuration options relating to sub-context assembly. */
   subContext,
   /** Configuration options relating to weighted-random selection. */
   weightedRandom,
+  /** Configuration options relating to context assembly. */
+  assembly,
   /** Configuration options relating to context post-processing. */
   postProcess
 } as const;

@@ -143,6 +143,35 @@ export function* toPairs(obj: any): Iterable<KVP<string | number | symbol, any>>
 };
 
 /**
+ * Creates an iterable that yields each element with the element that
+ * immediately follows it.
+ * 
+ * Will yield nothing if the iterable has less than 2 elements.
+ */
+export function scan<T, C extends number>(iter: Iterable<T>): Iterable<[T, T]>;
+/**
+ * Creates an iterable that yields each element with all the elements
+ * after it in an array with a length of `count`.
+ * 
+ * Will yield nothing if the iterable has less than `count` elements.
+ */
+export function scan<T, C extends number>(iter: Iterable<T>, count: C): Iterable<T[] & { length: C }>;
+export function* scan<T>(
+  iter: Iterable<T>,
+  count = 2
+) {
+  const buffer = new Array<T>(count);
+  let i = 0;
+  for (const v of iter) {
+    buffer[i++] = v;
+    if (i < count) continue;
+    yield [...buffer] as any;
+    buffer.copyWithin(0, 1);
+    i = count - 1;
+  }
+}  
+
+/**
  * Applies a transformation function to the values of an object.
  */
 export const mapValues = function<TObj extends Record<string, any>, TOut>(
@@ -359,32 +388,9 @@ export const skipRightUntil = function*<T extends Iterable<any>>(
     for (let i = 0; i <= cutOff; i++) yield iter[i];
   }
   else {
-    // We'll break this iterable up into chunks, separating it by which
-    // item satisfies the predicate.  Then, we'll just not yield the
-    // last chunk (unless we only got one chunk).
-    let holdOver: ElementOf<T>[] = [];
-    let yielded = false;
-    for (const items of buffer(iter, predicateFn, true)) {
-      if (holdOver.length) {
-        yield* holdOver;
-        yielded = true;
-      }
-      holdOver = items;
-    }
-
-    // If we yielded, there was more than one chunk, or the iterable
-    // was simply empty.
-    if (yielded || !holdOver.length) return;
-
-    // If we get here, one of two possible things happened.
-    // - The predicate triggered once on the very first element,
-    //   meaning we skip everything.
-    // - The predicate triggered once on the very last element,
-    //   meaning we skip nothing and yield everything.
-    // Since we know we have a non-empty have an array now, it's fast
-    // to just check if the first element; if it failed the predicate,
-    // we're in that latter possibility.
-    if (!predicateFn(holdOver[0])) yield* holdOver;
+    // Not really sure how to do this with an unbounded iterable.
+    // Just convert to an array and use the array version.
+    return skipRightUntil([...iter] as any, predicateFn);
   }
 };
 
@@ -596,6 +602,66 @@ export const bufferEagerly = function*<T extends Iterable<any>>(
   if (!finalize || !buffer.length) return;
   yield buffer;
 };
+
+/**
+ * Takes a sequence of elements and batches them into groups based on
+ * whether they're equal, according to `Object.is`.
+ * 
+ * Whenever the current value is found to not equal the previous, a new
+ * group is started.  Each group will contain elements considered equal.
+ */
+ export function batch<T extends Iterable<any>>(
+  iter: T
+): Iterable<ElementOf<T>[]>;
+/**
+ * Takes a sequence of elements and batches them into groups based on
+ * the results of a comparison function.
+ * 
+ * Whenever the current value is considered un-equal to the previous
+ * according to the `compareFn`, a new group is started.  Each group
+ * will contain elements that compare equitably.
+ */
+export function batch<T extends Iterable<any>>(
+  iter: T,
+  compareFn: (cur: ElementOf<T>, prev: ElementOf<T>) => boolean
+): Iterable<ElementOf<T>[]>;
+/**
+ * Takes a sequence of elements and batches them into groups based on
+ * the results of a comparison function.
+ * 
+ * Whenever the current value is considered un-equal to the previous
+ * according to the `compareFn`, a new group is started.  Each group
+ * will contain elements that compare equitably.
+ */
+export function batch<T extends Iterable<any>>(
+  iter: T,
+  compareFn: (cur: ElementOf<T>, prev: ElementOf<T>) => number
+): Iterable<ElementOf<T>[]>;
+export function* batch<T extends Iterable<any>>(
+  iter: T,
+  compareFn?: (cur: ElementOf<T>, prev: ElementOf<T>) => number | boolean
+): Iterable<ElementOf<T>[]> {
+  // By default, check if the current item is the same as the last item
+  // in the buffer using `Object.is`.
+  compareFn ??= Object.is;
+
+  let buffer: ElementOf<T>[] = [];
+  for (const item of iter) {
+    checks: {
+      if (buffer.length === 0) break checks;
+
+      const result = compareFn(item, buffer[buffer.length - 1]);
+      if (result === 0 || result === true) break checks;
+
+      yield buffer;
+      buffer = [];
+    }
+
+    buffer.push(item);
+  }
+
+  if (buffer.length) yield buffer;
+}
 
 /**
  * Calls the given function on each element of `iterable` and yields the

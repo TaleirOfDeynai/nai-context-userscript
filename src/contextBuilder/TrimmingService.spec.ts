@@ -6,6 +6,7 @@ import { mockStory } from "@spec/mock-story";
 
 import levDist from "fast-levenshtein";
 import AppConstants from "@nai/AppConstants";
+import $TokenizerService from "./TokenizerService";
 import $TrimmingService from "./TrimmingService";
 import $TrimmingProviders from "./TrimmingProviders";
 import $ContentAssembly from "./ContentAssembly";
@@ -36,6 +37,7 @@ const fakeRequire: any = (module: any) => {
 
 const { ContentAssembly } = $ContentAssembly(fakeRequire);
 const { TokenizedAssembly } = $TokenizedAssembly(fakeRequire);
+const { codecFor } = $TokenizerService(fakeRequire);
 const providers = $TrimmingProviders(fakeRequire);
 const trimming = $TrimmingService(fakeRequire);
 
@@ -69,7 +71,7 @@ const mockNewAssembly = (
   return mockAssembly(Object.freeze([content]), prefix, suffix);
 };
 
-const mockParams: ContextParams = Object.freeze({ tokenCodec: mockCodec }) as any;
+const mockParams: ContextParams = Object.freeze({ tokenCodec: codecFor(0, mockCodec) }) as any;
 
 /**
  * Sets a spy and mock implementation on

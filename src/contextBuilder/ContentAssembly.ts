@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
@@ -28,9 +28,6 @@ export interface MakeAssemblyOptions extends ContinuityOptions {
   prefix?: ContextConfig["prefix"];
   suffix?: ContextConfig["suffix"];
 }
-
-/** If thorough assertions should be run. */
-const thoroughChecks = userScriptConfig.debugLogging || userScriptConfig.testLogging;
 
 const defaultMakeOptions: Required<MakeAssemblyOptions> = {
   prefix: "",
@@ -192,7 +189,7 @@ const theModule = usModule((require, exports) => {
       );
 
       // Also sanity check the content if thorough logging is enabled.
-      if (thoroughChecks) {
+      if (usConfig.debugLogging || usConfig.inTestEnv) {
         const oldStats = source.contentStats;
         const newStats = assembly.contentStats;
         assert(

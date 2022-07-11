@@ -15,6 +15,8 @@ declare global {
 
 export type TypePredicate<T> = (value: any) => value is T;
 
+export type Thenable<T> = Pick<Promise<T>, "then">;
+
 export const isUndefined = (value: any): value is undefined =>
   typeof value === "undefined";
 
@@ -57,3 +59,8 @@ export const isPojo = dew(() => {
     return POJO_PROTOS.includes(Object.getPrototypeOf(value));
   };
 });
+
+export const isThenable = (value: any): value is Thenable<unknown> => {
+  if (value instanceof Promise) return true;
+  return isObject(value) && isFunction(value.then);
+};

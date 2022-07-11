@@ -1,24 +1,24 @@
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { assert } from "@utils/assert";
+import { assert, assertInBounds } from "@utils/assert";
 import { isArray, isFunction, isObject } from "@utils/is";
-import { defer } from "@utils/functions";
+import { noop, defer, future } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
+import { createLogger } from "@utils/logging";
 import $TokenizerCodec from "@nai/TokenizerCodec";
 import $TextSplitterService from "./TextSplitterService";
-import { onEndContext } from "./rx/events";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { Deferred } from "@utils/functions";
+import type { Deferred, Future } from "@utils/functions";
 import type { TokenCodec as AsyncTokenCodec } from "@nai/TokenizerCodec";
 import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TextOrFragment, TextFragment } from "./TextSplitterService";
 
-
 export interface SyncTokenCodec {
   encode(text: string): number[];
-  decode(tokens: number[]): string;
+  decode(tokens: readonly number[]): string;
 }
 
 export type SomeTokenCodec = AsyncTokenCodec | SyncTokenCodec;
@@ -64,7 +64,7 @@ export interface StreamEncodeOptions {
 export interface StreamEncodeFn {
   (
     /** The {@link TokenCodec} to use for token encode/decode. */
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     /**
      * An iterable containing the text fragments to encode.
      * As this is a prepend encoder, these fragments should be provided
@@ -106,6 +106,33 @@ namespace TokenOffset {
 
 export type TokenOffsetResult = TokenOffset.Result;
 
+export interface AugmentedTokenCodec extends AsyncTokenCodec {
+  mendTokens(
+    /** The sections of tokens and strings to be mended together. */
+    inputSections: Array<Tokens | TextOrFragment>,
+    /** How many tokens at mending boundaries to re-encode. */
+    bufferSize?: number
+  ): Promise<Tokens>;
+
+  /**
+   * Searches the given `tokens` to locate a range of indices in `tokens`
+   * that contains the cursor at some `offset` number of characters.
+   * 
+   * It returns a range, since the offset could lie between two tokens.
+   * If it does not, both elements of the returned array will be equal.
+   * 
+   * @todo Investigate if a binary search would be more efficient.
+   */
+  findOffset(
+    /** The array of tokens to search. */
+    tokens: Tokens,
+    /** The character offset to locate. */
+    offset: number,
+    /** The source text of the `tokens`. */
+    sourceText?: string
+  ): Promise<UndefOr<TokenOffsetResult>>;
+}
+
 type ResumeTuple = [
   /** The tokens considered unstable. */
   wilderness: Tokens,
@@ -117,9 +144,13 @@ type ResumeTuple = [
 
 const UNSAFE_TOKEN_BUFFER = 10;
 
+const $$MarkOfAugmentation = Symbol("TokenizerService.tokenCodec");
+
 export default usModule((require, exports) => {
   const tokenizerCodec = require($TokenizerCodec);
   const textSplitter = $TextSplitterService(require);
+
+  const logger = createLogger("TokenizerService");
 
   // NovelAI's token codecs have a bit of a problem that makes handling
   // them efficiently challenging: they only work discretely.  You give
@@ -161,19 +192,71 @@ export default usModule((require, exports) => {
   /**
    * Creates a function that can mend together token arrays, strings, and
    * {@link TextFragment text fragments} into a single, uniform token array.
+   * 
+   * There's two major performance sinks when working with the tokenizer:
+   * - The high cost of encoding a string into tokens.
+   * - The cost of marshalling the tokenizer's background worker.
+   * 
+   * Because decoding tokens is relatively cheap, we can minimize the size
+   * of strings sent to the encoder when joining them together if we have
+   * a previously encoded sample of the string.
+   * 
+   * By taking only the tokens at the boundaries where they need to be
+   * mended together and decoding those and re-encoding the concatenation
+   * of those strings, we can significantly reduce how long we're waiting
+   * on the encoder.
+   * 
+   * There is a balance to be struck here, however.  The extra decoding
+   * step means we have performance losses due to worker marshalling to
+   * cope with, but we can mitigate that to a degree with some braining.
    */
-  const mendTokens = (
-    /** The token codec to use. */
-    codec: TokenCodec,
-    /** How many tokens at mending boundaries to re-encode. */
-    bufferSize: number = UNSAFE_TOKEN_BUFFER
+  const makeMendTokens = (
+    encode: TokenCodec["encode"],
+    decode: TokenCodec["decode"]
   ) => {
     type Section = string | Tokens;
+    type TokensFuture = Future<Tokens> & { isNew: boolean };
+
+    /** To reduce object instantiations. */
+    const NO_TOKENS: Tokens = Object.freeze([]);
 
     const isTokens = isArray as (v: Tokens | TextOrFragment) => v is Tokens;
+    const isLengthy = (v: Section) => v.length > 0;
+    const toDecoded = (v: Section) => isTokens(v) ? decode(v as any) : v;
+    const doSum = (acc: number, v: Tokens) => acc + v.length;
+
+    // We're going to be lazy; when doing assembly and inserting new tokens
+    // into the context's token array, rather than try and figure out which
+    // tokens were unaffected and which need mending, we're just going throw
+    // all the tokens back into `mendTokens`.  When it's mending two pairs
+    // of token arrays together, it can check to see if it's done that pair
+    // before and pull from cache if so.
+    const binaryCache = new Map<string, TokensFuture>();
+    
+    /** For mending pairs of tokens, this will draw from the cache. */
+    const getBinaryFuture = (sections: Section[]): UndefOr<TokensFuture> => {
+      // Only applicable to `[Tokens, Tokens]`.
+      if (sections.length !== 2 || !sections.every(isTokens)) return undefined;
+      // We're not going to use the cache for larger sequences.
+      if (sections.reduce(doSum, 0) > UNSAFE_TOKEN_BUFFER * 2) return undefined;
+
+      // We can flatten the tokens to build the cache-key as their
+      // re-encoded result will be the same, regardless of which side
+      // of the mend the tokens came from.
+      const key = sections.flat().join(":");
+      let theFuture = binaryCache.get(key);
+      if (theFuture) {
+        theFuture.isNew = false;
+        return theFuture;
+      }
+
+      theFuture = Object.assign(future<Tokens>(), { isNew: true });
+      binaryCache.set(key, theFuture);
+      return theFuture;
+    };
 
     /** Splits the leading tokens into safe and unsafe portions. */
-    const leadingTokens = (tokens: Tokens): [Tokens, Tokens] => {
+    const leadingTokens = (bufferSize: number, tokens: Tokens): [Tokens, Tokens] => {
       if (tokens.length === 0) return [tokens, tokens];
 
       const left = tokens.slice(0, -bufferSize);
@@ -182,7 +265,7 @@ export default usModule((require, exports) => {
     };
 
     /** Splits the trailing tokens into unsafe and safe portions. */
-    const trailingTokens = (tokens: Tokens): [Tokens, Tokens] => {
+    const trailingTokens = (bufferSize: number, tokens: Tokens): [Tokens, Tokens] => {
       if (tokens.length === 0) return [tokens, tokens];
 
       const left = tokens.slice(0, bufferSize);
@@ -191,38 +274,74 @@ export default usModule((require, exports) => {
     };
 
     const doMending = async (
+      /** How many tokens at mending boundaries to re-encode. */
+      bufferSize: number,
       /** All the tokens we have encoded up to this point. */
       prevTokens: Tokens,
       /** The sections to be mended. */
       sections: Section[]
     ) => {
+      // Be aware: this is a private function and `boundMendTokens`
+      // will have filtered out empty sections for it.  No need to
+      // check for those.
+
       // We need at least one section.
       const lastSection = last(sections);
       if (!lastSection) return prevTokens;
 
+      // Fast-path: With empty `prevTokens`, no need to mend when
+      // we only have one element in `sections`.
+      if (!prevTokens.length && sections.length === 1) {
+        // Clone the tokens if needed and just use them directly.
+        if (isTokens(lastSection)) return toImmutable(lastSection);
+        // We just need to do an `encode` on a single string.
+        return await encode(lastSection);
+      }
+
       // We need to figure out what is going to be involved in the
       // mend and what is not.  We do not need to do an expensive
-      // re-encoding when we can use just decode a smaller section
-      // of tokens and encode that instead.
-      const [leadingLeft, leadingRight] = leadingTokens(prevTokens);
+      // re-encoding when we can just decode a smaller section of
+      // tokens and encode that smaller portion instead.
+      const [tokensBefore, leading] = leadingTokens(bufferSize, prevTokens);
       // We need to handle the case that the last element was a string.
-      const [trailingLeft, trailingRight]
-        = isTokens(lastSection) ? trailingTokens(lastSection)
-        : [lastSection, [] as Tokens];
+      const [trailing, tokensAfter]
+        = isTokens(lastSection) ? trailingTokens(bufferSize, lastSection)
+        : [lastSection, NO_TOKENS];
+      // `trailing` already has the contribution from the last section,
+      // so we'll use `skipRight` to remove it and get the sections
+      // in between.
+      const between = skipRight(sections, 1);
+
+      // Because `prevTokens` could have been empty, we do still have
+      // to filter empty items.  This doubles as a sanity check too.
+      const theSections = [leading, ...between, trailing].filter(isLengthy);
+
+      // If this is just mending two token arrays, let's see if we have
+      // stored a result for this one already.  If we get one and it
+      // isn't new, we'll use it.  Otherwise, we will need to do the
+      // mend during this call, and potentially fulfill it.
+      const maybeBinary = getBinaryFuture(theSections);
+      if (maybeBinary?.isNew === false) {
+        const fromCache = await maybeBinary.promise;
+        return [...tokensBefore, ...fromCache, ...tokensAfter];
+      }
       
-      // We've got the important portion of the last element in
-      // `trailingLeft`, so we'll use `skipRight` to replace it.
-      // We need to decode everything containing tokens now.
-      const frags = await chain([leadingRight, ...skipRight(sections, 1), trailingLeft])
-        .filter((v) => v.length > 0)
-        .map((v) => isTokens(v) ? codec.decode(v as any) : Promise.resolve(v))
-        .value((promises) => Promise.all(Array.from(promises)));
+      try {
+        // Decode as needed, then encode.
+        const theText = await Promise.all(theSections.map(toDecoded));
+        const tokensMended = await encode(theText.join(""));
 
-      // And now we concat and encode.
-      const mendedTokens = await codec.encode(frags.join(""));
+        // Resolve the binary future if we need to.
+        maybeBinary?.resolve(Object.freeze(tokensMended));
 
-      // And rejoin the split tokens back into the re-encoded portion.
-      return [...leadingLeft, ...mendedTokens, ...trailingRight];
+        // And rejoin the split tokens back into the re-encoded portion.
+        return [...tokensBefore, ...tokensMended, ...tokensAfter];
+      }
+      catch (err) {
+        // Just in case the error happened during the re-join above.
+        if (maybeBinary?.isFulfilled === false) maybeBinary.reject(err);
+        throw err;
+      }
     };
 
     /**
@@ -232,36 +351,206 @@ export default usModule((require, exports) => {
      */
     const boundMendTokens = async (
       /** The sections of tokens and strings to be mended together. */
-      ...inputSections: Array<Tokens | TextOrFragment>
+      inputSections: Array<Tokens | TextOrFragment>,
+      bufferSize: number = UNSAFE_TOKEN_BUFFER
     ): Promise<Tokens> => {
       // Get everything into either an array of tokens or a string.
       // While we're at it, drop any empty sections; no reason to bother.
       const sections = inputSections
         .map((v) => isTokens(v) ? v : textSplitter.asContent(v))
-        .filter((v) => v.length > 0);
+        .filter(isLengthy);
 
-      // If empty, our result is also empty.
-      if (sections.length === 0) return Object.freeze([]);
+      // Fast-path: If empty, our result is also empty.
+      if (sections.length === 0) return NO_TOKENS;
 
-      // If we have only one thing, we just make sure its tokens.
+      // Fast-path: If we have only one thing, we just make sure its tokens.
       if (sections.length === 1) {
         const [section] = sections;
         if (isTokens(section)) return toImmutable(section);
-        return Object.freeze(await codec.encode(section));
+        return Object.freeze(await encode(section));
       }
 
       // We want to process things in chunks, each containing zero-or-more
       // strings and ended by an array of tokens (possibly; there is nothing
       // that says the final element can't be a string).
-      let prevTokens = [] as Tokens;
+      let prevTokens = NO_TOKENS;
       for (const bufSections of buffer(sections, isTokens))
-        prevTokens = await doMending(prevTokens, bufSections);
+        prevTokens = await doMending(bufferSize, prevTokens, bufSections);
       
       return toImmutable(prevTokens);
     };
 
     return boundMendTokens;
-  }
+  };
+
+  /**
+   * Creates a function that can locate where a string offset would be
+   * located in a token array if it were decoded.
+   * 
+   * This is needed for figuring out how to quickly split tokens into
+   * two when splitting a tokenized text fragment into two.
+   * 
+   * Because token mending can fuse two tokens from different fragments
+   * together into a single token, it is unsafe to assume that an index
+   * from one fragment can map to its mended version.
+   * 
+   * When we want to figure out how to map from a token array to an
+   * offset in its decoded string, we got some problems:
+   * - Due to mending, we can't really use the source fragments to
+   *   assume anything about the mended token array.
+   * - We have no easy way to map from "position in string" to "index
+   *   of token array" without breaking it down into individual tokens.
+   * - When the offset we want happens to be inside a token, that sucks.
+   * 
+   * So, to locate a position in the decoded token array, we need to
+   * actually decode its individual tokens...  Or do we!?
+   * 
+   * Unfortunately, the tokenizer has no "convert this array of tokens
+   * into an array of its decoded strings" task.  But decoding is actually
+   * pretty fast (it's literally looking up a number in a hash-table),
+   * the cost of decoding individual tokens is more in marshalling the
+   * tokenizer's worker.
+   * 
+   * So, it is actually faster to just use a binary search; we'll decode
+   * the same tokens multiple times, but we'll overall reduce how much
+   * time we spend doing `postMessage` and `setTimeout` stuff.
+   */
+  const makeFindOffset = (decode: TokenCodec["decode"]) => {
+    const { createFragment, isOffsetInside } = textSplitter;
+
+    interface WithFragment {
+      fragment: TextFragment;
+    }
+
+    interface TokenPart extends WithFragment {
+      indexOffset: number;
+      tokens: Tokens;
+    }
+
+    const toPart = (
+      source: TokenPart,
+      tokens: Tokens,
+      tokensOffset: number,
+      text: string,
+      textOffset: number
+    ): TokenPart => {
+      const indexOffset = source.indexOffset + tokensOffset;
+      const fragment = createFragment(text, textOffset, source.fragment);
+      return { indexOffset, tokens, fragment };
+    };
+
+    const bifurcate = async (
+      givenPart: TokenPart
+    ): Promise<[TokenPart, TokenPart]> => {
+      const { tokens, fragment } = givenPart;
+      // We should switch to a per-token strategy for 3 or fewer tokens.
+      assert("Will not bifurcate; too small!", tokens.length > 3);
+      const splitIndex = (tokens.length / 2) | 0;
+
+      const leftTokens = tokens.slice(0, splitIndex) as Tokens;
+      const rightTokens = tokens.slice(splitIndex) as Tokens;
+
+      // We only need one of these; we can infer the other.
+      const leftText = await decode(leftTokens);
+      const rightText = fragment.content.slice(leftText.length);
+
+      if (usConfig.debugLogging) assert(
+        "Expected `leftText` to be the start of `fragment`.",
+        fragment.content.startsWith(leftText)
+      );
+
+      return [
+        toPart(givenPart, leftTokens, 0, leftText, 0),
+        toPart(givenPart, rightTokens, leftTokens.length, rightText, leftText.length)
+      ];
+    };
+
+    const getData = async (part: TokenPart, tokenIndex: number): Promise<TokenData> => {
+      const index = part.indexOffset + tokenIndex;
+      const token = part.tokens[tokenIndex];
+      const value = await decode([token]);
+      return { index, token, value };
+    };
+
+    return async (
+      /** The array of tokens to search. */
+      tokens: Tokens,
+      /** The character offset to locate. */
+      offset: number,
+      /** The source text of the `tokens`. */
+      sourceText?: string
+    ): Promise<UndefOr<TokenOffsetResult>> => {
+      if (!tokens.length) return undefined;
+
+      // If we were not given the source text, we'll need to decode it.
+      sourceText = sourceText != null ? sourceText : await decode(tokens);
+
+      assertInBounds(
+        "Expected `offset` to be in bounds of the source text.",
+        offset, sourceText
+      );
+
+      // Setup our initial part.
+      let curPart: TokenPart = {
+        indexOffset: 0,
+        tokens,
+        fragment: textSplitter.createFragment(sourceText, 0)
+      };
+
+      while (curPart.tokens.length > 3) {
+        const [leftPart, rightPart] = await bifurcate(curPart);
+        const inLeft = isOffsetInside(offset, leftPart.fragment);
+        const inRight = isOffsetInside(offset, rightPart.fragment);
+
+        // Fast-path: This is an exceptional situation, but it basically
+        // means its between the last token of the left part and the first
+        // token of the right part.  We can use this information to spit
+        // out a faster result.
+        if (inLeft && inRight) {
+          const [min, max] = await Promise.all([
+            getData(leftPart, leftPart.tokens.length - 1),
+            getData(rightPart, 0)
+          ]);
+          return { type: "double", min, max, remainder: 0 };
+        }
+
+        curPart = inLeft ? leftPart : rightPart;
+      }
+  
+      // When we get here, we should be down to 2 or 3 tokens.  We just
+      // need to decide which tokens contain our offset.
+
+      const processor = rx.from(curPart.tokens.keys()).pipe(
+        rxop.mergeMap((i) => getData(curPart, i)),
+        rxop.scan<TokenData, TokenData & WithFragment, WithFragment>(
+          (a, d) => {
+            const prev = a.fragment;
+            const fragment = createFragment(d.value, prev.offset + prev.content.length);
+            return Object.assign(d, { fragment });
+          },
+          { fragment: createFragment("", 0, curPart.fragment) }
+        ),
+        rxop.filter((d) => isOffsetInside(offset, d.fragment)),
+        rxop.toArray()
+      );
+
+      const result = await rx.lastValueFrom(processor);
+  
+      switch (result.length) {
+        case 2: {
+          const [min, max] = result;
+          return { type: "double", min, max, remainder: 0 };
+        }
+        case 1: {
+          const [data] = result;
+          const remainder = offset - data.fragment.offset;
+          return { type: "single", data, remainder };
+        }
+        default:
+          throw new Error("Expected to have either 1 or 2 elements.");
+      }
+    };
+  };
 
   const bootstrapPrepend = async (
     codec: AsyncTokenCodec,
@@ -301,7 +590,7 @@ export default usModule((require, exports) => {
    */
   async function* prependEncoder(
     /** The {@link TokenCodec} to use for token encode/decode. */
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     /**
      * An iterable containing the text fragments to encode.
      * As this is a prepend encoder, these fragments should be provided
@@ -316,8 +605,6 @@ export default usModule((require, exports) => {
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
 
-    const mendingFn = mendTokens(codec, bufferSize);
-
     let [wilderness, safeHouse, encoded] = await bootstrapPrepend(
       codec, seedResult, suffix
     );
@@ -329,11 +616,11 @@ export default usModule((require, exports) => {
 
     for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
-      const toPrepend = await mendingFn(...theBuffer, wilderness);
+      const toPrepend = await codec.mendTokens([...theBuffer, wilderness], bufferSize);
 
       // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...theBuffer, ...encoded]);
-      const tokens = await mendingFn(prefix, [...toPrepend, ...safeHouse]);
+      const tokens = await codec.mendTokens([prefix, [...toPrepend, ...safeHouse]], bufferSize);
 
       // The first `bufferSize` tokens are considered unverified.
       wilderness = Object.freeze(toPrepend.slice(0, bufferSize));
@@ -389,7 +676,7 @@ export default usModule((require, exports) => {
    */
   async function* appendEncoder(
     /** The {@link TokenCodec} to use for token encode/decode. */
-    codec: TokenCodec,
+    codec: AugmentedTokenCodec,
     /** An iterable containing the text fragments to encode. */
     toEncode: Iterable<TextFragment>,
     /** Options used to setup the encoder. */
@@ -399,8 +686,6 @@ export default usModule((require, exports) => {
     const suffix = options?.suffix ?? "";
     const seedResult = options?.seedResult;
     const bufferSize = options?.bufferSize ?? UNSAFE_TOKEN_BUFFER;
-
-    const mendingFn = mendTokens(codec, bufferSize);
 
     let [wilderness, safeHouse, encoded] = await bootstrapAppend(
       codec, seedResult, prefix
@@ -412,11 +697,11 @@ export default usModule((require, exports) => {
 
     for (const theBuffer of fragmentBuffers) {
       // We want to include unverified tokens, in case they change.
-      const toAppend = await mendingFn(wilderness, ...theBuffer);
+      const toAppend = await codec.mendTokens([wilderness, ...theBuffer], bufferSize);
 
       // Prepare the result for this encoding before updating our state.
       const fragments = Object.freeze([...encoded, ...theBuffer]);
-      const tokens =  await mendingFn([...safeHouse, ...toAppend], suffix);
+      const tokens =  await codec.mendTokens([[...safeHouse, ...toAppend], suffix], bufferSize);
 
       // The last `bufferSize` tokens are considered unverified.
       wilderness = Object.freeze(toAppend.slice(-bufferSize));
@@ -445,8 +730,9 @@ export default usModule((require, exports) => {
   };
 
   /**
-   * Ensures `givenCodec` is a codec, or returns an appropriate global
-   * codec instance.
+   * Ensures `givenCodec` is a codec and wraps it to ensure it corresponds
+   * to an {@link AsyncTokenCodec}. Otherwise, it returns an appropriate
+   * global codec instance.
    */
   const getCodec = (type: TokenizerTypes, givenCodec?: SomeTokenCodec): TokenCodec => {
     // Wrap in a try/catch in case it is synchronous.
@@ -461,18 +747,21 @@ export default usModule((require, exports) => {
       }
     };
 
-    // I do not know why NovelAI keeps instantiating a new class for the
-    // global encoder like this, but I will do as they do.
+    // NovelAI keeps instantiating a new class for the global encoder, but it
+    // seems to work fine (and is much faster) reusing an instance so.
+    const globalEncoder = new tokenizerCodec.GlobalEncoder();
     return {
-      encode: (text) => new tokenizerCodec.GlobalEncoder().encode(text, type),
-      decode: (tokens) => new tokenizerCodec.GlobalEncoder().decode(tokens, type)
+      encode: (text) => globalEncoder.encode(text, type),
+      decode: (tokens) => globalEncoder.decode(tokens as any, type)
     };
   };
 
   /**
-   * Wraps the given `codec` in a task runner that will run two encode/decode
-   * tasks concurrently and buffer any more than that, favoring executing the
-   * latest task before older tasks.
+   * Augments the given codec with a few additional methods.
+   * 
+   * It also wraps the given `codec` in a task runner that will run three
+   * encode/decode tasks concurrently and buffer any more than that,
+   * favoring executing the latest task before older tasks.
    * 
    * This will hopefully utilize both the background worker and main thread
    * more efficiently, keeping the worker saturated and the main thread
@@ -480,26 +769,38 @@ export default usModule((require, exports) => {
    * 
    * The task management would be better placed into the actual background
    * worker, since a task-runner on the main thread can only actually advance
-   * its jobs after the current event loop ends...  But it will still be
-   * better than no management at all.
+   * the worker's jobs after the current event loop ends...  But it will
+   * still be better than no management at all.
    */
-  const wrapInTaskRunner = (codec: TokenCodec): TokenCodec => {
-    const jobSubject = new rx.Subject<Deferred<string| number[]>>();
+  const augmentCodec = (codec: TokenCodec): AugmentedTokenCodec => {
+    // @ts-ignore - Preventing double augmentation.
+    if (codec[$$MarkOfAugmentation] === true) return codec;
+
+    const jobSubject = new rx.Subject<Deferred<string | Tokens>>();
 
     // This will execute deferred tasks as appropriate.
-    jobSubject.pipe(rxop.taskRunner((v) => v.execute())).subscribe(rx.noop);
+    jobSubject.pipe(rxop.taskRunner((v) => v.execute(), 3)).subscribe(noop);
+
+    const encode = (text: string) => {
+      const def = defer(() => codec.encode(text));
+      jobSubject.next(def);
+      return def.promise;
+    };
+
+    const decode = (tokens: Tokens) => {
+      const def = defer(() => codec.decode(tokens));
+      jobSubject.next(def);
+      return def.promise;
+    };
+
+    const mendTokens = makeMendTokens(encode, decode);
+    const findOffset = makeFindOffset(decode);
 
     return {
-      encode: (text) => {
-        const def = defer(() => codec.encode(text));
-        jobSubject.next(def);
-        return def.promise;
-      },
-      decode: (tokens) => {
-        const def = defer(() => codec.decode(tokens));
-        jobSubject.next(def);
-        return def.promise;
-      }
+      encode, decode,
+      mendTokens, findOffset,
+      // @ts-ignore - Don't care.  Doing it anyways.
+      [$$MarkOfAugmentation]: true
     };
   };
 
@@ -510,108 +811,12 @@ export default usModule((require, exports) => {
    */
   function codecFor(tokenizerType: TokenizerTypes, givenCodec?: SomeTokenCodec) {
     const codec = getCodec(tokenizerType, givenCodec);
-    return wrapInTaskRunner(codec);
+    return augmentCodec(codec);
   }
-
-  type TokenCache = Map<number, Promise<string>>;
-  const tokenCache = new Map<TokenCodec, TokenCache>();
-
-  onEndContext.subscribe(() => {
-    tokenCache.clear();
-  });
-
-  /**
-   * Gets the translated string for a single token.  This uses a cache
-   * that is reset after a context is generated.
-   */
-  const getTokenString = (
-    /** The token codec to use. */
-    codec: TokenCodec,
-    /** The token to translate. */
-    token: number
-  ): Promise<string> => {
-    let theCache = tokenCache.get(codec);
-    if (!theCache) {
-      theCache = new Map();
-      tokenCache.set(codec, theCache);
-    }
-
-    let result = theCache.get(token);
-    if (!result) {
-      result = codec.decode([token]);
-      theCache.set(token, result);
-    }
-    return result;
-  };
-
-  /**
-   * Searches the given `tokens` to locate a range of indices in `tokens`
-   * that contains the cursor at some `offset` number of characters.
-   * 
-   * It returns a range, since the offset could lie between two tokens.
-   * If it does not, both elements of the returned array will be equal.
-   * 
-   * @todo Investigate if a binary search would be more efficient.
-   */
-  const tokensOfOffset = async (
-    /** The token codec to use. */
-    codec: TokenCodec,
-    /** The array of tokens to search. */
-    tokens: Tokens,
-    /** The character offset to locate. */
-    offset: number
-  ): Promise<UndefOr<TokenOffsetResult>> => {
-    if (!tokens.length) return undefined;
-
-    // Hopefully this won't be too rough with our tokenizer optimizations.
-    // A decode should be quite quick, but this is potentially several
-    // hundred decodes all at once.
-    const tokenTable = await chain(new Set(tokens))
-      .map(async (token) => [token, await getTokenString(codec, token)] as const)
-      .value(async (promises) => new Map(await Promise.all([...promises])));
-    
-    let curOffset = 0;
-    let result = [] as number[];
-
-    for (let i = 0, len = tokens.length; i < len; i++) {
-      if (result.length === 2) break;
-      if (offset < curOffset) break;
-
-      const token = tokens[i];
-      const value = tokenTable.get(token) as string;
-      curOffset += value.length;
-
-      if (offset > curOffset) continue;
-      result.push(i);
-    }
-
-    const getData = (index: number): TokenData => {
-      const token = tokens[index];
-      const value = tokenTable.get(token) as string;
-      return { index, token, value };
-    };
-
-    switch (result.length) {
-      case 2: {
-        const min = getData(result[0]);
-        const max = getData(result[1]);
-        return { type: "double", min, max, remainder: 0 };
-      }
-      case 1: {
-        const data = getData(result[0]);
-        const remainder = data.value.length - (curOffset - offset);
-        return { type: "single", data, remainder };
-      }
-      default: return undefined;
-    }
-  };
 
   return Object.assign(exports, {
     isCodec,
     codecFor,
-    mendTokens,
-    getTokenString,
-    tokensOfOffset,
     prependEncoder,
     appendEncoder
   });

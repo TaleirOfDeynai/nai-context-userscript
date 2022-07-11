@@ -32,7 +32,10 @@ const rollupConfig = {
       preventAssignment: true
     }),
     nodeResolve({ extensions: ['.js', '.ts', '.tsx'] }),
-    typescriptPlugin({ typescript }),
+    typescriptPlugin({
+      typescript,
+      exclude: /\.spec\.[tj]s$/i
+    }),
     commonjs({
       include: [
         'node_modules/**'

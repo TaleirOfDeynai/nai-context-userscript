@@ -1,13 +1,14 @@
 import { describe, it, expect } from "@jest/globals";
+import { beforeEach } from "@jest/globals";
 import { toFragmentSeq } from "@spec/helpers-splitter";
 import * as helpers from "@spec/helpers-tokenizer";
 import * as mockStory from "@spec/mock-story";
 
 import { dew } from "@utils/dew";
-import { iterReverse, interweave } from "@utils/iterables";
+import { chain, iterReverse, interweave, iterPosition } from "@utils/iterables";
 import { skip, take, skipRight, takeRight } from "@utils/iterables";
 import * as AI from "@utils/asyncIterables";
-import $TokenizerService from "./TokenizerService";
+import $TokenizerService, { AugmentedTokenCodec } from "./TokenizerService";
 import AppConstants from "@nai/AppConstants";
 
 const fakeRequire: any = (module: any) => {
@@ -27,90 +28,261 @@ const { mockCodec } = helpers;
 // of phrases it can encode and decode.  Please reference its source
 // for a table of phrases that it will accept.
 
-describe("mendTokens", () => {
-  const { mendTokens } = tokenizer;
+describe("AugmentedTokenCodec", () => {
+  describe("mendTokens", () => {
+    let mendingFn: AugmentedTokenCodec["mendTokens"];
+    beforeEach(() => {
+      mendingFn = tokenizer.codecFor(0, mockCodec).mendTokens;
+    });
 
-  // A great many scenarios are tested by the append/prepend encoders.
-  // So, we're just going to test the scenarios unique to `mendTokens`.
-  // These tests rely on the default `UNSAFE_TOKEN_BUFFER` value to
-  // collapse tokens so they match the result of `mockCodec.encode`.
+    // A great many scenarios are tested by the append/prepend encoders.
+    // So, we're just going to test the scenarios unique to `mendTokens`.
+    // These tests rely on the default `UNSAFE_TOKEN_BUFFER` value to
+    // collapse tokens so they match the result of `mockCodec.encode`.
 
-  it("should do basic string encoding", async () => {
-    const mendingFn = mendTokens(mockCodec);
-    const result = await mendingFn("foo bar");
+    it("should do basic string encoding", async () => {
+      const result = await mendingFn(["foo bar"]);
 
-    expect(result).toEqual(await mockCodec.encode("foo bar"));
+      expect(result).toEqual(await mockCodec.encode("foo bar"));
+    });
+
+    it("should do string concatenation encoding", async () => {
+      const result = await mendingFn(["foo", " ", "bar"]);
+
+      expect(result).toEqual(await mockCodec.encode("foo bar"));
+    });
+
+    it("should handle an array of tokens between two strings", async () => {
+      const result = await mendingFn([
+        "foo",
+        [1, 111, 321, 112, 1], // " [ foobar ] "
+        "bar"
+      ]);
+
+      expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
+    });
+
+    it("should handle a string between two arrays of tokens", async () => {
+      const result = await mendingFn([
+        [301, 1, 111], // "foo [ "
+        "foobar",
+        [112, 312] // " ] bar"
+      ]);
+
+      expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
+    });
+
+    it("should handle mending of many arrays of tokens", async () => {
+      const result = await mendingFn([
+        [301, 1, 111], // "foo [ "
+        [301, 302], // "foobar"
+        [112, 312] // " ] bar"
+      ]);
+
+      expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
+    });
+
+    it("should work with large inputs", async () => {
+      const { startComments, middleComments, endComments } = mockStory;
+      const concatComments = [startComments, middleComments, endComments].join("");
+
+      const startTokens = await mockCodec.encode(startComments);
+      const middleTokens = await mockCodec.encode(middleComments);
+      const endTokens = await mockCodec.encode(endComments);
+      const expected = await mockCodec.encode(concatComments);
+
+      // Throw a battery of trials at it.
+      const trials = [
+        [startTokens, middleComments, endTokens],     // T S T
+        [startComments, middleTokens, endComments],   // S T S
+        [startTokens, middleTokens, endTokens],       // T T T
+        [startComments, middleComments, endComments], // S S S
+      ];
+
+      for (const trial of trials) {
+        const result = await mendingFn(trial);
+        expect(result).toEqual(expected);
+      }
+    });
   });
 
-  it("should do string concatenation encoding", async () => {
-    const mendingFn = mendTokens(mockCodec);
-    const result = await mendingFn("foo", " ", "bar");
+  describe("findOffset", () => {
+    let findOffset: AugmentedTokenCodec["findOffset"];
+    beforeEach(() => {
+      findOffset = tokenizer.codecFor(0, mockCodec).findOffset;
+    });
+  
+    it("should find a single index when inside a token", async () => {
+      const tokens = [301, 1, 302]; // "foo bar"
+  
+      const fooResult = await findOffset(tokens, 2);
+      expect(fooResult).toEqual({
+        type: "single",
+        data: expect.objectContaining({
+          index: 0,
+          token: 301,
+          value: "foo"
+        }),
+        remainder: 2
+      });
+  
+      const barResult = await findOffset(tokens, 5);
+      expect(barResult).toEqual({
+        type: "single",
+        data: expect.objectContaining({
+          index: 2,
+          token: 302,
+          value: "bar"
+        }),
+        remainder: 1
+      });
+    });
+  
+    it("should find a range when bordering two tokens", async () => {
+      const tokens = [301, 1, 302]; // "foo bar"
+  
+      const fooResult = await findOffset(tokens, 3);
+      expect(fooResult).toEqual({
+        type: "double",
+        min: expect.objectContaining({
+          index: 0,
+          token: 301,
+          value: "foo"
+        }),
+        max: expect.objectContaining({
+          index: 1,
+          token: 1,
+          value: " "
+        }),
+        remainder: 0
+      });
+  
+      const barResult = await findOffset(tokens, 4);
+      expect(barResult).toEqual({
+        type: "double",
+        min: expect.objectContaining({
+          index: 1,
+          token: 1,
+          value: " "
+        }),
+        max: expect.objectContaining({
+          index: 2,
+          token: 302,
+          value: "bar"
+        }),
+        remainder: 0
+      });
+    });
 
-    expect(result).toEqual(await mockCodec.encode("foo bar"));
-  });
+    it("should work with a given `sourceText`", async () => {
+      // It does not directly validate the tokens versus the text.
+      // There is an indirect check that it does when it performs
+      // the binary search, but it requires `debugLogging` to be
+      // enabled.
 
-  it("should handle an array of tokens between two strings", async () => {
-    const mendingFn = mendTokens(mockCodec);
-    const result = await mendingFn(
-      "foo",
-      [1, 111, 321, 112, 1], // " [ foobar ] "
-      "bar"
-    );
+      const tokens = [301, 1, 302]; // "foo bar"
+      const sourceText = await mockCodec.decode(tokens);
 
-    expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
-  });
+      const result = await findOffset(tokens, 5, sourceText);
+      expect(result).toEqual({
+        type: "single",
+        data: expect.objectContaining({
+          index: 2,
+          token: 302,
+          value: "bar"
+        }),
+        remainder: 1
+      });
+    });
 
-  it("should handle a string between two arrays of tokens", async () => {
-    const mendingFn = mendTokens(mockCodec);
-    const result = await mendingFn(
-      [301, 1, 111], // "foo [ "
-      "foobar",
-      [112, 312] // " ] bar"
-    );
+    it("should work with the offset being dead center", async () => {
+      // This is a bit of a gotcha.  When doing a binary search,
+      // it is possible for the offset to be in both halves because
+      // the offset happens to be between those fragments.
+      const tokens = [211, 212, 213, 211, 212, 213]; // "112233112233"
 
-    expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
-  });
+      const result = await findOffset(tokens, 6);
+      expect(result).toEqual({
+        type: "double",
+        min: expect.objectContaining({
+          index: 2,
+          token: 213,
+          value: "33"
+        }),
+        max: expect.objectContaining({
+          index: 3,
+          token: 211,
+          value: "11"
+        }),
+        remainder: 0
+      });
+    });
 
-  it("should handle mending of many arrays of tokens", async () => {
-    const mendingFn = mendTokens(mockCodec);
-    const result = await mendingFn(
-      [301, 1, 111], // "foo [ "
-      [301, 302], // "foobar"
-      [112, 312] // " ] bar"
-    );
+    it("should work with a large amount of tokens", async () => {
+      const sourceText = mockStory.mockStory;
+      const tokens = await mockCodec.encode(sourceText);
 
-    expect(result).toEqual(await mockCodec.encode("foo [ foobar ] bar"));
-  });
+      // There are 14 `"2222"` tokens in there.  We're going to find
+      // the index of of the 8th one.
+      const manyTwos = chain(tokens)
+        .thru(iterPosition)
+        .filter(([i, t]) => t === 232)
+        .toArray();
+      
+      // Sanity check this test.
+      expect(manyTwos.length).toBe(14);
 
-  it("should work with large inputs", async () => {
-    const { startComments, middleComments, endComments } = mockStory;
-    const concatComments = [startComments, middleComments, endComments].join("");
+      // Pull the 8th one and determine its offset.
+      const [index] = manyTwos[7];
+      const baseOffset = (await mockCodec.decode(tokens.slice(0, index))).length;
 
-    const startTokens = await mockCodec.encode(startComments);
-    const middleTokens = await mockCodec.encode(middleComments);
-    const endTokens = await mockCodec.encode(endComments);
-    const expected = await mockCodec.encode(concatComments);
+      const borderResult = await findOffset(tokens, baseOffset + 4, sourceText);
+      expect(borderResult).toEqual({
+        type: "double",
+        min: expect.objectContaining({
+          index: index,
+          token: 232,
+          value: "2222"
+        }),
+        max: expect.objectContaining({
+          index: index + 1,
+          token: 312,
+          value: " bar"
+        }),
+        remainder: 0
+      });
 
-    const mendingFn = mendTokens(mockCodec);
+      const insideResult = await findOffset(tokens, baseOffset + 2, sourceText);
+      expect(insideResult).toEqual({
+        type: "single",
+        data: expect.objectContaining({
+          index: index,
+          token: 232,
+          value: "2222"
+        }),
+        remainder: 2
+      });
+    });
 
-    // Throw a battery of trials at it.
-    const trials = [
-      [startTokens, middleComments, endTokens],     // T S T
-      [startComments, middleTokens, endComments],   // S T S
-      [startTokens, middleTokens, endTokens],       // T T T
-      [startComments, middleComments, endComments], // S S S
-    ];
+    it("should fail when `offset` is out of range of the string", async () => {
+      const tokens = [301, 1, 302]; // "foo bar"
+      const tooLo = () => findOffset(tokens, -3);
+      const tooHi = () => findOffset(tokens, 9);
 
-    for (const trial of trials) {
-      const result = await mendingFn(...trial);
-      expect(result).toEqual(expected);
-    }
+      await expect(tooLo()).rejects.toThrow();
+      await expect(tooHi()).rejects.toThrow();
+    });
   });
 });
 
 describe("prepend encoder", () => {
   const { prependEncoder } = tokenizer;
   const toExpected = helpers.toPrependExpected;
+
+  let augmentedCodec: AugmentedTokenCodec;
+  beforeEach(() => {
+    augmentedCodec = tokenizer.codecFor(0, mockCodec);
+  });
 
   // Be aware that the prepend encoder expects fragments in reverse
   // order.  Each iteration will prepend the next fragment in the
@@ -122,7 +294,7 @@ describe("prepend encoder", () => {
     // encoder on the joined string.
     const inOrder = toFragmentSeq(["foo", " ", "bar"], 10);
     const encoded = await AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder)
     ));
 
@@ -135,7 +307,7 @@ describe("prepend encoder", () => {
     // to the minimum possible tokens.
     const inOrder = toFragmentSeq(Array.from("11112222"), 10);
     const encodedSeq = await AI.toArray(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder)
     ));
 
@@ -163,7 +335,7 @@ describe("prepend encoder", () => {
     // the buffer.
     const inOrder = toFragmentSeq(Array.from("11111"), 10);
     const encodedSeq = await AI.toArray(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder),
       { bufferSize: 1 }
     ));
@@ -185,7 +357,7 @@ describe("prepend encoder", () => {
     // The `" "` is not wordy, so it will get combined with `"foo"`.
     const inOrder = toFragmentSeq(["foo", " ", "bar"], 10);
     const encodedSeq = await AI.toArray(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder)
     ));
 
@@ -201,7 +373,7 @@ describe("prepend encoder", () => {
     // fragments at significant positions.
     const inOrder = toFragmentSeq([" ", "foo", " ", "bar"], 10);
     const encoded = await AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder)
     ));
 
@@ -211,7 +383,7 @@ describe("prepend encoder", () => {
   it("should include the prefix and suffix in each step", async () => {
     const inOrder = toFragmentSeq(Array.from("123"), 10);
     const encodedSeq = await AI.toArray(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder),
       { prefix: "[ ", suffix: " ]" }
     ));
@@ -229,7 +401,7 @@ describe("prepend encoder", () => {
     // data too.
     const inOrder = toFragmentSeq(["foo", " ", "bar"], 10);
     const encoded = await AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(inOrder),
       // Small buffer size so we have some safe tokens.
       { prefix: "[ ", suffix: " ]", bufferSize: 1 }
@@ -279,7 +451,7 @@ describe("prepend encoder", () => {
     };
 
     const encoded = await AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(nextFragments),
       { prefix, suffix, seedResult }
     ));
@@ -311,14 +483,14 @@ describe("prepend encoder", () => {
     // Being prepend, we'll skip 20 fragments to get a resume point
     // that we can prepend to.
     const resumeMe = await AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(skip(fullFragments, 20)),
       { prefix, suffix }
     ));
 
     // And now we'll prepend those first 20 fragments by resuming.
     const checkMe = await AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       iterReverse(take(fullFragments, 20)),
       { prefix, suffix, seedResult: resumeMe }
     ));
@@ -349,7 +521,7 @@ describe("prepend encoder", () => {
     const nextFragments = toFragmentSeq(nextSource, 10);
 
     const result = AI.lastValueFrom(prependEncoder(
-      mockCodec,
+      augmentedCodec,
       nextFragments,
       { seedResult: appendResult }
     ));
@@ -362,6 +534,11 @@ describe("append encoder", () => {
   const { appendEncoder } = tokenizer;
   const toExpected = helpers.toAppendExpected;
 
+  let augmentedCodec: AugmentedTokenCodec;
+  beforeEach(() => {
+    augmentedCodec = tokenizer.codecFor(0, mockCodec);
+  });
+
   // Fragments are given in reading order for appending.
   // I'll be removing most comments from this one that explain
   // things; I'll clarify any important differences between
@@ -370,7 +547,7 @@ describe("append encoder", () => {
   it("should do basic encoding", async () => {
     const inOrder = toFragmentSeq(["foo", " ", "bar"], 10);
     const encoded = await AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder
     ));
 
@@ -380,7 +557,7 @@ describe("append encoder", () => {
   it("should collapse tokens between steps", async () => {
     const inOrder = toFragmentSeq(Array.from("11112222"), 10);
     const encodedSeq = await AI.toArray(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder
     ));
 
@@ -400,7 +577,7 @@ describe("append encoder", () => {
   it("should respect the `bufferSize` option", async () => {
     const inOrder = toFragmentSeq(Array.from("11111"), 10);
     const encodedSeq = await AI.toArray(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder,
       { bufferSize: 1 }
     ));
@@ -420,7 +597,7 @@ describe("append encoder", () => {
   it("should only yield after appending wordy fragments", async () => {
     const inOrder = toFragmentSeq(["foo", " ", "bar"], 10);
     const encodedSeq = await AI.toArray(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder
     ));
 
@@ -434,7 +611,7 @@ describe("append encoder", () => {
   it("should still yield on non-wordy fragments if they're the last fragment", async () => {
     const inOrder = toFragmentSeq(["foo", " ", "bar", " "], 10);
     const encoded = await AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder
     ));
 
@@ -444,7 +621,7 @@ describe("append encoder", () => {
   it("should include the prefix and suffix in each step", async () => {
     const inOrder = toFragmentSeq(Array.from("123"), 10);
     const encodedSeq = await AI.toArray(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder,
       { prefix: "[ ", suffix: " ]" }
     ));
@@ -459,7 +636,7 @@ describe("append encoder", () => {
   it("should include `resume` data in the result", async () => {
     const inOrder = toFragmentSeq(["foo", " ", "bar"], 10);
     const encoded = await AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       inOrder,
       // Small buffer size so we have some safe tokens.
       { prefix: "[ ", suffix: " ]", bufferSize: 1 }
@@ -498,7 +675,7 @@ describe("append encoder", () => {
     };
 
     const encoded = await AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       nextFragments,
       { prefix, suffix, seedResult }
     ));
@@ -525,14 +702,14 @@ describe("append encoder", () => {
     // Being append, we'll drop the last 20 fragments to get a resume
     // point that we can append to.
     const resumeMe = await AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       skipRight(fullFragments, 20),
       { prefix, suffix }
     ));
 
     // And now we'll append those last 20 fragments by resuming.
     const checkMe = await AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       takeRight(fullFragments, 20),
       { prefix, suffix, seedResult: resumeMe }
     ));
@@ -559,77 +736,11 @@ describe("append encoder", () => {
     const nextFragments = toFragmentSeq(nextSource, 10);
 
     const result = AI.lastValueFrom(appendEncoder(
-      mockCodec,
+      augmentedCodec,
       nextFragments,
       { seedResult: prependResult }
     ));
 
     await expect(result).rejects.toThrow();
-  });
-});
-
-describe("tokensOfOffset", () => {
-  const { tokensOfOffset } = tokenizer;
-
-  it("should find a single index when inside a token", async () => {
-    const tokens = [301, 1, 302]; // "foo bar"
-
-    const fooResult = await tokensOfOffset(mockCodec, tokens, 2);
-    expect(fooResult).toEqual({
-      type: "single",
-      data: {
-        index: 0,
-        token: 301,
-        value: "foo"
-      },
-      remainder: 2
-    });
-
-    const barResult = await tokensOfOffset(mockCodec, tokens, 5);
-    expect(barResult).toEqual({
-      type: "single",
-      data: {
-        index: 2,
-        token: 302,
-        value: "bar"
-      },
-      remainder: 1
-    });
-  });
-
-  it("should find a range when bordering two tokens", async () => {
-    const tokens = [301, 1, 302]; // "foo bar"
-
-    const fooResult = await tokensOfOffset(mockCodec, tokens, 3);
-    expect(fooResult).toEqual({
-      type: "double",
-      min: {
-        index: 0,
-        token: 301,
-        value: "foo"
-      },
-      max: {
-        index: 1,
-        token: 1,
-        value: " "
-      },
-      remainder: 0
-    });
-
-    const barResult = await tokensOfOffset(mockCodec, tokens, 4);
-    expect(barResult).toEqual({
-      type: "double",
-      min: {
-        index: 1,
-        token: 1,
-        value: " "
-      },
-      max: {
-        index: 2,
-        token: 302,
-        value: "bar"
-      },
-      remainder: 0
-    });
   });
 });

@@ -4,7 +4,7 @@ import type { TokenizerTypes } from "./TokenizerHelpers";
 /** An object that converts between a string and an array of tokens. */
 export interface TokenCodec {
   encode(text: string): Promise<number[]>;
-  decode(tokens: number[]): Promise<string>;
+  decode(tokens: readonly number[]): Promise<string>;
 }
 
 export namespace Virtual {
@@ -44,7 +44,7 @@ export interface ITokenizerCodec {
 }
 
 class TokenizerCodec extends ModuleDef<ITokenizerCodec> {
-  moduleId = 22398;
+  moduleId = 75310;
   expectedExports = 3;
   mapping = {
     "PT": ["GlobalEncoder", "function"]

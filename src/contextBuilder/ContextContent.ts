@@ -1,4 +1,4 @@
-import userScriptConfig from "@config";
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isNumber } from "@utils/is";
@@ -11,7 +11,7 @@ import $ContentAssembly from "./ContentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
-import type { ContextConfig } from "@nai/Lorebook";
+import type { ContextConfig, LoreEntryConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
 import type { FragmentAssembly } from "./FragmentAssembly";
@@ -27,6 +27,11 @@ import type { TokenizedAssembly } from "./TokenizedAssembly";
 type AnyAssembly = ContentAssembly | TokenizedAssembly;
 
 type InFlightTrimming = Promise<UndefOr<TokenizedAssembly>>;
+
+export interface StoryContent extends IContextField {
+  allowInnerInsertion: boolean;
+  allowInsertionInside: boolean;
+}
 
 export interface NormalizedBudgetStats {
   /** The configured token reservation; always an integer. */
@@ -88,7 +93,7 @@ const theModule = usModule((require, exports) => {
   ) => {
     switch (true as boolean) {
       case !contextParams.removeComments:
-      case forSearch && userScriptConfig.comments.searchComments:
+      case forSearch && usConfig.comments.searchComments:
         return providers.basic[trimDirection];
       default:
         return providers.removeComments[trimDirection];
@@ -164,7 +169,7 @@ const theModule = usModule((require, exports) => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);
-      const keepAffix = !forStory ? true : userScriptConfig.story.standardizeHandling;
+      const keepAffix = !forStory ? true : usConfig.story.standardizeHandling;
       return keepAffix ? result : await result.asOnlyContent();
     }
   });
@@ -217,7 +222,7 @@ const theModule = usModule((require, exports) => {
       return new ContextContent(field, searchText, trimmer, contextParams);
     }
 
-    static async forStory(contextParams: ContextParams): Promise<ContextContent> {
+    static async forStory(contextParams: ContextParams) {
       const { storyState } = contextParams;
       const contextConfig = storyState.storyContent.storyContextConfig;
       const storyText = storyState.storyContent.story.getText();
@@ -237,12 +242,14 @@ const theModule = usModule((require, exports) => {
       );
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
 
-      return new ContextContent(
+      const field: StoryContent = Object.assign(
         new ContextField(contextConfig, searchText.fullText),
-        searchText,
-        trimmer,
-        contextParams
+        // The story has some implied insertion rules that we're making
+        // explicit here.
+        { allowInnerInsertion: false, allowInsertionInside: true }
       );
+
+      return new ContextContent(field, searchText, trimmer, contextParams);
     }
 
     #uniqueId: string;
@@ -301,7 +308,7 @@ const theModule = usModule((require, exports) => {
     /**
      * The current token budget.
      * 
-     * This value is updated by calling {@link ContextContent.rebudget rebudget}.
+     * This value is updated by calling {@link rebudget}.
      */
     get currentBudget(): number {
       return this.#currentBudget;
@@ -389,8 +396,8 @@ const theModule = usModule((require, exports) => {
     /**
      * Invokes the trimmer, calculating a result that fits the `newBudget`.
      * 
-     * This method will also update the {@link ContextContent.trimmed trimmed}
-     * property with a promise that will be the result of the job.
+     * This method will also update the {@link trimmed} property with a
+     * promise that will be the result of the job.
      * 
      * If `newBudget` is not provided, it will use the current budget, which
      * will generally only kick of a trimming job when needed.

@@ -1,4 +1,19 @@
-import userScriptConfig from "@config";
+/**
+ * A selector with no bells-and-whistles.
+ * - It drops any entries that activated by keyword against the story,
+ *   but that keyword was outside of the configured search range.
+ *   With vanilla rules, this entry never would have activated, so
+ *   that is resolved here.
+ * - It sorts the final output into its insertion order.  For the
+ *   purposes of experimentation, this sorting order is configurable.
+ * 
+ * Configuration that affects this module:
+ * - Disabled by `weightedRandom.groupByInsertionPriority`.
+ * - Disabled by `weightedRandom.groupBySubContext`.
+ * - Output ordering affected by `selection.ordering`.
+ */
+
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -29,7 +44,7 @@ export default usModule((require, exports) => {
     storySource: rx.Observable<StorySource>
   ) => {
     /** Sorting functions we're going to use. */
-    const chosenSorters = chain(userScriptConfig.selection.ordering)
+    const chosenSorters = chain(usConfig.selection.insertionOrdering)
       // Force the natural sorters to be the last ones.
       .filter((k) => k !== "naturalByPosition" && k !== "naturalByType")
       .concat<SorterKey>("naturalByType", "naturalByPosition")

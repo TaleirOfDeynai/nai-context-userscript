@@ -35,7 +35,7 @@ export default usModule((require, exports) => {
     // Figure out our sources for context content.
     const sourceResults = processing.source.phaseRunner(contextParams);
 
-    // Figure out what to do with all this content.
+    // Figure out what content is actually to be used.
     const activationResults = processing.activation.phaseRunner(
       storyContent, sourceResults
     );
@@ -45,8 +45,13 @@ export default usModule((require, exports) => {
       storyContent, activationResults
     );
 
+    // Order the content based on importance.
     const selectionResults = processing.selection.phaseRunner(
       contextParams, sourceResults, activationResults
+    );
+
+    const assemblyResults = processing.assembly.phaseRunner(
+      contextParams, selectionResults
     );
 
     // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
@@ -59,7 +64,8 @@ export default usModule((require, exports) => {
       selectionResults.unselected,
       activationResults.rejected,
       activationResults.disabled,
-      biasGroupResults.biasGroups
+      biasGroupResults.biasGroups,
+      assemblyResults.whenComplete
     ]);
 
     for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
