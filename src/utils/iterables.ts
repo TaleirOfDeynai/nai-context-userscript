@@ -143,6 +143,35 @@ export function* toPairs(obj: any): Iterable<KVP<string | number | symbol, any>>
 };
 
 /**
+ * Creates an iterable that yields each element with the element that
+ * immediately follows it.
+ * 
+ * Will yield nothing if the iterable has less than 2 elements.
+ */
+export function scan<T, C extends number>(iter: Iterable<T>): Iterable<[T, T]>;
+/**
+ * Creates an iterable that yields each element with all the elements
+ * after it in an array with a length of `count`.
+ * 
+ * Will yield nothing if the iterable has less than `count` elements.
+ */
+export function scan<T, C extends number>(iter: Iterable<T>, count: C): Iterable<T[] & { length: C }>;
+export function* scan<T>(
+  iter: Iterable<T>,
+  count = 2
+) {
+  const buffer = new Array<T>(count);
+  let i = 0;
+  for (const v of iter) {
+    buffer[i++] = v;
+    if (i < count) continue;
+    yield [...buffer] as any;
+    buffer.copyWithin(0, 1);
+    i = count - 1;
+  }
+}  
+
+/**
  * Applies a transformation function to the values of an object.
  */
 export const mapValues = function<TObj extends Record<string, any>, TOut>(
