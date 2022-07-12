@@ -3,8 +3,6 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
 import { toImmutable } from "@utils/iterables";
-import $TextSplitterService from "../TextSplitterService";
-import $SequenceOps from "./sequenceOps";
 import $QueryOps from "./queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
@@ -12,19 +10,35 @@ import type { TextFragment } from "../TextSplitterService";
 import type { AssemblyStats } from "./sequenceOps";
 
 export interface IFragmentAssembly extends Iterable<TextFragment> {
+  /** The prefix fragment. */
   prefix: TextFragment;
+  /** The content fragments; may be an empty iterable. */
   content: Iterable<TextFragment>;
+  /** The suffix fragment. */
   suffix: TextFragment;
+  /**
+   * The source of the assembly.
+   * 
+   * By convention, if this property returns this assembly, the
+   * assembly is considered to be the source of its own content.
+   * 
+   * When nullish, it is also treated as its own source.
+   */
+  readonly source?: IFragmentAssembly;
 
-  readonly text: string;
-  readonly stats: AssemblyStats;
-  readonly contentStats: AssemblyStats;
-  readonly source: IFragmentAssembly;
+  // These properties may be set for caching purposes.
+
+  /** The full, concatenated text of the assembly. */
+  readonly text?: string;
+  /** The stats for this assembly. */
+  readonly stats?: AssemblyStats;
+  /** The stats for only the {@link content} portion of the assembly. */
+  readonly contentStats?: AssemblyStats;
+  /** Whether `content` is contiguous. */
+  readonly isContiguous?: boolean;
 }
 
 const theModule = usModule((require, exports) => {
-  const ss = $TextSplitterService(require);
-  const sequenceOps = $SequenceOps(require);
   const queryOps = $QueryOps(require);
 
   class FragmentAssembly implements IFragmentAssembly {
@@ -80,33 +94,19 @@ const theModule = usModule((require, exports) => {
 
     /** The full, concatenated text of the assembly. */
     get text(): string {
-      return this.#text ??= [
-        this.#prefix,
-        ...this.#content,
-        this.#suffix
-      ].map(ss.asContent).join("");
+      return this.#text ??= queryOps.getText(this, true);
     }
     #text: UndefOr<string> = undefined;
 
     /** The stats for this assembly. */
     get stats(): AssemblyStats {
-      return this.#assemblyStats ??= dew(() => {
-        // If we're un-affixed, we can reuse the content stats.
-        if (!this.#isAffixed) return this.contentStats;
-        return sequenceOps.getStats(Array.from(this));
-      });
+      return this.#assemblyStats ??= queryOps.getStats(this, true);
     }
     #assemblyStats: UndefOr<AssemblyStats> = undefined;
 
-    /**
-     * The stats for only the {@link FragmentAssembly.content content} portion of
-     * the assembly.
-     */
+    /** The stats for only the {@link content} portion of the assembly. */
     get contentStats(): AssemblyStats {
-      return this.#contentStats ??= sequenceOps.getStats(
-        this.#content,
-        ss.afterFragment(this.source.prefix)
-      );
+      return this.#contentStats ??= queryOps.getContentStats(this, true);
     }
     #contentStats: UndefOr<AssemblyStats> = undefined;
 
@@ -143,8 +143,7 @@ const theModule = usModule((require, exports) => {
 
     /**
      * Iterator that yields all fragments that are not empty.  This can
-     * include both the {@link FragmentAssembly.prefix prefix} and the
-     * {@link FragmentAssembly.suffix suffix}.
+     * include both the {@link prefix} and the {@link suffix}.
      */
     [Symbol.iterator](): Iterator<TextFragment> {
       return queryOps.iterateOn(this);

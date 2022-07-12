@@ -1,7 +1,7 @@
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import $Cursors from "../Cursors";
-import checkRelated from "./checkRelated";
+import { checkRelated } from "./theBasics";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";

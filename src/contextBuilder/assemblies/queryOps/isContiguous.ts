@@ -1,14 +1,8 @@
-import _hasIn from "lodash/hasIn";
 import { usModule } from "@utils/usModule";
+import { isBoolean } from "@utils/is";
 import $TextSplitterService from "../../TextSplitterService";
 
 import type { IFragmentAssembly } from "../Fragment";
-
-type WithIsContiguous = { isContiguous: boolean };
-type SomeAssembly = IFragmentAssembly | WithIsContiguous;
-
-const hasIsContiguous = (value: SomeAssembly): value is WithIsContiguous =>
-  _hasIn(value, "isContiguous");
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
@@ -19,8 +13,8 @@ export default usModule((require, exports) => {
    * If the assembly has an `isContiguous` property, it will defer to
    * that and avoid the expensive recheck.
    */
-  const isContiguous = (assembly: SomeAssembly) => {
-    if (hasIsContiguous(assembly)) return assembly.isContiguous;
+  const isContiguous = (assembly: IFragmentAssembly) => {
+    if (isBoolean(assembly.isContiguous)) return assembly.isContiguous;
     return ss.isContiguous(assembly.content);
   };
 

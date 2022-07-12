@@ -1,11 +1,11 @@
 import { jest, describe, it, expect } from "@jest/globals";
 import { beforeAll, beforeEach, afterEach } from "@jest/globals";
+import fakeRequire from "@spec/fakeRequire";
 import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { mockCodec } from "@spec/helpers-tokenizer";
 import { mockStory } from "@spec/mock-story";
 
 import levDist from "fast-levenshtein";
-import AppConstants from "@nai/AppConstants";
 import $TokenizerService from "./TokenizerService";
 import $TrimmingService from "./TrimmingService";
 import $TrimmingProviders from "./TrimmingProviders";
@@ -24,16 +24,6 @@ import type { ContextParams } from "./ParamsService";
 type SomeAssemblyCtor
   = ReturnType<typeof $ContentAssembly>["ContentAssembly"]
   | ReturnType<typeof $TokenizedAssembly>["TokenizedAssembly"];
-
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    // Imported by `TextSplitterService`.
-    case AppConstants: return {
-      contextSize: 2000
-    };
-    default: return {};
-  }
-};
 
 const { ContentAssembly } = $ContentAssembly(fakeRequire);
 const { TokenizedAssembly } = $TokenizedAssembly(fakeRequire);

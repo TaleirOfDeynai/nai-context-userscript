@@ -8,13 +8,14 @@ import UUID from "@nai/UUID";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TrimmingService from "./TrimmingService";
 import $ContentAssembly from "./ContentAssembly";
+import $QueryOps from "./assemblies/queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
 import type { ContextConfig, LoreEntryConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
-import type { FragmentAssembly } from "./FragmentAssembly";
+import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContentAssembly } from "./ContentAssembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
 
@@ -23,8 +24,6 @@ import type { TokenizedAssembly } from "./TokenizedAssembly";
  * - There's still some unused fields.  I believe they were to aid
  *   context assembly later on.
  */
-
-type AnyAssembly = ContentAssembly | TokenizedAssembly;
 
 type InFlightTrimming = Promise<UndefOr<TokenizedAssembly>>;
 
@@ -59,6 +58,7 @@ const theModule = usModule((require, exports) => {
   const eventModule = require(EventModule);
   const { ContextField } = require(ContextModule);
   const providers = $TrimmingProviders(require);
+  const queryOps = $QueryOps(require);
 
   const { createTrimmer, execTrimTokens, trimByLength } = $TrimmingService(require);
   const { ContentAssembly } = $ContentAssembly(require);
@@ -109,7 +109,7 @@ const theModule = usModule((require, exports) => {
       trimmer: Trimmer,
       contextConfig: ContextConfig,
       contextParams: ContextParams
-    ): Promise<AnyAssembly> => {
+    ): Promise<IFragmentAssembly> => {
       // For the story, we will always need to trim it to size.  What varies
       // is whether we trim by tokens or length.  We also need to sort out
       // whether to remove comments or not.
@@ -146,12 +146,12 @@ const theModule = usModule((require, exports) => {
     const _forLore = (
       trimmer: Trimmer,
       contextParams: ContextParams
-    ): AnyAssembly => {
-      const origin = trimmer.origin as AnyAssembly;
+    ): IFragmentAssembly => {
+      const origin = trimmer.origin;
       // The trimmer has the unmodified origin assembly.  We only need to
       // change things up if we need to remove comments for search.
       if (!contextParams.removeComments) return origin;
-      if (!reComment.test(origin.text)) return origin;
+      if (!reComment.test(queryOps.getText(origin))) return origin;
       const provider = getProvider(true, "doNotTrim", contextParams);
       // The do-not-trim provider does all its work in `preProcess`.
       const fragments = provider.preProcess(origin);
@@ -165,7 +165,7 @@ const theModule = usModule((require, exports) => {
       trimmer: Trimmer,
       contextConfig: ContextConfig,
       contextParams: ContextParams
-    ): Promise<FragmentAssembly> => {
+    ): Promise<IFragmentAssembly> => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);
@@ -185,7 +185,7 @@ const theModule = usModule((require, exports) => {
 
     constructor(
       origField: T,
-      searchText: FragmentAssembly,
+      searchText: IFragmentAssembly,
       trimmer: Trimmer | ReplayTrimmer,
       contextParams: ContextParams
     ) {
@@ -258,7 +258,7 @@ const theModule = usModule((require, exports) => {
     #contextConfig: ContextConfig;
     #trimmer: Trimmer | ReplayTrimmer;
 
-    #searchText: FragmentAssembly;
+    #searchText: IFragmentAssembly;
 
     /** Storage for the maximum token count allowed by the budget. */
     #maxTokenCount: UndefOr<number>;
@@ -296,12 +296,12 @@ const theModule = usModule((require, exports) => {
     }
 
     /** The fragment assembly used for searching. */
-    get searchedText(): FragmentAssembly {
+    get searchedText(): IFragmentAssembly {
       return this.#searchText;
     }
 
     /** The fragment assembly used for trimming/insertion. */
-    get insertedText(): FragmentAssembly {
+    get insertedText(): IFragmentAssembly {
       return this.#trimmer.origin;
     }
 

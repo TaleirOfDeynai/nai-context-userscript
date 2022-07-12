@@ -6,6 +6,7 @@ import $Cursors from "../Cursors";
 import $IsFoundIn from "./isFoundIn";
 import $IsContiguous from "./isContiguous";
 import $PositionOf from "./positionOf";
+import { getSource } from "./theBasics";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReduceFn } from "@utils/iterables";
@@ -116,7 +117,7 @@ export default usModule((require, exports) => {
     // boundaries of each significant block instead, defined completely by
     // the prefix and suffix.  This is one of the reasons why we're habitually
     // generating these, even if they're empty.
-    const { prefix, suffix } = assembly.source;
+    const { prefix, suffix } = getSource(assembly);
     const [newOffset] = assertExists(
       "Expected to have boundaries from prefix and suffix.",
       IterOps.chain(_iterBounds([prefix, suffix], cursor.offset))

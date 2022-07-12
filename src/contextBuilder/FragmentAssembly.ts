@@ -51,7 +51,7 @@ const theModule = usModule((require, exports) => {
     ) {
       assert(
         "Expected `source` to be a source assembly.",
-        !source || source.source === source
+        !source || queryOps.isSource(source)
       );
 
       // We make assumptions that the prefix fragment is always at position 0.
@@ -93,11 +93,7 @@ const theModule = usModule((require, exports) => {
 
     /** The full, concatenated text of the assembly. */
     get text(): string {
-      return this.#text ??= [
-        this.#prefix,
-        ...this.#content,
-        this.#suffix
-      ].map(ss.asContent).join("");
+      return this.#text ??= queryOps.getText(this, true);
     }
     #text: UndefOr<string> = undefined;
 

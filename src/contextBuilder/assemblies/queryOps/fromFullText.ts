@@ -5,7 +5,8 @@ import { toImmutable, first } from "@utils/iterables";
 import $TextSplitterService from "../../TextSplitterService";
 import $Cursors from "../Cursors";
 import $IsContiguous from "./isContiguous";
-import isAffixed from "./isAffixed";
+import $TheStats from "./theStats";
+import { getText, getSource, isAffixed } from "./theBasics";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "../../TextSplitterService";
@@ -15,9 +16,8 @@ import type { IFragmentAssembly } from "../Fragment";
 export default usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
   const cursors = $Cursors(require);
-  const { hasWords } = splitterService;
-  const { beforeFragment, afterFragment } = splitterService;
   const { isContiguous } = $IsContiguous(require);
+  const { getContentStats } = $TheStats(require);
 
   /**
    * Given a cursor that is addressing this instance's `text`,
@@ -50,10 +50,13 @@ export default usModule((require, exports) => {
       cursor.origin === assembly
     );
     assertInBounds(
-      "Expected cursor offset to be in bounds of `assembly.text`.",
+      "Expected cursor offset to be in bounds of the assembly's text.",
       cursor.offset,
-      assembly.text
+      getText(assembly),
+      true
     );
+
+    const { hasWords, beforeFragment, afterFragment } = splitterService;
 
     const { prefix, suffix } = assembly;
     const content = toImmutable(assembly.content);
@@ -71,7 +74,7 @@ export default usModule((require, exports) => {
       // change due to `splitAt`, we should use the source assembly's
       // prefix instead, since all derived assemblies should have the
       // same value here.
-      return afterFragment(assembly.source.prefix);
+      return afterFragment(getSource(assembly).prefix);
     });
 
     // Fast-path: We can just map straight to `content`.
@@ -82,7 +85,7 @@ export default usModule((require, exports) => {
     if (cursor.offset < prefixLength)
       return cursors.fragment(assembly, cursor.offset);
 
-    const suffixThreshold = prefixLength + assembly.contentStats.concatLength;
+    const suffixThreshold = prefixLength + getContentStats(assembly).concatLength;
 
     // When the cursor is within the suffix.
     if (cursor.offset > suffixThreshold)

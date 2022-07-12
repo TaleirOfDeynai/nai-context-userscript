@@ -25,6 +25,8 @@ export interface WrappedRequireFn {
   <TDef extends ModuleDef<Webpack.ExportsObject>>(moduleDef: TDef): TDef["TMapped"];
   /** Access to the raw {@link Webpack.WebpackRequireFn}. */
   raw: Webpack.WebpackRequireFn;
+  /** Mocks to inject for tests. */
+  _mocks?: Map<Function, (exports: Webpack.ExportsObject) => any>;
 }
 
 const DEFAULT_CHECK = () => true;

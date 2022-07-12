@@ -51,8 +51,9 @@ export default usModule((require, exports) => {
    * 
    * As fragments do not have information on their origin assembly,
    * it does not check to make sure the cursor is actually for the
-   * fragment.  Use {@link FragmentAssembly.positionOf} to interrogate
-   * the assembly the fragment came from for that.
+   * fragment.  Use the `positionOf` function in the assembly query
+   * operators to interrogate the assembly the fragment came from
+   * for that.
    */
   const isCursorInside = (cursor: Cursor.Any, fragment: TextFragment) =>
     $TextSplitterService(require).isOffsetInside(cursor.offset, fragment);

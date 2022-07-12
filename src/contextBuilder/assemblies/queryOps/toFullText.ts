@@ -3,7 +3,7 @@ import { assert } from "@utils/assert";
 import $TextSplitterService from "../../TextSplitterService";
 import $Cursors from "../Cursors";
 import $IsFoundIn from "./isFoundIn";
-import checkRelated from "./checkRelated";
+import { checkRelated } from "./theBasics";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";

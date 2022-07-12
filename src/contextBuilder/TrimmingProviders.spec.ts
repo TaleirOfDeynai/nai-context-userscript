@@ -1,4 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
+import fakeRequire from "@spec/fakeRequire";
 import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { withComments } from "@spec/mock-story";
 
@@ -6,21 +7,10 @@ import _zip from "lodash/zip";
 import { dew } from "@utils/dew";
 import { chain, interweave, flatMap, iterReverse, skipRight } from "@utils/iterables";
 import $TrimmingProviders from "./TrimmingProviders";
-import AppConstants from "@nai/AppConstants";
 
 import type { FragmentAssembly } from "./FragmentAssembly";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimProvider, SplitterFn } from "./TrimmingProviders";
-
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    // Imported by `TextSplitterService`.
-    case AppConstants: return {
-      contextSize: 2000
-    };
-    default: return {};
-  }
-};
 
 const providers = $TrimmingProviders(fakeRequire);
 

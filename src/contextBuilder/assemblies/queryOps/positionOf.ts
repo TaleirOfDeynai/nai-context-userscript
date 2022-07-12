@@ -1,8 +1,9 @@
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
-import * as IterOps from "@utils/iterables";
+import { isEmpty } from "@utils/iterables";
 import $Cursors from "../Cursors";
-import checkRelated from "./checkRelated";
+import $TheStats from "./theStats";
+import { getSource, checkRelated } from "./theBasics";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
@@ -10,6 +11,7 @@ import type { IFragmentAssembly } from "../Fragment";
 export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";
 
 export default usModule((require, exports) => {
+  const { getContentStats } = $TheStats(require);
   const cursors = $Cursors(require);
 
   /**
@@ -43,13 +45,13 @@ export default usModule((require, exports) => {
 
     // We'll use the source's prefix/suffix to keep this consistent between
     // derived assemblies and their source.
-    if (cursors.isCursorInside(cursor, assembly.source.prefix)) {
-      if (IterOps.isEmpty(assembly.content)) return "prefix";
-      if (cursor.offset !== assembly.contentStats.minOffset) return "prefix";
+    if (cursors.isCursorInside(cursor, getSource(assembly).prefix)) {
+      if (isEmpty(assembly.content)) return "prefix";
+      if (cursor.offset !== getContentStats(assembly).minOffset) return "prefix";
     }
-    else if (cursors.isCursorInside(cursor, assembly.source.suffix)) {
-      if (IterOps.isEmpty(assembly.content)) return "suffix";
-      if (cursor.offset !== assembly.contentStats.maxOffset) return "suffix";
+    else if (cursors.isCursorInside(cursor, getSource(assembly).suffix)) {
+      if (isEmpty(assembly.content)) return "suffix";
+      if (cursor.offset !== getContentStats(assembly).maxOffset) return "suffix";
     }
 
     // Acts as the fallback value as well.

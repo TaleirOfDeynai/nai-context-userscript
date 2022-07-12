@@ -35,8 +35,27 @@ interface Ranged {
   max: number
 };
 
-const isLengthy = (value: any): value is Lengthy => _hasIn(value, "length");
-const isSized = (value: any): value is Sized => _hasIn(value, "size");
+const isLengthy = (value: any): value is Lengthy =>
+  isString(value) || _hasIn(value, "length");
+const isSized = (value: any): value is Sized =>
+  _hasIn(value, "size");
+const hasMin = (value: unknown): value is Pick<Ranged, "min"> =>
+  _hasIn(value, "min");
+const hasMax = (value: unknown): value is Pick<Ranged, "max"> =>
+  _hasIn(value, "max");
+
+const getMin = (value: unknown): number => {
+  if (hasMin(value)) return value.min;
+  return 0;
+};
+
+const getMax = (value: unknown): number => {
+  if (isNumber(value)) return value;
+  if (isLengthy(value)) return value.length;
+  if (isSized(value)) return value.size;
+  if (hasMax(value)) return value.max;
+  throw new Error("Unsupported value type.");
+};
 
 /** Validates that `value` is between `0` and `max`. */
 function assertInBounds(
@@ -76,20 +95,8 @@ function assertInBounds(
   ref: number | Lengthy | Sized | Ranged,
   inclusive = false
 ) {
-  let min = 0;
-  let max = 0;
-
-  // Gotta be careful with strings, as you can't use the `in` operator
-  // on them, since they're technically a value type.
-  if (isNumber(ref)) max = ref;
-  else if (isString(ref)) max = ref.length;
-  else if (isLengthy(ref)) max = ref.length;
-  else if (isSized(ref)) max = ref.size;
-  else {
-    min = ref.min;
-    max = ref.max;
-  }
-
+  const min = getMin(ref);
+  const max = getMax(ref);
   assert(msg, value >= min && (inclusive ? value <= max : value < max));
 }
 

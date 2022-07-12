@@ -3,7 +3,7 @@ import { mockFragment } from "@spec/helpers-splitter";
 import { afterFrag } from "@spec/helpers-assembly";
 import { SpecAssembly } from "./_common";
 
-import type { FragmentAssembly } from "../FragmentAssembly";
+import type { IFragmentAssembly } from "../assemblies/Fragment";
 
 describe("FragmentAssembly", () => {
 
@@ -16,7 +16,7 @@ describe("FragmentAssembly", () => {
         return new SpecAssembly(
           prefixFrag, [contentFrag], suffixFrag,
           true,
-          { isSource: false } as FragmentAssembly
+          { source: {} } as IFragmentAssembly
         );
       };
 

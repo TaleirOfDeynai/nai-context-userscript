@@ -171,7 +171,7 @@ const theModule = usModule((require, exports) => {
       }
 
       // Make sure we actually have the source assembly.
-      const { source } = originAssembly;
+      const source = queryOps.getSource(originAssembly);
       // Use the given instance's prefix and suffix, though.  It may now
       // differ from the source due to splitting and the like.
       const { prefix, suffix } = originAssembly;
@@ -193,7 +193,7 @@ const theModule = usModule((require, exports) => {
 
       // Also sanity check the content if thorough logging is enabled.
       if (usConfig.debugLogging || usConfig.inTestEnv) {
-        const oldStats = source.contentStats;
+        const oldStats = queryOps.getContentStats(source);
         const newStats = assembly.contentStats;
         assert(
           "Expected minimum offset to be in range of source.",

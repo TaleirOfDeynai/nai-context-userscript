@@ -17,7 +17,7 @@ import type { TextFragment } from "./TextSplitterService";
 import type { TrimDirection, TrimType } from "./TrimmingProviders";
 import type { TrimProvider, TextSequencer } from "./TrimmingProviders";
 import type { ContextParams } from "./ParamsService";
-import type { FragmentAssembly } from "./FragmentAssembly";
+import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContentAssembly } from "./ContentAssembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
 
@@ -48,7 +48,7 @@ export interface TrimResult {
 export interface Trimmer {
   (): AsyncIterable<TrimResult>;
   readonly provider: TrimProvider;
-  readonly origin: FragmentAssembly;
+  readonly origin: IFragmentAssembly;
 };
 
 export interface ReplayTrimResult {
@@ -58,7 +58,7 @@ export interface ReplayTrimResult {
 
 export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
   readonly provider: TrimProvider;
-  readonly origin: FragmentAssembly;
+  readonly origin: IFragmentAssembly;
 };
 
 const EMPTY = async function*() {};
@@ -78,7 +78,7 @@ export default usModule((require, exports) => {
 
   /** Constructs a result, with an assembly, from the given parameters. */
   const makeTrimResult = async (
-    origin: FragmentAssembly,
+    origin: IFragmentAssembly,
     encodeResult: EncodeResult,
     split: TrimResult["split"],
     codec: AugmentedTokenCodec
@@ -104,7 +104,7 @@ export default usModule((require, exports) => {
    * be trimmed multiple times.
    */
   function createTrimmer(
-    assembly: FragmentAssembly,
+    assembly: IFragmentAssembly,
     contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: true
@@ -115,7 +115,7 @@ export default usModule((require, exports) => {
    * encoder on fragments it has already encoded before.
    */
   function createTrimmer(
-    assembly: FragmentAssembly,
+    assembly: IFragmentAssembly,
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay?: false
@@ -124,14 +124,14 @@ export default usModule((require, exports) => {
    * Creates a trimmer.  It is ambiguous whether or not it does replay caching.
    */
   function createTrimmer(
-    assembly: FragmentAssembly,
+    assembly: IFragmentAssembly,
     contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: boolean
   ): Trimmer | ReplayTrimmer;
   // Actual implementation.
   function createTrimmer(
-    assembly: FragmentAssembly,
+    assembly: IFragmentAssembly,
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay = false
@@ -274,7 +274,7 @@ export default usModule((require, exports) => {
    */
   async function trimByTokens(
     /** The content to trim. */
-    assembly: FragmentAssembly,
+    assembly: IFragmentAssembly,
     /** The token budget. */
     tokenBudget: number,
     /** The context parameters object. */
@@ -345,7 +345,7 @@ export default usModule((require, exports) => {
    * prior to performing the trim.
    */
   function trimByLength(
-    assembly: FragmentAssembly,
+    assembly: IFragmentAssembly,
     maximumLength: number,
     options?: Partial<TrimOptions>
   ): UndefOr<ContentAssembly> {

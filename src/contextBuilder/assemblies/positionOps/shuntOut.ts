@@ -23,7 +23,7 @@ export default usModule((require, exports) => {
     // We actually want to convert this to a full-text cursor, as it
     // simplifies a lot of this.
     const { offset } = queryOps.toFullText(assembly, cursor);
-    const fullLength = assembly.text.length;
+    const fullLength = queryOps.getText(assembly).length;
 
     const type
       = mode === "toTop" ? "insertBefore"

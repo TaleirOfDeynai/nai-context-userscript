@@ -1,5 +1,6 @@
-import { jest, describe, it, expect } from "@jest/globals";
-import { beforeEach } from "@jest/globals";
+import { describe, it, expect } from "@jest/globals";
+import { beforeAll, afterEach } from "@jest/globals";
+import fakeRequire from "@spec/fakeRequire";
 import { mockStory } from "@spec/mock-story";
 import { getEmptyFrag, mockFragment } from "@spec/helpers-splitter";
 import { mockCursor } from "@spec/helpers-assembly";
@@ -8,8 +9,9 @@ import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
 import { contiguousFrags, offsetFrags } from "@spec/helpers-assembly";
 
 import { first, last } from "@utils/iterables";
+import $FindBest from "./assemblies/queryOps/findBest";
+import $IsFoundIn from "./assemblies/queryOps/isFoundIn";
 import $ContentAssembly from "./ContentAssembly";
-import AppConstants from "@nai/AppConstants";
 
 import type { SpyInstance } from "jest-mock";
 import type { AssemblyInit } from "@spec/helpers-assembly";
@@ -17,15 +19,17 @@ import type { ContentAssembly } from "./ContentAssembly";
 
 type SplitContent = [ContentAssembly, ContentAssembly];
 
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    // Imported by `TextSplitterService`.
-    case AppConstants: return {
-      contextSize: 2000
-    };
-    default: return {};
-  }
-};
+let spyFindBest: SpyInstance<ReturnType<typeof $FindBest>["findBest"]>;
+fakeRequire.inject($FindBest, (exports, jestFn) => {
+  spyFindBest = jestFn(exports.findBest);
+  return Object.assign(exports, { findBest: spyFindBest });
+});
+
+let spyIsFoundIn: SpyInstance<ReturnType<typeof $IsFoundIn>["isFoundIn"]>;
+fakeRequire.inject($IsFoundIn, (exports, jestFn) => {
+  spyIsFoundIn = jestFn(exports.isFoundIn);
+  return Object.assign(exports, { isFoundIn: spyIsFoundIn });
+});
 
 const { ContentAssembly } = $ContentAssembly(fakeRequire);
 
@@ -401,15 +405,15 @@ describe("ContentAssembly", () => {
       });
 
       describe("concerning loose mode", () => {
-        let testAssembly: ContentAssembly;
-        let spyFindBest: SpyInstance<ContentAssembly["findBest"]>;
-        let spyIsFoundIn: SpyInstance<ContentAssembly["isFoundIn"]>;
+        const testAssembly = initAssembly(offsetFrags);
 
-        beforeEach(() => {
-          testAssembly = initAssembly(offsetFrags);
-          spyFindBest = jest.spyOn(testAssembly, "findBest");
-          spyIsFoundIn = jest.spyOn(testAssembly, "isFoundIn");
-        });
+        const resetMocks = () => {
+          spyFindBest.mockReset();
+          spyIsFoundIn.mockReset();
+        };
+
+        beforeAll(resetMocks);
+        afterEach(resetMocks);
 
         it("should call `findBest` with the input cursor when active", () => {
           const offset = beforeFrag(offsetFrags.content[2]);
@@ -418,7 +422,7 @@ describe("ContentAssembly", () => {
           spyFindBest.mockReturnValue(cursor);
           testAssembly.splitAt(cursor, true);
 
-          expect(spyFindBest).toBeCalledWith(cursor, true);
+          expect(spyFindBest).toBeCalledWith(testAssembly, cursor, true);
           expect(spyIsFoundIn).not.toHaveBeenCalled();
         });
 
@@ -429,7 +433,7 @@ describe("ContentAssembly", () => {
           spyIsFoundIn.mockReturnValue(true);
           testAssembly.splitAt(cursor, false);
 
-          expect(spyIsFoundIn).toBeCalledWith(cursor);
+          expect(spyIsFoundIn).toBeCalledWith(testAssembly, cursor);
           expect(spyFindBest).not.toHaveBeenCalled();
         });
 

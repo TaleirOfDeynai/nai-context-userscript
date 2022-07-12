@@ -1,5 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
-import checkRelated from "./checkRelated";
+import * as theBasics from "./theBasics";
 
 import type { IFragmentAssembly } from "../Fragment";
 
@@ -14,13 +14,13 @@ describe("checkRelated", () => {
   const barAssembly = { source: barOrigin } as IFragmentAssembly;
 
   it("should indicate when two assemblies are related", () => {
-    const result = checkRelated(fooAssembly1, fooAssembly2);
+    const result = theBasics.checkRelated(fooAssembly1, fooAssembly2);
 
     expect(result).toBe(true);
   });
 
   it("should indicate when two assemblies are not related", () => {
-    const result = checkRelated(fooAssembly1, barAssembly);
+    const result = theBasics.checkRelated(fooAssembly1, barAssembly);
 
     expect(result).toBe(false);
   });

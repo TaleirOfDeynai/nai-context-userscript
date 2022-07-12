@@ -1,5 +1,6 @@
 import { describe, it, expect } from "@jest/globals";
 import { beforeEach } from "@jest/globals";
+import fakeRequire from "@spec/fakeRequire";
 import { toFragmentSeq } from "@spec/helpers-splitter";
 import * as helpers from "@spec/helpers-tokenizer";
 import * as mockStory from "@spec/mock-story";
@@ -9,17 +10,6 @@ import { chain, iterReverse, interweave, iterPosition } from "@utils/iterables";
 import { skip, take, skipRight, takeRight } from "@utils/iterables";
 import * as AI from "@utils/asyncIterables";
 import $TokenizerService, { AugmentedTokenCodec } from "./TokenizerService";
-import AppConstants from "@nai/AppConstants";
-
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    // Imported by `TextSplitterService`.
-    case AppConstants: return {
-      contextSize: 2000
-    };
-    default: return {};
-  }
-};
 
 const tokenizer = $TokenizerService(fakeRequire);
 const { mockCodec } = helpers;

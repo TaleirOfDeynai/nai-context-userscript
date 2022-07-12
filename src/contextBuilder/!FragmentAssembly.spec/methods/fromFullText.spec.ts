@@ -256,7 +256,7 @@ describe("FragmentAssembly", () => {
         });
       });
 
-      describe.skip("procedural tests", () => {
+      describe("procedural tests", () => {
         type ContentModifier = (content: readonly TextFragment[]) => readonly TextFragment[];
 
         interface SpecParams {
