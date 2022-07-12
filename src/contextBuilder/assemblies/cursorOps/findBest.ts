@@ -3,10 +3,9 @@ import { assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import $TextSplitterService from "../../TextSplitterService";
 import $Cursors from "../Cursors";
+import $QueryOps from "../queryOps";
 import $IsFoundIn from "./isFoundIn";
-import $IsContiguous from "./isContiguous";
 import $PositionOf from "./positionOf";
-import { getSource, iterateOn } from "./theBasics";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReduceFn } from "@utils/iterables";
@@ -19,6 +18,7 @@ type OffsetResult = [offset: number, distance: number];
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const cursors = $Cursors(require);
+  const queryOps = $QueryOps(require);
 
   /**
    * Just a helper for {@link findBest}.
@@ -87,10 +87,10 @@ export default usModule((require, exports) => {
     // distance from the cursor's offset and the fragment's end.
 
     // We can prefer searching within only the content.
-    const fragments = preferContent ? assembly.content : iterateOn(assembly);
+    const fragments = preferContent ? assembly.content : queryOps.iterateOn(assembly);
     const offsetsIterator = _iterBounds(fragments, cursor.offset);
 
-    if ($IsContiguous(require).isContiguous(assembly)) {
+    if (queryOps.isContiguous(assembly)) {
       // Fast-path: for contiguous assemblies, we can stop as soon as the
       // distance stops getting smaller.
       let lastResult: UndefOr<OffsetResult> = undefined;
@@ -117,7 +117,7 @@ export default usModule((require, exports) => {
     // boundaries of each significant block instead, defined completely by
     // the prefix and suffix.  This is one of the reasons why we're habitually
     // generating these, even if they're empty.
-    const { prefix, suffix } = getSource(assembly);
+    const { prefix, suffix } = queryOps.getSource(assembly);
     const [newOffset] = assertExists(
       "Expected to have boundaries from prefix and suffix.",
       IterOps.chain(_iterBounds([prefix, suffix], cursor.offset))

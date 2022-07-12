@@ -1,6 +1,6 @@
 import { usModule } from "@utils/usModule";
 import $TextSplitterService from "../TextSplitterService";
-import $FromFullText from "./queryOps/fromFullText";
+import $FromFullText from "./cursorOps/fromFullText";
 
 import type { TextFragment } from "../TextSplitterService";
 import type { MatchResult } from "../MatcherService";

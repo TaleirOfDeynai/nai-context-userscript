@@ -1,7 +1,7 @@
 import { isArray } from "@utils/is";
 
 import type { Cursor, Selection } from "../Cursors";
-import type { IterDirection } from "./_types";
+import type { IterDirection } from "./_types.d";
 
 /**
  * Given a {@link Cursor.Fragment} or a {@link Selection}, produces

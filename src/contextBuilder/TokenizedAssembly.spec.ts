@@ -8,8 +8,8 @@ import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
 import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
 
 import { first, last } from "@utils/iterables";
-import $FindBest from "./assemblies/queryOps/findBest";
-import $IsFoundIn from "./assemblies/queryOps/isFoundIn";
+import $FindBest from "./assemblies/cursorOps/findBest";
+import $IsFoundIn from "./assemblies/cursorOps/isFoundIn";
 import $TokenizerService from "./TokenizerService";
 import $TokenizedAssembly from "./TokenizedAssembly";
 

@@ -4,9 +4,7 @@ import { assert, assertInBounds } from "@utils/assert";
 import { toImmutable, first } from "@utils/iterables";
 import $TextSplitterService from "../../TextSplitterService";
 import $Cursors from "../Cursors";
-import $IsContiguous from "./isContiguous";
-import $TheStats from "./theStats";
-import { getText, getSource, isAffixed } from "./theBasics";
+import $QueryOps from "../queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "../../TextSplitterService";
@@ -16,8 +14,7 @@ import type { IFragmentAssembly } from "../Fragment";
 export default usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
   const cursors = $Cursors(require);
-  const { isContiguous } = $IsContiguous(require);
-  const { getContentStats } = $TheStats(require);
+  const queryOps = $QueryOps(require);
 
   /**
    * Given a cursor that is addressing this instance's `text`,
@@ -52,7 +49,7 @@ export default usModule((require, exports) => {
     assertInBounds(
       "Expected cursor offset to be in bounds of the assembly's text.",
       cursor.offset,
-      getText(assembly),
+      queryOps.getText(assembly),
       true
     );
 
@@ -74,18 +71,18 @@ export default usModule((require, exports) => {
       // change due to `splitAt`, we should use the source assembly's
       // prefix instead, since all derived assemblies should have the
       // same value here.
-      return afterFragment(getSource(assembly).prefix);
+      return afterFragment(queryOps.getSource(assembly).prefix);
     });
 
     // Fast-path: We can just map straight to `content`.
-    if (!isAffixed(assembly) && isContiguous(assembly))
+    if (!queryOps.isAffixed(assembly) && queryOps.isContiguous(assembly))
       return cursors.fragment(assembly, cursor.offset + initOffset);
     
     // When the cursor is within the prefix.
     if (cursor.offset < prefixLength)
       return cursors.fragment(assembly, cursor.offset);
 
-    const suffixThreshold = prefixLength + getContentStats(assembly).concatLength;
+    const suffixThreshold = prefixLength + queryOps.getContentStats(assembly).concatLength;
 
     // When the cursor is within the suffix.
     if (cursor.offset > suffixThreshold)
@@ -107,7 +104,8 @@ export default usModule((require, exports) => {
 
       // Fast-path: For contiguous content, we can map the cursor directly
       // to the content, now that the prefix was accounted for.
-      if (isContiguous(assembly)) return cursors.fragment(assembly, cursorOffset + initOffset);
+      if (queryOps.isContiguous(assembly))
+        return cursors.fragment(assembly, cursorOffset + initOffset);
       
       // Otherwise, we have to iterate to account for the gaps in content.
       // When there is ambiguity between a fragment with words and a

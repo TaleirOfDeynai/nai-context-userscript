@@ -6,6 +6,7 @@ import { toImmutable } from "@utils/iterables";
 import $Cursors from "./assemblies/Cursors";
 import $SequenceOps from "./assemblies/sequenceOps";
 import $QueryOps from "./assemblies/queryOps";
+import $CursorOps from "./assemblies/cursorOps";
 import $TextSplitterService from "./TextSplitterService";
 import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
@@ -33,6 +34,7 @@ const theModule = usModule((require, exports) => {
   const cursors = $Cursors(require);
   const seqOps = $SequenceOps(require);
   const queryOps = $QueryOps(require);
+  const cursorOps = $CursorOps(require);
 
   // I'm reminded why I absolutely HATE classes...  HATE!  HATE!
   // If the word "hate" were written on every micro-angstrom of my...
@@ -215,13 +217,13 @@ const theModule = usModule((require, exports) => {
     ): Promise<UndefOr<[TokenizedAssembly, TokenizedAssembly]>> {
       const usedCursor = dew(() => {
         // The input cursor must be for the content.
-        if (queryOps.positionOf(this, cursor) !== "content") return undefined;
-        if (!loose) return queryOps.isFoundIn(this, cursor) ? cursor : undefined;
-        const bestCursor = queryOps.findBest(this, cursor, true);
+        if (cursorOps.positionOf(this, cursor) !== "content") return undefined;
+        if (!loose) return cursorOps.isFoundIn(this, cursor) ? cursor : undefined;
+        const bestCursor = cursorOps.findBest(this, cursor, true);
         // Make sure the cursor did not get moved out of the content.
         // This can happen when the content is empty; the only remaining
         // place it could be moved was to a prefix/suffix fragment.
-        return queryOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
+        return cursorOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
       });
 
       if (!usedCursor) return undefined;
@@ -229,7 +231,7 @@ const theModule = usModule((require, exports) => {
       const [beforeCut, afterCut] = seqOps.splitAt(this.content, usedCursor);
       const [beforeTokens, afterTokens] = await getTokensForSplit(
         this.#codec,
-        queryOps.toFullText(this, usedCursor).offset,
+        cursorOps.toFullText(this, usedCursor).offset,
         this.#tokens,
         this.text
       );
@@ -278,7 +280,10 @@ const theModule = usModule((require, exports) => {
         const tokensIn = this.#tokens;
         if (!prefix.content) return [prefix, tokensIn];
 
-        const ftCursor = queryOps.toFullText(this, cursors.fragment(this, ss.afterFragment(prefix)));
+        const ftCursor = cursorOps.toFullText(
+          this,
+          cursors.fragment(this, ss.afterFragment(prefix))
+        );
         const [, theTokens] = await getTokensForSplit(
           this.#codec,
           ftCursor.offset,
@@ -294,7 +299,10 @@ const theModule = usModule((require, exports) => {
         const tokensIn = noPrefixTokens;
         if (!suffix.content) return [suffix, tokensIn];
 
-        const ftCursor = queryOps.toFullText(this, cursors.fragment(this, ss.beforeFragment(suffix)));
+        const ftCursor = cursorOps.toFullText(
+          this,
+          cursors.fragment(this, ss.beforeFragment(suffix))
+        );
         const [theTokens] = await getTokensForSplit(
           this.#codec,
           ftCursor.offset - prefix.content.length,

@@ -6,7 +6,7 @@ import $Cursors from "../Cursors";
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { TextFragment } from "../../TextSplitterService";
-import type { IterDirection } from "./_types";
+import type { IterDirection } from "./_types.d";
 
 const lineBatcher = (c: TextFragment, p: TextFragment) =>
   c.content === p.content && c.content === "\n";

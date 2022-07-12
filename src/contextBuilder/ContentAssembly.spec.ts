@@ -9,8 +9,8 @@ import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
 import { contiguousFrags, offsetFrags } from "@spec/helpers-assembly";
 
 import { first, last } from "@utils/iterables";
-import $FindBest from "./assemblies/queryOps/findBest";
-import $IsFoundIn from "./assemblies/queryOps/isFoundIn";
+import $FindBest from "./assemblies/cursorOps/findBest";
+import $IsFoundIn from "./assemblies/cursorOps/isFoundIn";
 import $ContentAssembly from "./ContentAssembly";
 
 import type { SpyInstance } from "jest-mock";

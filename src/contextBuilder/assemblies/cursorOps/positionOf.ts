@@ -2,8 +2,7 @@ import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { isEmpty } from "@utils/iterables";
 import $Cursors from "../Cursors";
-import $TheStats from "./theStats";
-import { getSource, checkRelated } from "./theBasics";
+import $QueryOps from "../queryOps";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
@@ -11,8 +10,8 @@ import type { IFragmentAssembly } from "../Fragment";
 export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";
 
 export default usModule((require, exports) => {
-  const { getContentStats } = $TheStats(require);
   const cursors = $Cursors(require);
+  const queryOps = $QueryOps(require);
 
   /**
    * Determines what block the given `cursor` belongs to.  It makes the
@@ -41,17 +40,19 @@ export default usModule((require, exports) => {
     );
 
     // Can't be in this assembly if it is unrelated.
-    if (!checkRelated(assembly, cursor.origin)) return "unrelated";
+    if (!queryOps.checkRelated(assembly, cursor.origin)) return "unrelated";
+
+    const source = queryOps.getSource(assembly);
 
     // We'll use the source's prefix/suffix to keep this consistent between
     // derived assemblies and their source.
-    if (cursors.isCursorInside(cursor, getSource(assembly).prefix)) {
+    if (cursors.isCursorInside(cursor, source.prefix)) {
       if (isEmpty(assembly.content)) return "prefix";
-      if (cursor.offset !== getContentStats(assembly).minOffset) return "prefix";
+      if (cursor.offset !== queryOps.getContentStats(assembly).minOffset) return "prefix";
     }
-    else if (cursors.isCursorInside(cursor, getSource(assembly).suffix)) {
+    else if (cursors.isCursorInside(cursor, source.suffix)) {
       if (isEmpty(assembly.content)) return "suffix";
-      if (cursor.offset !== getContentStats(assembly).maxOffset) return "suffix";
+      if (cursor.offset !== queryOps.getContentStats(assembly).maxOffset) return "suffix";
     }
 
     // Acts as the fallback value as well.

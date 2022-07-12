@@ -5,6 +5,7 @@ import { assert } from "@utils/assert";
 import { chain, toImmutable, mapIter } from "@utils/iterables";
 import $SequenceOps from "./assemblies/sequenceOps";
 import $QueryOps from "./assemblies/queryOps";
+import $CursorOps from "./assemblies/cursorOps";
 import $TextSplitterService from "./TextSplitterService";
 import $FragmentAssembly from "./FragmentAssembly";
 
@@ -13,7 +14,6 @@ import type { ContextConfig } from "@nai/Lorebook";
 import type { Cursor } from "./assemblies/Cursors";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
-import type { FragmentAssembly } from "./FragmentAssembly";
 
 export interface ContinuityOptions {
   /**
@@ -43,6 +43,7 @@ const theModule = usModule((require, exports) => {
   const { FragmentAssembly } = $FragmentAssembly(require);
   const seqOps = $SequenceOps(require);
   const queryOps = $QueryOps(require);
+  const cursorOps = $CursorOps(require);
 
   /**
    * An abstraction that standardizes how text is assembled with prefixes
@@ -230,13 +231,13 @@ const theModule = usModule((require, exports) => {
     ): UndefOr<[ContentAssembly, ContentAssembly]> {
       const usedCursor = dew(() => {
         // The input cursor must be for the content.
-        if (queryOps.positionOf(this, cursor) !== "content") return undefined;
-        if (!loose) return queryOps.isFoundIn(this, cursor) ? cursor : undefined;
-        const bestCursor = queryOps.findBest(this, cursor, true);
+        if (cursorOps.positionOf(this, cursor) !== "content") return undefined;
+        if (!loose) return cursorOps.isFoundIn(this, cursor) ? cursor : undefined;
+        const bestCursor = cursorOps.findBest(this, cursor, true);
         // Make sure the cursor did not get moved out of the content.
         // This can happen when the content is empty; the only remaining
         // place it could be moved was to a prefix/suffix fragment.
-        return queryOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
+        return cursorOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
       });
 
       if (!usedCursor) return undefined;

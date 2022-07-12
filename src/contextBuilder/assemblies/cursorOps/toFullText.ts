@@ -2,8 +2,8 @@ import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import $TextSplitterService from "../../TextSplitterService";
 import $Cursors from "../Cursors";
+import $QueryOps from "../queryOps";
 import $IsFoundIn from "./isFoundIn";
-import { checkRelated, iterateOn } from "./theBasics";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
@@ -11,6 +11,7 @@ import type { IFragmentAssembly } from "../Fragment";
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const cursors = $Cursors(require);
+  const queryOps = $QueryOps(require);
 
   /**
    * Converts an fragment cursor into a full-text cursor.
@@ -27,7 +28,7 @@ export default usModule((require, exports) => {
     );
     assert(
       "Expected cursor to be related to the given assembly.",
-      checkRelated(assembly, cursor.origin)
+      queryOps.checkRelated(assembly, cursor.origin)
     );
     assert(
       "Expected cursor to belong to a fragment of the given assembly.",
@@ -35,7 +36,7 @@ export default usModule((require, exports) => {
     );
 
     let fullLength = 0;
-    for (const frag of iterateOn(assembly)) {
+    for (const frag of queryOps.iterateOn(assembly)) {
       if (cursors.isCursorInside(cursor, frag)) {
         fullLength += cursor.offset - ss.beforeFragment(frag);
         break;

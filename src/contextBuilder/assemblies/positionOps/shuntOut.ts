@@ -1,12 +1,14 @@
 import { usModule } from "@utils/usModule";
 import $QueryOps from "../queryOps";
+import $CursorOps from "../cursorOps";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
-import type { IterDirection, PositionResult } from "./_types";
+import type { IterDirection, PositionResult } from "./_types.d";
 
 export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);
+  const cursorOps = $CursorOps(require);
 
   /**
    * When we have a cursor inside this assembly, but we can't split it
@@ -22,7 +24,7 @@ export default usModule((require, exports) => {
   ): PositionResult => {
     // We actually want to convert this to a full-text cursor, as it
     // simplifies a lot of this.
-    const { offset } = queryOps.toFullText(assembly, cursor);
+    const { offset } = cursorOps.toFullText(assembly, cursor);
     const fullLength = queryOps.getText(assembly).length;
 
     const type

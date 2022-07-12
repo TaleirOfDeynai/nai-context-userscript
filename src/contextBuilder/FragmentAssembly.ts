@@ -9,6 +9,7 @@ import $Cursors from "./assemblies/Cursors";
 import $TextSplitterService from "./TextSplitterService";
 import $SequenceOps from "./assemblies/sequenceOps";
 import $QueryOps from "./assemblies/queryOps";
+import $CursorOps from "./assemblies/cursorOps";
 import $PositionOps from "./assemblies/positionOps";
 
 import type { UndefOr } from "@utils/utility-types";
@@ -17,7 +18,7 @@ import type { TrimType } from "./TrimmingProviders";
 import type { Cursor, Selection } from "./assemblies/Cursors";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { AssemblyStats } from "./assemblies/sequenceOps";
-import type { CursorPosition } from "./assemblies/queryOps";
+import type { CursorPosition } from "./assemblies/cursorOps";
 import type * as PosOps from "./assemblies/positionOps";
 
 const theModule = usModule((require, exports) => {
@@ -25,6 +26,7 @@ const theModule = usModule((require, exports) => {
   const cursors = $Cursors(require);
   const seqOps = $SequenceOps(require);
   const queryOps = $QueryOps(require);
+  const cursorOps = $CursorOps(require);
   const posOps = $PositionOps(require);
 
   /**
@@ -171,7 +173,7 @@ const theModule = usModule((require, exports) => {
      * - Otherwise, whichever fragment comes first in natural order.
      */
     fromFullText(cursor: Cursor.FullText): Cursor.Fragment {
-      return queryOps.fromFullText(this, cursor);
+      return cursorOps.fromFullText(this, cursor);
     }
 
     /**
@@ -180,7 +182,7 @@ const theModule = usModule((require, exports) => {
      * The cursor must be addressing a fragment that exists within this assembly.
      */
     toFullText(cursor: Cursor.Fragment): Cursor.FullText {
-      return queryOps.toFullText(this, cursor);
+      return cursorOps.toFullText(this, cursor);
     }
 
     /**
@@ -193,7 +195,7 @@ const theModule = usModule((require, exports) => {
      * `content` array.
      */
     isFoundIn(cursor: Cursor.Fragment): boolean {
-      return queryOps.isFoundIn(this, cursor);
+      return cursorOps.isFoundIn(this, cursor);
     }
 
     /**
@@ -214,7 +216,7 @@ const theModule = usModule((require, exports) => {
       cursor: Cursor.Fragment,
       preferContent?: boolean
     ): Cursor.Fragment {
-      return queryOps.findBest(this, cursor, preferContent);
+      return cursorOps.findBest(this, cursor, preferContent);
     }
 
     /**
@@ -255,7 +257,7 @@ const theModule = usModule((require, exports) => {
 
       // In case the cursor points to no existing fragment, this will move
       // it to the next nearest fragment.
-      const cursor = queryOps.findBest(this, posOps.cursorForDir(position, direction));
+      const cursor = cursorOps.findBest(this, posOps.cursorForDir(position, direction));
       return posOps.splitUpFrom(this, cursor, splitType, direction);
     }
 
@@ -286,7 +288,7 @@ const theModule = usModule((require, exports) => {
       // Fast-path: If this assembly is empty, tell it to carry on.
       if (this.isEmpty) return { type: direction, remainder: offset };
 
-      const initCursor = queryOps.findBest(this, posOps.cursorForDir(position, direction));
+      const initCursor = cursorOps.findBest(this, posOps.cursorForDir(position, direction));
 
       // Fast-path: If we're given an offset of 0, we don't need to move
       // the cursor at all (though, `findBest` could have moved it).
@@ -320,7 +322,7 @@ const theModule = usModule((require, exports) => {
 
       // We're not going to split on the prefix or suffix, just to avoid
       // the complexity of it, so we need to check where we are.
-      switch (queryOps.positionOf(this, result)) {
+      switch (cursorOps.positionOf(this, result)) {
         // This is the best case; everything is just fine, but this
         // fragment will need to be split.
         case "content": return { type: "inside", cursor: result };
@@ -414,7 +416,7 @@ const theModule = usModule((require, exports) => {
      * determination.
      */
     positionOf(cursor: Cursor.Fragment): CursorPosition {
-      return queryOps.positionOf(this, cursor);
+      return cursorOps.positionOf(this, cursor);
     }
 
     /**
