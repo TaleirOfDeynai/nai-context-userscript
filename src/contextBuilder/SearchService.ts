@@ -240,7 +240,7 @@ export default usModule((require, exports) => {
     forceFullText = false
   ): AssemblyResultMap {
     const fullText = queryOps.getText(assembly);
-    const lineText = forceFullText ? undefined : assembly;
+    const lineText = forceFullText ? undefined : queryOps.iterateOn(assembly);
     const results = doSearching(fullText, lineText, matchable);
     
     // We need to convert these matches into a variant using the more

@@ -3,7 +3,7 @@ import { assert } from "@utils/assert";
 import $TextSplitterService from "../../TextSplitterService";
 import $Cursors from "../Cursors";
 import $IsFoundIn from "./isFoundIn";
-import { checkRelated } from "./theBasics";
+import { checkRelated, iterateOn } from "./theBasics";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
@@ -35,7 +35,7 @@ export default usModule((require, exports) => {
     );
 
     let fullLength = 0;
-    for (const frag of assembly) {
+    for (const frag of iterateOn(assembly)) {
       if (cursors.isCursorInside(cursor, frag)) {
         fullLength += cursor.offset - ss.beforeFragment(frag);
         break;

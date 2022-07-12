@@ -6,7 +6,7 @@ import $Cursors from "../Cursors";
 import $IsFoundIn from "./isFoundIn";
 import $IsContiguous from "./isContiguous";
 import $PositionOf from "./positionOf";
-import { getSource } from "./theBasics";
+import { getSource, iterateOn } from "./theBasics";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ReduceFn } from "@utils/iterables";
@@ -87,7 +87,7 @@ export default usModule((require, exports) => {
     // distance from the cursor's offset and the fragment's end.
 
     // We can prefer searching within only the content.
-    const fragments = preferContent ? assembly.content : assembly;
+    const fragments = preferContent ? assembly.content : iterateOn(assembly);
     const offsetsIterator = _iterBounds(fragments, cursor.offset);
 
     if ($IsContiguous(require).isContiguous(assembly)) {

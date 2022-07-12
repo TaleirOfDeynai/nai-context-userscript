@@ -15,14 +15,7 @@ const mockOrigin: IFragmentAssembly = dew(() => {
   const content = [mockFragment(mockStory, 10)];
   const suffix = mockFragment("", mockStory.length + 20);
 
-  return Object.freeze({
-    prefix, content, suffix,
-    *[Symbol.iterator]() {
-      yield prefix;
-      yield* content;
-      yield suffix;
-    }
-  });
+  return Object.freeze({ prefix, content, suffix });
 })
 
 describe("isCursorInside", () => {

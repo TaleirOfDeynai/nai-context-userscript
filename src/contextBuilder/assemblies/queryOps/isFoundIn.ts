@@ -1,7 +1,7 @@
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import $Cursors from "../Cursors";
-import { checkRelated } from "./theBasics";
+import { checkRelated, iterateOn } from "./theBasics";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
@@ -31,7 +31,7 @@ export default usModule((require, exports) => {
       checkRelated(assembly, cursor.origin)
     );
 
-    for (const frag of assembly)
+    for (const frag of iterateOn(assembly))
       if (cursors.isCursorInside(cursor, frag))
         return true;
 

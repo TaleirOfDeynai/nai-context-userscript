@@ -41,7 +41,7 @@ const theModule = usModule((require, exports) => {
    * Finally, they can be split at specific offsets using an
    * {@link Cursor.Any}, which is handy for assembly.
    */
-  abstract class FragmentAssembly implements IFragmentAssembly {
+  abstract class FragmentAssembly implements IFragmentAssembly, Iterable<TextFragment> {
     constructor(
       prefix: TextFragment,
       content: Iterable<TextFragment>,
@@ -108,7 +108,7 @@ const theModule = usModule((require, exports) => {
     #assemblyStats: UndefOr<AssemblyStats> = undefined;
 
     /**
-     * The stats for only the {@link FragmentAssembly.content content} portion of
+     * The stats for only the {@link content} portion of
      * the assembly.
      */
     get contentStats(): AssemblyStats {
@@ -146,8 +146,7 @@ const theModule = usModule((require, exports) => {
 
     /**
      * Iterator that yields all fragments that are not empty.  This can
-     * include both the {@link FragmentAssembly.prefix prefix} and the
-     * {@link FragmentAssembly.suffix suffix}.
+     * include both the {@link prefix} and the {@link suffix}.
      */
     [Symbol.iterator](): Iterator<TextFragment> {
       return queryOps.iterateOn(this);

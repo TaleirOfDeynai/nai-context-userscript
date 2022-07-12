@@ -9,7 +9,7 @@ import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "../TextSplitterService";
 import type { AssemblyStats } from "./sequenceOps";
 
-export interface IFragmentAssembly extends Iterable<TextFragment> {
+export interface IFragmentAssembly {
   /** The prefix fragment. */
   prefix: TextFragment;
   /** The content fragments; may be an empty iterable. */
@@ -41,17 +41,17 @@ export interface IFragmentAssembly extends Iterable<TextFragment> {
 const theModule = usModule((require, exports) => {
   const queryOps = $QueryOps(require);
 
-  class FragmentAssembly implements IFragmentAssembly {
+  class FragmentAssembly implements IFragmentAssembly, Iterable<TextFragment> {
     constructor(
       prefix: TextFragment,
       content: Iterable<TextFragment>,
       suffix: TextFragment,
       isContiguous: boolean,
-      source: FragmentAssembly | null
+      source: IFragmentAssembly | null
     ) {
       assert(
         "Expected `source` to be a source assembly.",
-        !source || source.isSource
+        !source || queryOps.isSource(source)
       );
 
       // We make assumptions that the prefix fragment is always at position 0.
