@@ -1,13 +1,7 @@
 import usConfig from "@config";
 import { usModule } from "@utils/usModule";
-import { dew } from "@utils/dew";
-import { isNumber } from "@utils/is";
 import { assert } from "@utils/assert";
-import * as IterOps from "@utils/iterables";
-import { chain, toImmutable } from "@utils/iterables";
-import $Cursors from "./assemblies/Cursors";
-import $TextSplitterService from "./TextSplitterService";
-import $SequenceOps from "./assemblies/sequenceOps";
+import { toImmutable } from "@utils/iterables";
 import $QueryOps from "./assemblies/queryOps";
 import $CursorOps from "./assemblies/cursorOps";
 import $PositionOps from "./assemblies/positionOps";
@@ -22,9 +16,6 @@ import type { CursorPosition } from "./assemblies/cursorOps";
 import type * as PosOps from "./assemblies/positionOps";
 
 const theModule = usModule((require, exports) => {
-  const ss = $TextSplitterService(require);
-  const cursors = $Cursors(require);
-  const seqOps = $SequenceOps(require);
   const queryOps = $QueryOps(require);
   const cursorOps = $CursorOps(require);
   const posOps = $PositionOps(require);
@@ -101,23 +92,15 @@ const theModule = usModule((require, exports) => {
 
     /** The stats for this assembly. */
     get stats(): AssemblyStats {
-      return this.#assemblyStats ??= dew(() => {
-        // If we're un-affixed, we can reuse the content stats.
-        if (!queryOps.isAffixed(this)) return this.contentStats;
-        return seqOps.getStats(Array.from(this));
-      });
+      return this.#assemblyStats ??= queryOps.getStats(this, true);
     }
     #assemblyStats: UndefOr<AssemblyStats> = undefined;
 
     /**
-     * The stats for only the {@link content} portion of
-     * the assembly.
+     * The stats for only the {@link content} portion of the assembly.
      */
     get contentStats(): AssemblyStats {
-      return this.#contentStats ??= seqOps.getStats(
-        this.#content,
-        ss.afterFragment(this.source.prefix)
-      );
+      return this.#contentStats ??= queryOps.getContentStats(this, true);
     }
     #contentStats: UndefOr<AssemblyStats> = undefined;
 
@@ -281,63 +264,7 @@ const theModule = usModule((require, exports) => {
       /** An object describing how to locate the insertion. */
       positionData: Readonly<PosOps.InsertionPosition>
     ): PosOps.PositionResult {
-      const { position, direction, offset } = positionData;
-
-      assert("Expected `offset` to be a positive number.", offset >= 0);
-
-      // Fast-path: If this assembly is empty, tell it to carry on.
-      if (this.isEmpty) return { type: direction, remainder: offset };
-
-      const initCursor = cursorOps.findBest(this, posOps.cursorForDir(position, direction));
-
-      // Fast-path: If we're given an offset of 0, we don't need to move
-      // the cursor at all (though, `findBest` could have moved it).
-      if (offset === 0) return { type: "inside", cursor: initCursor };
-
-      const result = dew(() => {
-        // Tracks how many elements we still need to pass.
-        let remainder = offset;
-
-        const cursors = chain(this)
-          .thru((iter) => posOps.splitUpFrom(iter, initCursor, insertionType, direction))
-          // Convert into positions...
-          .thru((iter) => posOps.positionsFrom(this, iter, direction))
-          // ...but if we find the initial cursor, skip it...
-          .thru((iter) => IterOps.skipUntil(iter, (c) => c.offset !== initCursor.offset))
-          // ...because we're adding it into the first position here.
-          .thru((cursors) => IterOps.concat(initCursor, cursors))
-          .value();
-
-        for (const cursor of cursors) {
-          if (remainder <= 0) return cursor;
-          remainder -= 1;
-        }
-
-        // If we get here, we couldn't find a good fragment within the assembly.
-        return remainder;
-      });
-
-      // If we got a remainder, we tell it to carry on.
-      if (isNumber(result)) return { type: direction, remainder: result };
-
-      // We're not going to split on the prefix or suffix, just to avoid
-      // the complexity of it, so we need to check where we are.
-      switch (cursorOps.positionOf(this, result)) {
-        // This is the best case; everything is just fine, but this
-        // fragment will need to be split.
-        case "content": return { type: "inside", cursor: result };
-        // This tells it to insert before this fragment.
-        case "prefix": return {
-          type: "insertBefore",
-          shunted: result.offset - ss.beforeFragment(this.prefix)
-        };
-        // And this after this fragment.
-        case "suffix": return {
-          type: "insertAfter",
-          shunted: ss.afterFragment(this.suffix) - result.offset
-        };
-        default: throw new Error("Unexpected position.");
-      }
+      return posOps.locateInsertion(this, insertionType, positionData);
     }
 
     /**
@@ -365,23 +292,7 @@ const theModule = usModule((require, exports) => {
        */
       insertionType?: TrimType
     ): Cursor.Fragment {
-      if (insertionType) {
-        const initCursor = this.entryPosition(direction);
-        return chain(this)
-          .thru((iter) => posOps.splitUpFrom(iter, initCursor, insertionType, direction))
-          .thru((iter) => posOps.positionsFrom(this, iter, direction))
-          .value((c) => IterOps.first(c) ?? initCursor);
-      }
-      else if (direction === "toTop") {
-        const suffix = this.suffix.content ? this.suffix : undefined;
-        const frag = suffix ?? IterOps.last(this.content) ?? this.prefix;
-        return cursors.fragment(this, ss.afterFragment(frag));
-      }
-      else {
-        const prefix = this.prefix.content ? this.prefix : undefined;
-        const frag = prefix ?? IterOps.first(this.content) ?? this.suffix;
-        return cursors.fragment(this, ss.beforeFragment(frag));
-      }
+      return posOps.entryPosition(this, direction, insertionType);
     }
 
     /**

@@ -8,7 +8,7 @@ import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { TextFragment } from "../../TextSplitterService";
 import type { TrimType, TextSequencer } from "../../TrimmingProviders";
-import type { IterDirection } from "./_types.d";
+import type { IterDirection } from "./cursorForDir";
 
 export default usModule((require, exports) => {
   const tp = $TrimmingProviders(require);

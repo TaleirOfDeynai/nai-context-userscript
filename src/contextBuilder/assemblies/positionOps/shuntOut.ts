@@ -4,7 +4,8 @@ import $CursorOps from "../cursorOps";
 
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
-import type { IterDirection, PositionResult } from "./_types.d";
+import type { IterDirection } from "./cursorForDir";
+import type { PositionResult } from "./locateInsertion";
 
 export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);

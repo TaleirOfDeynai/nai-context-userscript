@@ -1,5 +1,5 @@
 import { isString } from "@utils/is";
-import { iterReverse } from "@utils/iterables";
+import { iterReverse, isEmpty as isIterEmpty } from "@utils/iterables";
 
 import type { IFragmentAssembly } from "../Fragment";
 
@@ -50,6 +50,10 @@ export const isAffixed = (assembly: IFragmentAssembly) => {
   if (assembly.suffix.content) return true;
   return false;
 };
+
+/** Checks if the given assembly is entirely empty. */
+export const isEmpty = (assembly: IFragmentAssembly) =>
+  !isAffixed(assembly) && isIterEmpty(assembly.content);
 
 /** Determines if the given assembly is a source assembly. */
 export const isSource = (assembly: IFragmentAssembly) =>

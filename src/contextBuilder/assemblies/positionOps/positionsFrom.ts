@@ -6,7 +6,7 @@ import $Cursors from "../Cursors";
 import type { Cursor } from "../Cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { TextFragment } from "../../TextSplitterService";
-import type { IterDirection } from "./_types.d";
+import type { IterDirection } from "./cursorForDir";
 
 const lineBatcher = (c: TextFragment, p: TextFragment) =>
   c.content === p.content && c.content === "\n";
@@ -58,7 +58,7 @@ export default usModule((require, exports) => {
       // Then convert them into cursors...
       .map((f) => c.fragment(assembly, toFragOffset(f)))
       .value();
-  }
+  };
 
   return Object.assign(exports, {
     positionsFrom

@@ -8,16 +8,22 @@ import { usModule } from "@utils/usModule";
 import cursorForDir from "./cursorForDir";
 
 // User-script imports...
+import $EntryPosition from "./entryPosition";
+import $LocateInsertion from "./locateInsertion";
 import $PositionsFrom from "./positionsFrom";
 import $ShuntOut from "./shuntOut";
 import $SplitUpFrom from "./splitUpFrom";
 
 // Type re-exports...
-export * from "./_types.d";
+export { IterDirection } from "./cursorForDir";
+export { InsertionPosition } from "./locateInsertion";
+export { Position, PositionResult } from "./locateInsertion";
 
 export default usModule((require, exports) => {
   return Object.assign(exports, {
     cursorForDir,
+    ...$EntryPosition(require),
+    ...$LocateInsertion(require),
     ...$PositionsFrom(require),
     ...$SplitUpFrom(require),
     ...$ShuntOut(require)

@@ -1,7 +1,8 @@
 import { isArray } from "@utils/is";
 
 import type { Cursor, Selection } from "../Cursors";
-import type { IterDirection } from "./_types.d";
+
+export type IterDirection = "toTop" | "toBottom";
 
 /**
  * Given a {@link Cursor.Fragment} or a {@link Selection}, produces
