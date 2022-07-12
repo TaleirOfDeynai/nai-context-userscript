@@ -1,18 +1,8 @@
+import fakeRequire from "@spec/fakeRequire";
 import $FragmentAssembly from "../FragmentAssembly";
-import AppConstants from "@nai/AppConstants";
 
 import type { AssemblyInit } from "@spec/helpers-assembly";
 import type { FragmentAssembly } from "../FragmentAssembly";
-
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    // Imported by `TextSplitterService`.
-    case AppConstants: return {
-      contextSize: 2000
-    };
-    default: return {};
-  }
-};
 
 export const Module = $FragmentAssembly(fakeRequire);
 

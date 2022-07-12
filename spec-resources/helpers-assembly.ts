@@ -2,8 +2,8 @@ import { mockFragment, toFragmentSeq } from "@spec/helpers-splitter";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
-import type { FragmentAssembly, AnyCursor } from "@src/contextBuilder/FragmentAssembly";
-import type { FragmentCursor, FullTextCursor } from "@src/contextBuilder/FragmentAssembly";
+import type { IFragmentAssembly } from "@src/contextBuilder/assemblies/Fragment";
+import type { Cursor } from "@src/contextBuilder/assemblies/Cursors";
 
 export interface GenerateOpts {
   prefix?: string;
@@ -21,23 +21,23 @@ export interface AssemblyData {
 export interface AssemblyInit extends Omit<Required<AssemblyData>, "maxOffset"> {
   maxOffset?: number;
   isContiguous?: boolean;
-  source?: FragmentAssembly | null;
+  source?: IFragmentAssembly | null;
 }
 
 /**
- * Builds a mock {@link FullTextCursor}.
+ * Builds a mock {@link Cursor.FullText}.
  * 
  * By default, `origin` is a new empty-object instance, but anything
  * may be provided, in service of the test.
  */
-export function mockCursor(offset: number, type: "fullText", origin?: any): FullTextCursor;
+export function mockCursor(offset: number, type: "fullText", origin?: any): Cursor.FullText;
 /**
- * Builds a mock {@link AssemblyCursor}.
+ * Builds a mock {@link Cursor.Assembly}.
  * 
  * By default, `origin` is a new empty-object instance, but anything
  * may be provided, in service of the test.
  */
-export function mockCursor(offset: number, type?: "fragment", origin?: any): FragmentCursor;
+export function mockCursor(offset: number, type?: "fragment", origin?: any): Cursor.Fragment;
 /**
  * Builds a mock {@link TextCursor}; the type is not known and not
  * type-checked.
@@ -45,12 +45,12 @@ export function mockCursor(offset: number, type?: "fragment", origin?: any): Fra
  * By default, `origin` is a new empty-object instance, but anything
  * may be provided, in service of the test.
  */
-export function mockCursor(offset: number, type?: string, origin?: any): AnyCursor;
+export function mockCursor(offset: number, type?: string, origin?: any): Cursor.Any;
 export function mockCursor(
   offset: number,
-  type: AnyCursor["type"] = "fragment",
+  type: Cursor.Any["type"] = "fragment",
   origin?: any,
-): AnyCursor {
+): Cursor.Any {
   return Object.freeze({ type, offset, origin });
 }
 

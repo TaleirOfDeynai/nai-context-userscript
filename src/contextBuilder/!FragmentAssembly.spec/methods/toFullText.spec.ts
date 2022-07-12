@@ -14,7 +14,7 @@ describe("FragmentAssembly", () => {
 
       describe("sanity checks", () => {
         it.failing("should FAIL if cursor is not assembly", () => {
-          const offset = insideFrag(mockFragment(testAssembly.fullText, 0));
+          const offset = insideFrag(mockFragment(testAssembly.text, 0));
           const cursor = mockCursor(offset, "fullText", testAssembly);
           
           // @ts-ignore - We're checking this assertion fails at runtime.

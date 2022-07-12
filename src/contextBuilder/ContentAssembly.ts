@@ -2,15 +2,18 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
-import * as IterOps from "@utils/iterables";
-import { chain, toImmutable } from "@utils/iterables";
+import { chain, toImmutable, mapIter } from "@utils/iterables";
+import $SequenceOps from "./assemblies/sequenceOps";
+import $QueryOps from "./assemblies/queryOps";
 import $TextSplitterService from "./TextSplitterService";
 import $FragmentAssembly from "./FragmentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
+import type { Cursor } from "./assemblies/Cursors";
+import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
-import type { FragmentAssembly, FragmentCursor } from "./FragmentAssembly";
+import type { FragmentAssembly } from "./FragmentAssembly";
 
 export interface ContinuityOptions {
   /**
@@ -36,10 +39,10 @@ const defaultMakeOptions: Required<MakeAssemblyOptions> = {
 };
 
 const theModule = usModule((require, exports) => {
-  const splitterService = $TextSplitterService(require);
-  const { createFragment, isContiguous } = splitterService;
-  const { afterFragment } = splitterService;
-  const { FragmentAssembly, splitSequenceAt } = $FragmentAssembly(require);
+  const ss = $TextSplitterService(require);
+  const { FragmentAssembly } = $FragmentAssembly(require);
+  const seqOps = $SequenceOps(require);
+  const queryOps = $QueryOps(require);
 
   /**
    * An abstraction that standardizes how text is assembled with prefixes
@@ -61,7 +64,7 @@ const theModule = usModule((require, exports) => {
       content: Iterable<TextFragment>,
       suffix: TextFragment,
       isContiguous: boolean,
-      source: FragmentAssembly | null
+      source: IFragmentAssembly | null
     ) {
       super(prefix, content, suffix, isContiguous, source);
     }
@@ -72,11 +75,11 @@ const theModule = usModule((require, exports) => {
     static fromSource(sourceText: TextOrFragment, options?: MakeAssemblyOptions) {
       const { prefix, suffix } = { ...defaultMakeOptions, ...options };
 
-      const prefixFragment = createFragment(prefix, 0);
+      const prefixFragment = ss.createFragment(prefix, 0);
 
       const sourceFragment = dew(() => {
         let content: string;
-        let offset = afterFragment(prefixFragment);
+        let offset = ss.afterFragment(prefixFragment);
         if (typeof sourceText === "string") content = sourceText;
         else {
           content = sourceText.content;
@@ -84,11 +87,11 @@ const theModule = usModule((require, exports) => {
         }
         
         if (!content) return undefined;
-        return createFragment(content, offset);
+        return ss.createFragment(content, offset);
       });
 
-      const suffixOffset = afterFragment(sourceFragment ?? prefixFragment);
-      const suffixFragment = createFragment(suffix, suffixOffset);
+      const suffixOffset = ss.afterFragment(sourceFragment ?? prefixFragment);
+      const suffixFragment = ss.createFragment(suffix, suffixOffset);
 
       return new ContentAssembly(
         prefixFragment,
@@ -109,22 +112,22 @@ const theModule = usModule((require, exports) => {
         .filter((f) => Boolean(f.content))
         .thru((frags) => {
           if (!prefix) return frags;
-          return IterOps.mapIter(
+          return mapIter(
             frags,
-            ({ content, offset }) => createFragment(content, prefix.length + offset)
+            (f) => ss.createFragment(f.content, prefix.length + f.offset)
           );
         })
         .value(toImmutable);
 
       const maxOffset = chain(adjustedFrags)
-        .map(afterFragment)
+        .map(ss.afterFragment)
         .reduce(0, Math.max);
 
       return new ContentAssembly(
-        createFragment(prefix, 0),
+        ss.createFragment(prefix, 0),
         adjustedFrags,
-        createFragment(suffix, maxOffset),
-        assumeContinuity ? true : isContiguous(adjustedFrags),
+        ss.createFragment(suffix, maxOffset),
+        assumeContinuity ? true : ss.isContiguous(adjustedFrags),
         null
       );
     }
@@ -146,7 +149,7 @@ const theModule = usModule((require, exports) => {
        * The assembly whose fragments were used to make the given fragments.
        * This assembly does not need to be a source assembly.
        */
-      originAssembly: FragmentAssembly,
+      originAssembly: IFragmentAssembly,
       /**
        * Whether to make assumptions on if the fragments are contiguous.
        * 
@@ -162,7 +165,7 @@ const theModule = usModule((require, exports) => {
         // But make sure we're still internally consistent.
         assert(
           "Expected the assembly to be related to `originAssembly`.",
-          FragmentAssembly.checkRelated(fragments, originAssembly)
+          queryOps.checkRelated(fragments, originAssembly)
         );
         return fragments;
       }
@@ -184,7 +187,7 @@ const theModule = usModule((require, exports) => {
         prefix, localFrags, suffix,
         // We'll assume the derived assembly has the same continuity as
         // its origin assembly.
-        assumeContinuity ? originAssembly.isContiguous : isContiguous(localFrags),
+        assumeContinuity ? queryOps.isContiguous(originAssembly) : ss.isContiguous(localFrags),
         source
       );
 
@@ -218,7 +221,7 @@ const theModule = usModule((require, exports) => {
      */
     splitAt(
       /** The cursor demarking the position of the cut. */
-      cursor: FragmentCursor,
+      cursor: Cursor.Fragment,
       /**
        * If `true` and no fragment exists in the assembly for the position,
        * the next best position will be used instead as a fallback.
@@ -227,25 +230,25 @@ const theModule = usModule((require, exports) => {
     ): UndefOr<[ContentAssembly, ContentAssembly]> {
       const usedCursor = dew(() => {
         // The input cursor must be for the content.
-        if (this.positionOf(cursor) !== "content") return undefined;
-        if (!loose) return this.isFoundIn(cursor) ? cursor : undefined;
-        const bestCursor = this.findBest(cursor, true);
+        if (queryOps.positionOf(this, cursor) !== "content") return undefined;
+        if (!loose) return queryOps.isFoundIn(this, cursor) ? cursor : undefined;
+        const bestCursor = queryOps.findBest(this, cursor, true);
         // Make sure the cursor did not get moved out of the content.
         // This can happen when the content is empty; the only remaining
         // place it could be moved was to a prefix/suffix fragment.
-        return this.positionOf(bestCursor) === "content" ? bestCursor : undefined;
+        return queryOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
       });
 
       if (!usedCursor) return undefined;
 
-      const [beforeCut, afterCut] = splitSequenceAt(this.content, usedCursor);
+      const [beforeCut, afterCut] = seqOps.splitAt(this.content, usedCursor);
 
       // If we're splitting this assembly, it doesn't make sense to preserve
       // the suffix on the assembly before the cut or the prefix after the cut.
       // Replace them with empty fragments, as needed.
       const { prefix, suffix } = this;
-      const afterPrefix = !prefix.content ? prefix : createFragment("", 0, prefix);
-      const beforeSuffix = !suffix.content ? suffix : createFragment("", 0, suffix);
+      const afterPrefix = !prefix.content ? prefix : ss.createFragment("", 0, prefix);
+      const beforeSuffix = !suffix.content ? suffix : ss.createFragment("", 0, suffix);
 
       // Because we're changing the prefix and suffix, we're going to invoke
       // the constructor directly instead of using `fromDerived`.
@@ -269,14 +272,14 @@ const theModule = usModule((require, exports) => {
      */
     asOnlyContent(): ContentAssembly {
       // No need if we don't have a prefix or suffix.
-      if (!this.isAffixed) return this;
+      if (!queryOps.isAffixed(this)) return this;
 
       // Replace the suffix and prefix with zero-length fragments.
       const { prefix, suffix } = this;
       return new ContentAssembly(
-        !prefix.content ? prefix : createFragment("", 0, prefix),
+        !prefix.content ? prefix : ss.createFragment("", 0, prefix),
         this.content,
-        !suffix.content ? suffix : createFragment("", 0, suffix),
+        !suffix.content ? suffix : ss.createFragment("", 0, suffix),
         this.isContiguous, this.source
       );
     }

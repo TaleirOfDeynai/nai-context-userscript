@@ -1,4 +1,6 @@
+import _hasIn from "lodash/hasIn";
 import { isInstance, isNumber, isString } from "./is";
+
 import type { TypePredicate } from "./is";
 
 /**
@@ -24,7 +26,7 @@ const assertAs = <T>(msg: string, checkFn: TypePredicate<T>, value: any): T => {
 const assertExists = <T>(msg: string, value: T): Exclude<T, undefined | null> =>
   assertAs(msg, isInstance, value);
 
-type Lengthy = string | { length: number };
+type Lengthy = { length: number };
 type Sized = { size: number };
 interface Ranged {
   /** The minimum value of the range. */
@@ -32,6 +34,9 @@ interface Ranged {
   /** The maximum value of the range. */
   max: number
 };
+
+const isLengthy = (value: any): value is Lengthy => _hasIn(value, "length");
+const isSized = (value: any): value is Sized => _hasIn(value, "size");
 
 /** Validates that `value` is between `0` and `max`. */
 function assertInBounds(
@@ -78,8 +83,8 @@ function assertInBounds(
   // on them, since they're technically a value type.
   if (isNumber(ref)) max = ref;
   else if (isString(ref)) max = ref.length;
-  else if ("length" in ref) max = ref.length;
-  else if ("size" in ref) max = ref.size;
+  else if (isLengthy(ref)) max = ref.length;
+  else if (isSized(ref)) max = ref.size;
   else {
     min = ref.min;
     max = ref.max;

@@ -151,7 +151,7 @@ const theModule = usModule((require, exports) => {
       // The trimmer has the unmodified origin assembly.  We only need to
       // change things up if we need to remove comments for search.
       if (!contextParams.removeComments) return origin;
-      if (!reComment.test(origin.fullText)) return origin;
+      if (!reComment.test(origin.text)) return origin;
       const provider = getProvider(true, "doNotTrim", contextParams);
       // The do-not-trim provider does all its work in `preProcess`.
       const fragments = provider.preProcess(origin);
@@ -243,7 +243,7 @@ const theModule = usModule((require, exports) => {
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
 
       const field: StoryContent = Object.assign(
-        new ContextField(contextConfig, searchText.fullText),
+        new ContextField(contextConfig, searchText.text),
         // The story has some implied insertion rules that we're making
         // explicit here.
         { allowInnerInsertion: false, allowInsertionInside: true }

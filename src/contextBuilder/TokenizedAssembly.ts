@@ -3,13 +3,17 @@ import { dew } from "@utils/dew";
 import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { toImmutable } from "@utils/iterables";
+import $Cursors from "./assemblies/Cursors";
+import $SequenceOps from "./assemblies/sequenceOps";
+import $QueryOps from "./assemblies/queryOps";
 import $TextSplitterService from "./TextSplitterService";
 import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
+import type { Cursor } from "./assemblies/Cursors";
+import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { TextFragment } from "./TextSplitterService";
-import type { FragmentAssembly, FragmentCursor } from "./FragmentAssembly";
 import type { ContinuityOptions } from "./ContentAssembly";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
 
@@ -23,11 +27,12 @@ export interface DerivedOptions extends ContinuityOptions {
 const TOKEN_MENDING_RANGE = 5;
 
 const theModule = usModule((require, exports) => {
-  const splitterService = $TextSplitterService(require);
-  const { createFragment, isContiguous, asContent } = splitterService;
-  const { beforeFragment, afterFragment } = splitterService;
-  const { FragmentAssembly, splitSequenceAt, makeCursor } = $FragmentAssembly(require);
+  const ss = $TextSplitterService(require);
+  const { FragmentAssembly } = $FragmentAssembly(require);
   const { ContentAssembly } = $ContentAssembly(require);
+  const cursors = $Cursors(require);
+  const seqOps = $SequenceOps(require);
+  const queryOps = $QueryOps(require);
 
   // I'm reminded why I absolutely HATE classes...  HATE!  HATE!
   // If the word "hate" were written on every micro-angstrom of my...
@@ -90,7 +95,7 @@ const theModule = usModule((require, exports) => {
       tokens: Tokens,
       codec: AugmentedTokenCodec,
       isContiguous: boolean,
-      source: FragmentAssembly | null
+      source: IFragmentAssembly | null
     ) {
       super(prefix, content, suffix, isContiguous, source);
       this.#tokens = tokens;
@@ -114,7 +119,7 @@ const theModule = usModule((require, exports) => {
        * The assembly whose fragments were used to make the given fragments.
        * This assembly does not need to be a source assembly.
        */
-      originAssembly: FragmentAssembly,
+      originAssembly: IFragmentAssembly,
       /** The options for creating a derived assembly. */
       options?: DerivedOptions
     ) {
@@ -124,7 +129,7 @@ const theModule = usModule((require, exports) => {
         // But make sure we're still internally consistent.
         assert(
           "Expected the assembly to be related to `originAssembly`.",
-          TokenizedAssembly.checkRelated(fragments, originAssembly)
+          queryOps.checkRelated(fragments, originAssembly)
         );
         assert(
           "Expected the assembly to have identical tokens.",
@@ -161,7 +166,7 @@ const theModule = usModule((require, exports) => {
       const assumeContinuity = options?.assumeContinuity ?? false;
       const tokens = await dew(() => {
         if (options?.tokens) return options.tokens;
-        return tokenCodec.encode(theDerived.fullText);
+        return tokenCodec.encode(theDerived.text);
       });
 
       const { content } = theDerived;
@@ -171,7 +176,7 @@ const theModule = usModule((require, exports) => {
         tokenCodec,
         // We'll assume the derived assembly has the same continuity as
         // its origin assembly.
-        assumeContinuity ? originAssembly.isContiguous : isContiguous(content),
+        assumeContinuity ? queryOps.isContiguous(originAssembly) : ss.isContiguous(content),
         theDerived.source
       );
     }
@@ -201,7 +206,7 @@ const theModule = usModule((require, exports) => {
      */
     async splitAt(
       /** The cursor demarking the position of the cut. */
-      cursor: FragmentCursor,
+      cursor: Cursor.Fragment,
       /**
        * If `true` and no fragment exists in the assembly for the position,
        * the next best position will be used instead as a fallback.
@@ -210,31 +215,31 @@ const theModule = usModule((require, exports) => {
     ): Promise<UndefOr<[TokenizedAssembly, TokenizedAssembly]>> {
       const usedCursor = dew(() => {
         // The input cursor must be for the content.
-        if (this.positionOf(cursor) !== "content") return undefined;
-        if (!loose) return this.isFoundIn(cursor) ? cursor : undefined;
-        const bestCursor = this.findBest(cursor, true);
+        if (queryOps.positionOf(this, cursor) !== "content") return undefined;
+        if (!loose) return queryOps.isFoundIn(this, cursor) ? cursor : undefined;
+        const bestCursor = queryOps.findBest(this, cursor, true);
         // Make sure the cursor did not get moved out of the content.
         // This can happen when the content is empty; the only remaining
         // place it could be moved was to a prefix/suffix fragment.
-        return this.positionOf(bestCursor) === "content" ? bestCursor : undefined;
+        return queryOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
       });
 
       if (!usedCursor) return undefined;
       
-      const [beforeCut, afterCut] = splitSequenceAt(this.content, usedCursor);
+      const [beforeCut, afterCut] = seqOps.splitAt(this.content, usedCursor);
       const [beforeTokens, afterTokens] = await getTokensForSplit(
         this.#codec,
-        this.toFullText(usedCursor).offset,
+        queryOps.toFullText(this, usedCursor).offset,
         this.#tokens,
-        this.fullText
+        this.text
       );
 
       // If we're splitting this assembly, it doesn't make sense to preserve
       // the suffix on the assembly before the cut or the prefix after the cut.
       // Replace them with empty fragments, as needed.
       const { prefix, suffix } = this;
-      const afterPrefix = !prefix.content ? prefix : createFragment("", 0, prefix);
-      const beforeSuffix = !suffix.content ? suffix : createFragment("", 0, suffix);
+      const afterPrefix = !prefix.content ? prefix : ss.createFragment("", 0, prefix);
+      const beforeSuffix = !suffix.content ? suffix : ss.createFragment("", 0, suffix);
 
       // Because we're changing the prefix and suffix, we're going to invoke
       // the constructor directly instead of using `fromDerived`.
@@ -260,7 +265,7 @@ const theModule = usModule((require, exports) => {
      */
     async asOnlyContent(): Promise<TokenizedAssembly> {
       // No need if we don't have a prefix or suffix.
-      if (!this.isAffixed) return this;
+      if (!queryOps.isAffixed(this)) return this;
 
       // This can be seen as splitting the prefix and suffix from the rest
       // of the content, so we will want to get tokens for each of these
@@ -273,14 +278,14 @@ const theModule = usModule((require, exports) => {
         const tokensIn = this.#tokens;
         if (!prefix.content) return [prefix, tokensIn];
 
-        const ftCursor = this.toFullText(makeCursor(this, afterFragment(prefix)));
+        const ftCursor = queryOps.toFullText(this, cursors.fragment(this, ss.afterFragment(prefix)));
         const [, theTokens] = await getTokensForSplit(
           this.#codec,
           ftCursor.offset,
           tokensIn,
-          this.fullText
+          this.text
         );
-        return [createFragment("", 0, prefix), theTokens];
+        return [ss.createFragment("", 0, prefix), theTokens];
       });
 
       // This must use the tokens from the prefix and adjust the full-text
@@ -289,14 +294,14 @@ const theModule = usModule((require, exports) => {
         const tokensIn = noPrefixTokens;
         if (!suffix.content) return [suffix, tokensIn];
 
-        const ftCursor = this.toFullText(makeCursor(this, beforeFragment(suffix)));
+        const ftCursor = queryOps.toFullText(this, cursors.fragment(this, ss.beforeFragment(suffix)));
         const [theTokens] = await getTokensForSplit(
           this.#codec,
           ftCursor.offset - prefix.content.length,
           tokensIn,
-          [...this.content, this.suffix].map(asContent).join("")
+          [...this.content, this.suffix].map(ss.asContent).join("")
         );
-        return [createFragment("", 0, suffix), theTokens];
+        return [ss.createFragment("", 0, suffix), theTokens];
       });
 
       return new TokenizedAssembly(

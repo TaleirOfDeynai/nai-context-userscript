@@ -8,7 +8,8 @@ import { initAssembly } from "../_common";
 import { dew } from "@utils/dew";
 import { first, last, iterReverse, scan } from "@utils/iterables";
 
-import type { FragmentAssembly, InsertionPosition, Position } from "../../FragmentAssembly";
+import type { FragmentAssembly } from "../../FragmentAssembly";
+import type { InsertionPosition, Position } from "../../assemblies/positionOps";
 
 
 describe("FragmentAssembly", () => {

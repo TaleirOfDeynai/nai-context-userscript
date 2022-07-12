@@ -92,7 +92,7 @@ export default usModule((require, exports) => {
         ].filter(Boolean).join(" "));
       }
 
-      logger.dir({ finalText: assembled.fullText });
+      logger.dir({ finalText: assembled.text });
     };
   };
 

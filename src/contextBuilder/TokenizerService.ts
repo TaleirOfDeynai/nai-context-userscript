@@ -1,3 +1,4 @@
+import _hasIn from "lodash/hasIn";
 import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
@@ -722,8 +723,8 @@ export default usModule((require, exports) => {
   /** Checks if `value` satisfies the {@link SomeTokenCodec} interface. */
   const isCodec = (value: any): value is SomeTokenCodec => {
     if (!isObject(value)) return false;
-    if (!("encode" in value)) return false;
-    if (!("decode" in value)) return false;
+    if (!_hasIn(value, "encode")) return false;
+    if (!_hasIn(value, "decode")) return false;
     if (!isFunction(value.encode)) return false;
     if (!isFunction(value.decode)) return false;
     return true;

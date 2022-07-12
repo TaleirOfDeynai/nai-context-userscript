@@ -16,12 +16,12 @@ describe("FragmentAssembly", () => {
       source: sourceAssembly
     });
 
-    describe("fullText", () => {
+    describe("text", () => {
       it("should produce the full, concatenated text (no affixing)", () => {
         const assemblyData = generateData(3, NO_AFFIX);
         const testAssembly = initAssembly(assemblyData);
 
-        expect(testAssembly.fullText).toBe(assemblyData.content.map(toContent).join(""));
+        expect(testAssembly.text).toBe(assemblyData.content.map(toContent).join(""));
       });
 
       it("should produce the full, concatenated text (with affixing)", () => {
@@ -29,7 +29,7 @@ describe("FragmentAssembly", () => {
 
         const allFrags = [prefix, ...content, suffix];
 
-        expect(sourceAssembly.fullText).toBe(allFrags.map(toContent).join(""));
+        expect(sourceAssembly.text).toBe(allFrags.map(toContent).join(""));
       });
     });
 

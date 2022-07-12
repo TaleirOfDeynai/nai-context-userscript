@@ -31,7 +31,7 @@ const { TokenizedAssembly } = $TokenizedAssembly(fakeRequire);
 const { codecFor } = $TokenizerService(fakeRequire);
 
 const initAssembly = async (data: AssemblyInit) => {
-  const fullText = [data.prefix, ...data.content, data.suffix]
+  const text = [data.prefix, ...data.content, data.suffix]
     .map(toContent)
     .join("");
 
@@ -39,7 +39,7 @@ const initAssembly = async (data: AssemblyInit) => {
     data.prefix,
     data.content,
     data.suffix,
-    await mockCodec.encode(fullText),
+    await mockCodec.encode(text),
     codecFor(0, mockCodec),
     data.isContiguous ?? true,
     data.source ?? null

@@ -236,7 +236,7 @@ export default usModule((require, exports) => {
      */
     forceFullText = false
   ): AssemblyResultMap {
-    const fullText = assembly.fullText;
+    const fullText = assembly.text;
     const lineText = forceFullText ? undefined : assembly;
     const results = doSearching(fullText, lineText, matchable);
     

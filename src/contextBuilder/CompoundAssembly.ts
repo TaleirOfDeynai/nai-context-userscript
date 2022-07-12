@@ -9,23 +9,19 @@ import $SearchService from "./SearchService";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
-import type { LoreEntry } from "@nai/Lorebook";
 import type { BudgetedSource } from "./rx/3-selection/_shared";
+import type * as PosOps from "./assemblies/positionOps";
+import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContextContent } from "./ContextContent";
-import type * as FA from "./FragmentAssembly";
+import type { Cursor } from "./assemblies/Cursors";
 import type { FragmentAssembly } from "./FragmentAssembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
 import type { AssemblyResultMap } from "./SearchService";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
 
-type InsertableField = Pick<
-  LoreEntry,
-  keyof IContextField | "allowInnerInsertion" | "allowInsertionInside"
->;
-
 /** The bare minimum needed for an assembly. */
 interface AssemblyLike {
-  readonly fullText: TokenizedAssembly["fullText"];
+  readonly text: TokenizedAssembly["text"];
   readonly tokens: TokenizedAssembly["tokens"];
   readonly source: FragmentAssembly["source"];
 
@@ -58,7 +54,7 @@ interface SourceLike {
 
 export type ShuntingMode = "nearest" | "inDirection";
 
-export interface InsertionIterationState extends FA.InsertionPosition {
+export interface InsertionIterationState extends PosOps.InsertionPosition {
   index: number;
 }
 
@@ -82,7 +78,7 @@ namespace Insertion {
   }
 
   interface MainBase {
-    readonly type: Exclude<FA.PositionResult["type"], FA.IterDirection>;
+    readonly type: Exclude<PosOps.PositionResult["type"], PosOps.IterDirection>;
     readonly target: Target;
     readonly tokensUsed: number;
     readonly shunted: number;
@@ -136,11 +132,11 @@ const theModule = usModule((require, exports) => {
     #codec: AugmentedTokenCodec;
     #fragments: AssemblyLike[];
     #knownSources: Set<SourceLike>;
-    #textToSource: Map<FragmentAssembly, SourceLike>;
+    #textToSource: Map<IFragmentAssembly, SourceLike>;
 
     /** The full, concatenated text of the assembly. */
-    get fullText(): string {
-      return this.#fragments.map((a) => a.fullText).join("");
+    get text(): string {
+      return this.#fragments.map((a) => a.text).join("");
     }
 
     get tokens(): Tokens {
@@ -354,7 +350,7 @@ const theModule = usModule((require, exports) => {
       iterState: InsertionIterationState,
       source: SourceLike,
       inserted: AssemblyLike,
-      shuntRef: FA.FragmentCursor | FA.PositionResult
+      shuntRef: Cursor.Fragment | PosOps.PositionResult
     ): Promise<InsertionResult> {
       const { index } = iterState;
 
@@ -389,7 +385,7 @@ const theModule = usModule((require, exports) => {
     /** Inserts into the fragment at `index`. */
     async #doInsertInside(
       iterState: InsertionIterationState,
-      cursor: FA.FragmentCursor,
+      cursor: Cursor.Fragment,
       source: SourceLike,
       inserted: AssemblyLike
     ): Promise<InsertionResult> {
