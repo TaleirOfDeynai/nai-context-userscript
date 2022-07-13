@@ -49,6 +49,7 @@ export default usModule((require, exports) => {
       "Expected cursor offset to be in bounds of the assembly's text.",
       cursor.offset,
       queryOps.getText(assembly),
+      // The position at `length` is valid for a cursor.
       true
     );
 

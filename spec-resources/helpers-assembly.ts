@@ -11,14 +11,30 @@ export interface GenerateOpts {
   content?: string[];
 }
 
-export interface AssemblyData {
+interface BaseData {
   prefix: TextFragment;
   content: readonly TextFragment[];
   suffix: TextFragment;
-  maxOffset: number;
 }
 
-export interface AssemblyInit extends Omit<Required<AssemblyData>, "maxOffset"> {
+/** This fits the minimum {@link IFragmentAssembly} interface. */
+export interface AssemblyData extends BaseData, Omit<IFragmentAssembly, "content"> {
+  /** The maximum offset of the content. */
+  maxOffset: number;
+  /** Short-hand to create a fragment cursor. */
+  inFrag(offset: number): Cursor.Fragment;
+  /** Short-hand to create a full-text cursor. */
+  inText(offset: number): Cursor.FullText;
+  /** Gets the concatenation of the fragments. */
+  getText(): string;
+}
+
+export interface BoundCursors {
+  fragment: (offset: number) => Cursor.Fragment;
+  fullText: (offset: number) => Cursor.FullText;
+}
+
+export interface AssemblyInit extends BaseData {
   maxOffset?: number;
   isContiguous?: boolean;
   source?: IFragmentAssembly | null;
@@ -49,10 +65,19 @@ export function mockCursor(offset: number, type?: string, origin?: any): Cursor.
 export function mockCursor(
   offset: number,
   type: Cursor.Any["type"] = "fragment",
-  origin?: any,
+  origin: any = {},
 ): Cursor.Any {
   return Object.freeze({ type, offset, origin });
 }
+
+/**
+ * Creates a mock cursor factory bound to a given `origin`.
+ * Just saves some typing when working with a single assembly.
+ */
+export const cursorOfOrigin = (origin: any): BoundCursors => ({
+  fragment: (offset: number) => mockCursor(offset, "fragment", origin),
+  fullText: (offset: number) => mockCursor(offset, "fullText", origin)
+});
 
 /** Gets the position just before a fragment. */
 export const beforeFrag = (frag: UndefOr<TextFragment>) =>
@@ -66,10 +91,13 @@ export const insideFrag = (frag: UndefOr<TextFragment>) =>
 export const afterFrag = (frag: UndefOr<TextFragment>) =>
   !frag ? 0 : frag.offset + frag.content.length;
 
+/** Generates the data for a standard test assembly. */
 export const generateData = (
+  /** How much padding to offset the start and end of the content. */
   contentOffset: number,
+  /** Provide different options to customize the assembly. */
   options?: Readonly<GenerateOpts>
-): AssemblyData => {
+): Readonly<AssemblyData> => {
   const config = {
     prefix: "PREFIX\n",
     suffix: "\nSUFFIX",
@@ -93,10 +121,22 @@ export const generateData = (
 
   const suffix = mockFragment(config.suffix, maxOffset + contentOffset);
 
-  return { prefix, content, suffix, maxOffset };
+  return Object.freeze({
+    prefix, content, suffix, maxOffset,
+    // These use `this`, so if they get spread into a new object, they
+    // will still be bound to the same assembly.
+    inFrag(offset: number) { return mockCursor(offset, "fragment", this); },
+    inText(offset: number) { return mockCursor(offset, "fullText", this); },
+    getText() {
+      return [this.prefix, ...this.content, this.suffix]
+        .map((f) => f.content)
+        .filter(Boolean)
+        .join("");
+    }
+  });
 };
 
-/** Mix this into the options to disable affixing. */
+/** Mix this into the options of {@link generateData} to disable affixing. */
 export const NO_AFFIX = { prefix: "", suffix: "" } as Readonly<GenerateOpts>;
 
 /**
