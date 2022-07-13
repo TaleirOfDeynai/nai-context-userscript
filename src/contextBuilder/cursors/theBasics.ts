@@ -1,43 +1,32 @@
 import { usModule } from "@utils/usModule";
 import $TextSplitterService from "../TextSplitterService";
-import $FromFullText from "./cursorOps/fromFullText";
+import $FromFullText from "../assemblies/cursorOps/fromFullText";
+import fragment, { FragmentCursor } from "./Fragment";
+import fullText, { FullTextCursor } from "./FullText";
 
 import type { TextFragment } from "../TextSplitterService";
 import type { MatchResult } from "../MatcherService";
-import type { IFragmentAssembly } from "./Fragment";
+import type { IFragmentAssembly } from "../assemblies/Fragment";
 
-export namespace Cursor {
-  export interface Fragment {
-    readonly type: "fragment";
-    readonly origin: IFragmentAssembly;
-    readonly offset: number;
-  }
-  
-  export interface FullText {
-    readonly type: "fullText";
-    readonly origin: IFragmentAssembly;
-    readonly offset: number;
-  }
-  
-  export type Any = Fragment | FullText;
-}
+/** Represents a range from one {@link FragmentCursor} to another. */
+export type Selection = readonly [FragmentCursor, FragmentCursor];
 
-export type Selection = readonly [Cursor.Fragment, Cursor.Fragment];
+/** Accepts any cursor. */
+export type AnyCursor = FragmentCursor | FullTextCursor;
+
+/** The named types of cursors. */
+export type CursorType = AnyCursor["type"];
 
 export default usModule((require, exports) => {
-  /** Creates a full-text cursor. */
-  const fullText = (origin: IFragmentAssembly, offset: number): Cursor.FullText =>
-    Object.freeze({ type: "fullText", origin, offset });
-  
-  const fragment = (origin: IFragmentAssembly, offset: number): Cursor.Fragment =>
-    Object.freeze({ type: "fragment", origin, offset });
-  
+  const { isOffsetInside } = $TextSplitterService(require);
+  const { fromFullText } = $FromFullText(require);
+
   /** Creates a cursor of the given type. */
   const create = (
     origin: IFragmentAssembly,
     offset: number,
-    type: Cursor.Any["type"]
-  ): Cursor.Any => {
+    type: CursorType
+  ): AnyCursor => {
     switch (type) {
       case "fullText": return fullText(origin, offset);
       case "fragment": return fragment(origin, offset);
@@ -55,13 +44,13 @@ export default usModule((require, exports) => {
    * operators to interrogate the assembly the fragment came from
    * for that.
    */
-  const isCursorInside = (cursor: Cursor.Any, fragment: TextFragment) =>
-    $TextSplitterService(require).isOffsetInside(cursor.offset, fragment);
+  const isCursorInside = (cursor: AnyCursor, fragment: TextFragment) =>
+    isOffsetInside(cursor.offset, fragment);
 
-  /** Ensures the given cursor is a {@link Cursor.Fragment}. */
-  const asFragmentCursor = (cursor: Cursor.Any): Cursor.Fragment => {
+  /** Ensures the given cursor is a {@link FragmentCursor}. */
+  const asFragmentCursor = (cursor: AnyCursor): FragmentCursor => {
     if (cursor.type === "fragment") return cursor;
-    return $FromFullText(require).fromFullText(cursor.origin, cursor);
+    return fromFullText(cursor.origin, cursor);
   };
 
   /**
@@ -73,7 +62,7 @@ export default usModule((require, exports) => {
   const toSelection = (
     match: MatchResult,
     origin: IFragmentAssembly,
-    type: Cursor.Any["type"]
+    type: CursorType
   ): Selection => {
     const { index, length } = match;
     const left = asFragmentCursor(create(origin, index, type));
@@ -84,8 +73,6 @@ export default usModule((require, exports) => {
   };
 
   return Object.assign(exports, {
-    fullText,
-    fragment,
     create,
     isCursorInside,
     asFragmentCursor,

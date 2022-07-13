@@ -2,18 +2,17 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert, assertInBounds } from "@utils/assert";
 import { toImmutable, first } from "@utils/iterables";
+import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
-import $Cursors from "../Cursors";
 import $QueryOps from "../queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "../../TextSplitterService";
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 
 export default usModule((require, exports) => {
   const splitterService = $TextSplitterService(require);
-  const cursors = $Cursors(require);
   const queryOps = $QueryOps(require);
 
   /**
@@ -76,17 +75,17 @@ export default usModule((require, exports) => {
 
     // Fast-path: We can just map straight to `content`.
     if (!queryOps.isAffixed(assembly) && queryOps.isContiguous(assembly))
-      return cursors.fragment(assembly, cursor.offset + initOffset);
+      return makeCursor(assembly, cursor.offset + initOffset);
     
     // When the cursor is within the prefix.
     if (cursor.offset < prefixLength)
-      return cursors.fragment(assembly, cursor.offset);
+      return makeCursor(assembly, cursor.offset);
 
     const suffixThreshold = prefixLength + queryOps.getContentStats(assembly).concatLength;
 
     // When the cursor is within the suffix.
     if (cursor.offset > suffixThreshold)
-      return cursors.fragment(assembly, (cursor.offset - suffixThreshold) + suffix.offset);
+      return makeCursor(assembly, (cursor.offset - suffixThreshold) + suffix.offset);
 
     // Exceptional circumstances; this function is setup to favor the
     // content, but if content is empty and the cursor is between the
@@ -94,8 +93,8 @@ export default usModule((require, exports) => {
     // actually is for this instance's `text`), we must favor one of
     // those instead.
     if (content.length === 0) {
-      if (prefixLength) return cursors.fragment(assembly, prefixLength);
-      if (suffix.content) return cursors.fragment(assembly, suffix.offset);
+      if (prefixLength) return makeCursor(assembly, prefixLength);
+      if (suffix.content) return makeCursor(assembly, suffix.offset);
     }
     else {
       // Remove the prefix from the full-text cursor so we're inside
@@ -105,7 +104,7 @@ export default usModule((require, exports) => {
       // Fast-path: For contiguous content, we can map the cursor directly
       // to the content, now that the prefix was accounted for.
       if (queryOps.isContiguous(assembly))
-        return cursors.fragment(assembly, cursorOffset + initOffset);
+        return makeCursor(assembly, cursorOffset + initOffset);
       
       // Otherwise, we have to iterate to account for the gaps in content.
       // When there is ambiguity between a fragment with words and a
@@ -121,7 +120,7 @@ export default usModule((require, exports) => {
           // to use the end of the last fragment.
           if (!hasWords(curFrag.content)) break;
           // Otherwise, use the start of this fragment.
-          return cursors.fragment(assembly, beforeFragment(curFrag));
+          return makeCursor(assembly, beforeFragment(curFrag));
         }
 
         // Remove this fragment from the full-text offset.  This will go
@@ -139,7 +138,7 @@ export default usModule((require, exports) => {
           // subtracted `cursorOffset` to make the checks of the loop
           // simpler, we have to add it back to the length to get the
           // correct offset.
-          return cursors.fragment(assembly, curFrag.offset + fragLength + cursorOffset);
+          return makeCursor(assembly, curFrag.offset + fragLength + cursorOffset);
         }
 
         // Update the last fragment.
@@ -151,12 +150,12 @@ export default usModule((require, exports) => {
       // we are meant to use the end of that fragment, since we were
       // likely attempting the non-wordy disambiguation and ran out
       // of fragments.
-      if (lastFrag) return cursors.fragment(assembly, afterFragment(lastFrag));
+      if (lastFrag) return makeCursor(assembly, afterFragment(lastFrag));
     }
 
     // If we get here, this is the "completely empty assembly" fail-safe;
     // just use the initial offset we determined.
-    return cursors.fragment(assembly, initOffset);
+    return makeCursor(assembly, initOffset);
   }
 
   return Object.assign(exports, {

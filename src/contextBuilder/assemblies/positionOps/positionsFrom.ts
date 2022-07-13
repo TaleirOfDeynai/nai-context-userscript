@@ -1,9 +1,9 @@
 import { usModule } from "@utils/usModule";
 import { chain, batch, flatMap, mapIter, skip } from "@utils/iterables";
+import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
-import $Cursors from "../Cursors";
 
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { TextFragment } from "../../TextSplitterService";
 import type { IterDirection } from "./cursorForDir";
@@ -13,7 +13,6 @@ const lineBatcher = (c: TextFragment, p: TextFragment) =>
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
-  const c = $Cursors(require);
 
   /**
    * Takes the given `fragments` from some `assembly` and converts them
@@ -56,7 +55,7 @@ export default usModule((require, exports) => {
       // And now preserve the empty fragments and those with words.
       .filter((f) => f.content.length === 0 || ss.hasWords(f))
       // Then convert them into cursors...
-      .map((f) => c.fragment(assembly, toFragOffset(f)))
+      .map((f) => makeCursor(assembly, toFragOffset(f)))
       .value();
   };
 

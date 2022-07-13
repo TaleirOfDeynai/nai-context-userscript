@@ -1,18 +1,18 @@
 import { usModule } from "@utils/usModule";
 import { skipUntil, flatMap } from "@utils/iterables";
 import $TrimmingProviders from "../../TrimmingProviders";
-import $Cursors from "../Cursors";
+import $Cursors from "../../cursors";
 import $QueryOps from "../queryOps";
 
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { TextFragment } from "../../TextSplitterService";
 import type { TrimType, TextSequencer } from "../../TrimmingProviders";
 import type { IterDirection } from "./cursorForDir";
 
 export default usModule((require, exports) => {
-  const tp = $TrimmingProviders(require);
-  const c = $Cursors(require);
+  const providers = $TrimmingProviders(require);
+  const cursors = $Cursors(require);
   const queryOps = $QueryOps(require);
 
   /**
@@ -30,7 +30,7 @@ export default usModule((require, exports) => {
     direction: IterDirection
   ): Iterable<TextFragment> => {
     const theFrags = queryOps.iterateOn(assembly, direction === "toTop");
-    return skipUntil(theFrags, (f) => c.isCursorInside(cursor, f));
+    return skipUntil(theFrags, (f) => cursors.isCursorInside(cursor, f));
   };
 
   /**
@@ -50,7 +50,7 @@ export default usModule((require, exports) => {
     // Skip fragments while we have not found the cursor that
     // indicates the start of iteration.  This needs to be done
     // regardless of if we're doing further splitting.
-    const theFrags = skipUntil(inFrags, (f) => c.isCursorInside(cursor, f));
+    const theFrags = skipUntil(inFrags, (f) => cursors.isCursorInside(cursor, f));
     if (!sequencers.length) return theFrags;
 
     const [sequencer, ...restSeq] = sequencers;
@@ -77,7 +77,7 @@ export default usModule((require, exports) => {
     return sequenceFragments(
       cursor,
       fragsStartingFrom(assembly, cursor, direction),
-      tp.getSequencersFrom(provider, splitType)
+      providers.getSequencersFrom(provider, splitType)
     );
   };
 

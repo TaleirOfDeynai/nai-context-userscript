@@ -13,11 +13,11 @@ import type { BudgetedSource } from "./rx/3-selection/_shared";
 import type * as PosOps from "./assemblies/positionOps";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContextContent } from "./ContextContent";
-import type { Cursor } from "./assemblies/Cursors";
 import type { FragmentAssembly } from "./FragmentAssembly";
 import type { TokenizedAssembly } from "./TokenizedAssembly";
 import type { AssemblyResultMap } from "./SearchService";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
+import type { Cursor } from "./cursors";
 
 /** The bare minimum needed for an assembly. */
 interface AssemblyLike {

@@ -3,7 +3,7 @@ import { mockFragment, toFragmentSeq } from "@spec/helpers-splitter";
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
 import type { IFragmentAssembly } from "@src/contextBuilder/assemblies/Fragment";
-import type { Cursor } from "@src/contextBuilder/assemblies/Cursors";
+import type { Cursor } from "@src/contextBuilder/cursors";
 
 export interface GenerateOpts {
   prefix?: string;

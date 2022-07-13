@@ -2,7 +2,7 @@ import { usModule } from "@utils/usModule";
 import $QueryOps from "../queryOps";
 import $CursorOps from "../cursorOps";
 
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { IterDirection } from "./cursorForDir";
 import type { PositionResult } from "./locateInsertion";

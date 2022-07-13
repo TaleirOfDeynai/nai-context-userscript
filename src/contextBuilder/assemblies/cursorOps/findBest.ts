@@ -1,8 +1,8 @@
 import { usModule } from "@utils/usModule";
 import { assertExists } from "@utils/assert";
-import * as IterOps from "@utils/iterables";
+import { chain } from "@utils/iterables";
+import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
-import $Cursors from "../Cursors";
 import $QueryOps from "../queryOps";
 import $IsFoundIn from "./isFoundIn";
 import $PositionOf from "./positionOf";
@@ -10,14 +10,13 @@ import $PositionOf from "./positionOf";
 import type { UndefOr } from "@utils/utility-types";
 import type { ReduceFn } from "@utils/iterables";
 import type { TextFragment } from "../../TextSplitterService";
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 
 type OffsetResult = [offset: number, distance: number];
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
-  const cursors = $Cursors(require);
   const queryOps = $QueryOps(require);
 
   /**
@@ -97,19 +96,19 @@ export default usModule((require, exports) => {
       for (const curResult of offsetsIterator) {
         const next = _offsetReducer(lastResult, curResult);
         // We hit the minimum if we get the `lastResult` back.
-        if (next === lastResult) return cursors.fragment(assembly, next[0]);
+        if (next === lastResult) return makeCursor(assembly, next[0]);
         lastResult = next;
       }
       // If we get here, we ran through them all and never got the last
       // result back from `_offsetReducer`.  But, if we have `lastResult`,
       // we will assume the very last fragment was the nearest.
-      if (lastResult) return cursors.fragment(assembly, lastResult[0]);
+      if (lastResult) return makeCursor(assembly, lastResult[0]);
     }
     else {
       // For non-contiguous assemblies, we'll have to run through every
       // fragment to find the minimum difference.
-      const result = IterOps.chain(offsetsIterator).reduce(undefined, _offsetReducer);
-      if (result) return cursors.fragment(assembly, result[0]);
+      const result = chain(offsetsIterator).reduce(undefined, _offsetReducer);
+      if (result) return makeCursor(assembly, result[0]);
     }
 
     // If we get here, `fragments` was probably empty, which can happen
@@ -120,10 +119,10 @@ export default usModule((require, exports) => {
     const { prefix, suffix } = queryOps.getSource(assembly);
     const [newOffset] = assertExists(
       "Expected to have boundaries from prefix and suffix.",
-      IterOps.chain(_iterBounds([prefix, suffix], cursor.offset))
+      chain(_iterBounds([prefix, suffix], cursor.offset))
         .reduce(undefined, _offsetReducer)
     );
-    return cursors.fragment(assembly, newOffset);
+    return makeCursor(assembly, newOffset);
   }
 
   return Object.assign(exports, {

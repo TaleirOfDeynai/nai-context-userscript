@@ -11,9 +11,9 @@ import $FragmentAssembly from "./FragmentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
-import type { Cursor } from "./assemblies/Cursors";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
+import type { Cursor } from "./cursors";
 
 export interface ContinuityOptions {
   /**

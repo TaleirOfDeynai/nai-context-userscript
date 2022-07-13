@@ -18,8 +18,8 @@ import * as Iterables from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import $MatcherService from "./MatcherService";
 import $TextSplitterService from "./TextSplitterService";
-import $Cursors from "./assemblies/Cursors";
 import $QueryOps from "./assemblies/queryOps";
+import $Cursors from "./cursors";
 
 import type { Maybe, UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
@@ -29,13 +29,13 @@ import type { MatcherFn, MatchResult as TextResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContextContent } from "./ContextContent";
-import type { Cursor, Selection } from "./assemblies/Cursors";
+import type { Cursor } from "./cursors";
 
 export type KeyedContent = ContextContent<IContextField & { keys: string[] }>;
 export type Matchable = Iterable<string> | KeyedContent;
 
 export interface AssemblyResult extends TextResult {
-  readonly selection: Selection;
+  readonly selection: Cursor.Selection;
 }
 
 export type TextResultMap = Map<string, readonly TextResult[]>;

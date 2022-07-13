@@ -3,7 +3,7 @@ import { dew } from "@utils/dew";
 import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { toImmutable } from "@utils/iterables";
-import $Cursors from "./assemblies/Cursors";
+import makeCursor from "./cursors/Fragment";
 import $SequenceOps from "./assemblies/sequenceOps";
 import $QueryOps from "./assemblies/queryOps";
 import $CursorOps from "./assemblies/cursorOps";
@@ -12,11 +12,11 @@ import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { Cursor } from "./assemblies/Cursors";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { TextFragment } from "./TextSplitterService";
 import type { ContinuityOptions } from "./ContentAssembly";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
+import type { Cursor } from "./cursors";
 
 export interface DerivedOptions extends ContinuityOptions {
   /** Required when not deriving from another `TokenizedAssembly`. */
@@ -31,7 +31,6 @@ const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const { FragmentAssembly } = $FragmentAssembly(require);
   const { ContentAssembly } = $ContentAssembly(require);
-  const cursors = $Cursors(require);
   const seqOps = $SequenceOps(require);
   const queryOps = $QueryOps(require);
   const cursorOps = $CursorOps(require);
@@ -282,7 +281,7 @@ const theModule = usModule((require, exports) => {
 
         const ftCursor = cursorOps.toFullText(
           this,
-          cursors.fragment(this, ss.afterFragment(prefix))
+          makeCursor(this, ss.afterFragment(prefix))
         );
         const [, theTokens] = await getTokensForSplit(
           this.#codec,
@@ -301,7 +300,7 @@ const theModule = usModule((require, exports) => {
 
         const ftCursor = cursorOps.toFullText(
           this,
-          cursors.fragment(this, ss.beforeFragment(suffix))
+          makeCursor(this, ss.beforeFragment(suffix))
         );
         const [theTokens] = await getTokensForSplit(
           this.#codec,

@@ -11,7 +11,7 @@ import $PositionsFrom from "./positionsFrom";
 import $SplitUpFrom from "./splitUpFrom";
 
 import type { TrimType } from "../../TrimmingProviders";
-import type { Cursor, Selection } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { IterDirection } from "./cursorForDir";
 
@@ -19,11 +19,11 @@ export interface InsertionPosition {
   /**
    * A cursor or selection marking the position of the iteration.
    * 
-   * If a {@link Selection}:
+   * If a {@link Cursor.Selection}:
    * - When `direction` is `"toTop"`, the first cursor is used.
    * - When `direction` is `"toBottom"`, the second cursor is used.
    */
-  position: Cursor.Fragment | Selection;
+  position: Cursor.Fragment | Cursor.Selection;
   /** Which direction to look for an insertion position. */
   direction: IterDirection;
   /** How many elements to shift the position by; must be positive. */

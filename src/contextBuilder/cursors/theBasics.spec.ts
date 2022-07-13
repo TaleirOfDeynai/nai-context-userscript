@@ -5,10 +5,10 @@ import { mockCursor } from "@spec/helpers-assembly";
 import { mockStory } from "@spec/mock-story";
 
 import { dew } from "@utils/dew";
-import $Cursors from "./Cursors";
+import $TheBasics from "./theBasics";
 
 import type { MatchResult } from "../MatcherService";
-import type { IFragmentAssembly } from "./Fragment";
+import type { IFragmentAssembly } from "../assemblies/Fragment";
 
 const mockOrigin: IFragmentAssembly = dew(() => {
   const prefix = mockFragment("", 0);
@@ -19,7 +19,7 @@ const mockOrigin: IFragmentAssembly = dew(() => {
 })
 
 describe("isCursorInside", () => {
-  const { isCursorInside } = $Cursors(fakeRequire);
+  const { isCursorInside } = $TheBasics(fakeRequire);
 
   const fragment = mockFragment("0123456789", 10);
 
@@ -48,7 +48,7 @@ describe("isCursorInside", () => {
 });
 
 describe("asFragmentCursor", () => {
-  const { asFragmentCursor } = $Cursors(fakeRequire);
+  const { asFragmentCursor } = $TheBasics(fakeRequire);
 
   // This relies heavily on `FragmentAssembly.fromFullText`.
   // We're only going to test that it attempts the conversion when
@@ -70,7 +70,7 @@ describe("asFragmentCursor", () => {
 });
 
 describe("toSelection", () => {
-  const { toSelection } = $Cursors(fakeRequire);
+  const { toSelection } = $TheBasics(fakeRequire);
 
   it("should convert from an assembly match", () => {
     const mockMatch: MatchResult = Object.freeze({

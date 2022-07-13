@@ -1,18 +1,17 @@
 import { usModule } from "@utils/usModule";
 import { chain, first, last } from "@utils/iterables";
+import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
-import $Cursors from "../Cursors";
 import $PositionsFrom from "./positionsFrom";
 import $SplitUpFrom from "./splitUpFrom";
 
 import type { TrimType } from "../../TrimmingProviders";
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 import type { IterDirection } from "./cursorForDir";
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
-  const c = $Cursors(require);
   const { positionsFrom } = $PositionsFrom(require);
   const { splitUpFrom } = $SplitUpFrom(require);
 
@@ -52,12 +51,12 @@ export default usModule((require, exports) => {
     else if (direction === "toTop") {
       const suffix = assembly.suffix.content ? assembly.suffix : undefined;
       const frag = suffix ?? last(assembly.content) ?? assembly.prefix;
-      return c.fragment(assembly, ss.afterFragment(frag));
+      return makeCursor(assembly, ss.afterFragment(frag));
     }
     else {
       const prefix = assembly.prefix.content ? assembly.prefix : undefined;
       const frag = prefix ?? first(assembly.content) ?? assembly.suffix;
-      return c.fragment(assembly, ss.beforeFragment(frag));
+      return makeCursor(assembly, ss.beforeFragment(frag));
     }
   }
 

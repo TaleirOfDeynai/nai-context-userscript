@@ -1,13 +1,13 @@
 import { usModule } from "@utils/usModule";
-import $Cursors from "../Cursors";
+import $Cursors from "../../cursors";
 import $TextSplitterService from "../../TextSplitterService";
 
 import type { TextFragment } from "../../TextSplitterService";
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 
 export default usModule((require, exports) => {
-  const cursors = $Cursors(require);
   const ss = $TextSplitterService(require);
+  const cursors = $Cursors(require);
 
   /**
    * Given a cursor and a sequence of text fragments, splits the sequence

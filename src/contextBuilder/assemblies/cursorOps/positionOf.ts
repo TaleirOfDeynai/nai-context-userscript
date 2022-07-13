@@ -1,10 +1,10 @@
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { isEmpty } from "@utils/iterables";
-import $Cursors from "../Cursors";
+import $Cursors from "../../cursors";
 import $QueryOps from "../queryOps";
 
-import type { Cursor } from "../Cursors";
+import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../Fragment";
 
 export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";

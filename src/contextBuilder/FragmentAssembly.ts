@@ -7,13 +7,13 @@ import $CursorOps from "./assemblies/cursorOps";
 import $PositionOps from "./assemblies/positionOps";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { TextFragment } from "./TextSplitterService";
-import type { TrimType } from "./TrimmingProviders";
-import type { Cursor, Selection } from "./assemblies/Cursors";
 import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { AssemblyStats } from "./assemblies/sequenceOps";
 import type { CursorPosition } from "./assemblies/cursorOps";
 import type * as PosOps from "./assemblies/positionOps";
+import type { TextFragment } from "./TextSplitterService";
+import type { TrimType } from "./TrimmingProviders";
+import type { Cursor } from "./cursors";
 
 const theModule = usModule((require, exports) => {
   const queryOps = $QueryOps(require);
@@ -226,11 +226,11 @@ const theModule = usModule((require, exports) => {
       /**
        * A cursor or selection marking the position of the iteration.
        * 
-       * If a {@link Selection}:
+       * If a {@link Cursor.Selection}:
        * - When `direction` is `"toTop"`, the first cursor is used.
        * - When `direction` is `"toBottom"`, the second cursor is used.
        */
-      position: Cursor.Fragment | Selection,
+      position: Cursor.Fragment | Cursor.Selection,
       /** The splitting type to use to generate the fragments. */
       splitType: TrimType,
       /** Which direction to iterate. */
