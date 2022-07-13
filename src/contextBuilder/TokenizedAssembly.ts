@@ -214,17 +214,7 @@ const theModule = usModule((require, exports) => {
        */
       loose: boolean = false
     ): Promise<UndefOr<[TokenizedAssembly, TokenizedAssembly]>> {
-      const usedCursor = dew(() => {
-        // The input cursor must be for the content.
-        if (cursorOps.positionOf(this, cursor) !== "content") return undefined;
-        if (!loose) return cursorOps.isFoundIn(this, cursor) ? cursor : undefined;
-        const bestCursor = cursorOps.findBest(this, cursor, true);
-        // Make sure the cursor did not get moved out of the content.
-        // This can happen when the content is empty; the only remaining
-        // place it could be moved was to a prefix/suffix fragment.
-        return cursorOps.positionOf(this, bestCursor) === "content" ? bestCursor : undefined;
-      });
-
+      const usedCursor = cursorOps.contentCursorOf(this, cursor, loose);
       if (!usedCursor) return undefined;
       
       const [beforeCut, afterCut] = seqOps.splitAt(this.content, usedCursor);

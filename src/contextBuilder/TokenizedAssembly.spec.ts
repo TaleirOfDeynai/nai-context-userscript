@@ -1,5 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
-import { beforeAll, beforeEach, afterEach } from "@jest/globals";
+import { beforeEach } from "@jest/globals";
 import fakeRequire from "@spec/fakeRequire";
 import { getEmptyFrag, mockFragment, toContent } from "@spec/helpers-splitter";
 import { mockCodec } from "@spec/helpers-tokenizer";
@@ -8,8 +8,7 @@ import { afterFrag, insideFrag, beforeFrag } from "@spec/helpers-assembly";
 import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
 
 import { first, last } from "@utils/iterables";
-import $FindBest from "./assemblies/cursorOps/findBest";
-import $IsFoundIn from "./assemblies/cursorOps/isFoundIn";
+import $ContentCursorOf from "./assemblies/cursorOps/contentCursorOf";
 import $TokenizerService from "./TokenizerService";
 import $TokenizedAssembly from "./TokenizedAssembly";
 
@@ -19,16 +18,14 @@ import type { TokenizedAssembly } from "./TokenizedAssembly";
 
 type SplitContent = [TokenizedAssembly, TokenizedAssembly];
 
-let spyFindBest: SpyInstance<ReturnType<typeof $FindBest>["findBest"]>;
-fakeRequire.inject($FindBest, (exports, jestFn) => {
-  spyFindBest = jestFn(exports.findBest);
-  return Object.assign(exports, { findBest: spyFindBest });
+let spyContentCursorOf: SpyInstance<ReturnType<typeof $ContentCursorOf>["contentCursorOf"]>;
+fakeRequire.inject($ContentCursorOf, (exports, jestFn) => {
+  spyContentCursorOf = jestFn(exports.contentCursorOf);
+  return Object.assign(exports, { contentCursorOf: spyContentCursorOf });
 });
 
-let spyIsFoundIn: SpyInstance<ReturnType<typeof $IsFoundIn>["isFoundIn"]>;
-fakeRequire.inject($IsFoundIn, (exports, jestFn) => {
-  spyIsFoundIn = jestFn(exports.isFoundIn);
-  return Object.assign(exports, { isFoundIn: spyIsFoundIn });
+beforeEach(() => {
+  spyContentCursorOf.mockReset();
 });
 
 const { TokenizedAssembly } = $TokenizedAssembly(fakeRequire);
@@ -344,53 +341,28 @@ describe("TokenizedAssembly", () => {
       describe("concerning loose mode", () => {
         let testAssembly: TokenizedAssembly;
 
-        const resetMocks = () => {
-          spyFindBest.mockReset();
-          spyIsFoundIn.mockReset();
-        };
-
-        beforeAll(resetMocks);
-        afterEach(resetMocks);
-
         beforeEach(async () => {
           testAssembly = await initAssembly(foobarFrags);
         });
 
-        it("should call `findBest` with the input cursor when active", async () => {
+        it("should call `contentCursorOf` in loose mode when active", async () => {
           const offset = beforeFrag(foobarFrags.content[2]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
 
-          spyFindBest.mockReturnValue(cursor);
+          spyContentCursorOf.mockReturnValue(undefined);
           await testAssembly.splitAt(cursor, true);
 
-          expect(spyFindBest).toBeCalledWith(testAssembly, cursor, true);
+          expect(spyContentCursorOf).toBeCalledWith(testAssembly, cursor, true);
         });
 
-        it("should NOT call `findBest` with the input cursor when inactive", async () => {
+        it("should call `contentCursorOf` in strict mode when inactive", async () => {
           const offset = beforeFrag(foobarFrags.content[2]);
           const cursor = mockCursor(offset, "fragment", testAssembly);
 
-          spyIsFoundIn.mockReturnValue(true);
-          await testAssembly.splitAt(cursor, false);
+          spyContentCursorOf.mockReturnValue(undefined);
+          await testAssembly.splitAt(cursor);
 
-          expect(spyFindBest).not.toHaveBeenCalled();
-        });
-
-        it("should not use the best cursor if it is outside the content block", async () => {
-          const inputCursor = mockCursor(
-            beforeFrag(foobarFrags.content[2]),
-            "fragment", testAssembly
-          );
-
-          const prefixCursor = mockCursor(
-            insideFrag(foobarFrags.prefix),
-            "fragment", testAssembly
-          );
-
-          spyFindBest.mockReturnValue(prefixCursor);
-          const result = await testAssembly.splitAt(inputCursor, true);
-
-          expect(result).toBeUndefined();
+          expect(spyContentCursorOf).toBeCalledWith(testAssembly, cursor, false);
         });
       });
     });
