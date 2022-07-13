@@ -61,7 +61,8 @@ export default usModule((require, exports) => {
   };
 
   /**
-   * Private implementation of {@link fragmentsFrom}.
+   * Splits up the fragments of an assembly starting from the position
+   * identified by a `cursor`, toward the given `direction`.
    */
   const splitUpFrom = (
     /** The assembly to query. */
