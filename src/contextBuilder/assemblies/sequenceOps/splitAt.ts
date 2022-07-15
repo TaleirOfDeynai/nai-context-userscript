@@ -20,7 +20,7 @@ export default usModule((require, exports) => {
   const splitAt = (
     content: readonly TextFragment[],
     cursor: Cursor.Fragment
-  ): [TextFragment[], TextFragment[]] => {
+  ): [readonly TextFragment[], readonly TextFragment[]] => {
     const beforeCut: TextFragment[] = [];
     const afterCut: TextFragment[] = [];
     let curBucket = beforeCut;
@@ -61,7 +61,7 @@ export default usModule((require, exports) => {
       curBucket.push(frag);
     }
 
-    return [beforeCut, afterCut];
+    return [Object.freeze(beforeCut), Object.freeze(afterCut)];
   };
  
   return Object.assign(exports, {

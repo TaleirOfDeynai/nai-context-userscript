@@ -147,11 +147,15 @@ export default usModule((require, exports) => {
   /** Standardizes on text fragments for processing. */
   const asFragment = (inputText: TextOrFragment): TextFragment =>
     isString(inputText) ? createFragment(inputText, 0) : inputText;
-  
+
   /** Pulls the content text from a string or fragment. */
   const asContent = (inputText: TextOrFragment): string =>
     isString(inputText) ? inputText : inputText.content;
-  
+
+  /** Creates an empty version of a fragment at the same offset. */
+  const asEmptyFragment = (fragment: TextFragment) =>
+    !fragment.content ? fragment : createFragment("", 0, fragment);
+
   /**
    * Combines many sequential fragments into a single fragment.
    * 
@@ -505,6 +509,7 @@ export default usModule((require, exports) => {
     createFragment,
     asFragment,
     asContent,
+    asEmptyFragment,
     beforeFragment,
     afterFragment,
     isOffsetInside,

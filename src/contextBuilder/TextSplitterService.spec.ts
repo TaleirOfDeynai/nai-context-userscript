@@ -64,6 +64,20 @@ describe("asContent", () => {
   });
 });
 
+describe("asEmptyFragment", () => {
+  const { asEmptyFragment } = textSplitter;
+
+  it("should produce an empty fragment with the same offset", () => {
+    const testFrag = mockFragment("Test Fragment", 10);
+    expect(asEmptyFragment(testFrag)).toEqual({ content: "", offset: 10 });
+  });
+
+  it("should reuse the fragment when already empty", () => {
+    const testFrag = mockFragment("", 10);
+    expect(asEmptyFragment(testFrag)).toBe(testFrag);
+  });
+});
+
 describe("isContiguous", () => {
   const { isContiguous } = textSplitter;
 

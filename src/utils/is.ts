@@ -53,7 +53,7 @@ export const isBoolean = (value: any): value is boolean =>
   typeof value === "boolean";
 
 export const isPojo = dew(() => {
-  const POJO_PROTOS = [Object.prototype, null];
+  const POJO_PROTOS = Object.freeze([Object.prototype, null]);
   return (value: any): value is Object => {
     if (!isObject(value)) return false;
     return POJO_PROTOS.includes(Object.getPrototypeOf(value));

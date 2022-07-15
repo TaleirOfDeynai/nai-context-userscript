@@ -3,9 +3,8 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
 import { chain, toImmutable, mapIter } from "@utils/iterables";
-import $SequenceOps from "./assemblies/sequenceOps";
+import $ManipOps from "./assemblies/manipOps";
 import $QueryOps from "./assemblies/queryOps";
-import $CursorOps from "./assemblies/cursorOps";
 import $TextSplitterService from "./TextSplitterService";
 import $FragmentAssembly from "./FragmentAssembly";
 
@@ -41,9 +40,8 @@ const defaultMakeOptions: Required<MakeAssemblyOptions> = {
 const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const { FragmentAssembly } = $FragmentAssembly(require);
-  const seqOps = $SequenceOps(require);
+  const manipOps = $ManipOps(require);
   const queryOps = $QueryOps(require);
-  const cursorOps = $CursorOps(require);
 
   /**
    * An abstraction that standardizes how text is assembled with prefixes
@@ -229,30 +227,14 @@ const theModule = usModule((require, exports) => {
        */
       loose: boolean = false
     ): UndefOr<[ContentAssembly, ContentAssembly]> {
-      const usedCursor = cursorOps.contentCursorOf(this, cursor, loose);
-      if (!usedCursor) return undefined;
-
-      const [beforeCut, afterCut] = seqOps.splitAt(this.content, usedCursor);
-
-      // If we're splitting this assembly, it doesn't make sense to preserve
-      // the suffix on the assembly before the cut or the prefix after the cut.
-      // Replace them with empty fragments, as needed.
-      const { prefix, suffix } = this;
-      const afterPrefix = !prefix.content ? prefix : ss.createFragment("", 0, prefix);
-      const beforeSuffix = !suffix.content ? suffix : ss.createFragment("", 0, suffix);
-
-      // Because we're changing the prefix and suffix, we're going to invoke
-      // the constructor directly instead of using `fromDerived`.
-      return [
-        new ContentAssembly(
-          prefix, toImmutable(beforeCut), beforeSuffix,
+      return manipOps.splitAt(this, cursor, loose)?.map((a) => {
+        // Because we're changing the prefix and suffix, we're going to invoke
+        // the constructor directly instead of using `fromDerived`.
+        return new ContentAssembly(
+          a.prefix, toImmutable(a.content), a.suffix,
           this.isContiguous, this.source
-        ),
-        new ContentAssembly(
-          afterPrefix, toImmutable(afterCut), suffix,
-          this.isContiguous, this.source
-        )
-      ];
+        );
+      }) as [ContentAssembly, ContentAssembly];
     }
 
     /**
@@ -262,15 +244,13 @@ const theModule = usModule((require, exports) => {
      * work as expected.
      */
     asOnlyContent(): ContentAssembly {
-      // No need if we don't have a prefix or suffix.
-      if (!queryOps.isAffixed(this)) return this;
+      const result = manipOps.removeAffix(this);
 
-      // Replace the suffix and prefix with zero-length fragments.
-      const { prefix, suffix } = this;
+      // If we're already only-content, `removeAffix` will return its input.
+      if (result === this) return this;
+
       return new ContentAssembly(
-        !prefix.content ? prefix : ss.createFragment("", 0, prefix),
-        this.content,
-        !suffix.content ? suffix : ss.createFragment("", 0, suffix),
+        result.prefix, result.content, result.suffix,
         this.isContiguous, this.source
       );
     }

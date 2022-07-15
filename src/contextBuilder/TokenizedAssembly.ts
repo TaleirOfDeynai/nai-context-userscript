@@ -2,11 +2,10 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
-import { toImmutable } from "@utils/iterables";
 import makeCursor from "./cursors/Fragment";
-import $SequenceOps from "./assemblies/sequenceOps";
-import $QueryOps from "./assemblies/queryOps";
 import $CursorOps from "./assemblies/cursorOps";
+import $QueryOps from "./assemblies/queryOps";
+import $SequenceOps from "./assemblies/sequenceOps";
 import $TextSplitterService from "./TextSplitterService";
 import $FragmentAssembly from "./FragmentAssembly";
 import $ContentAssembly from "./ContentAssembly";
@@ -31,9 +30,9 @@ const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const { FragmentAssembly } = $FragmentAssembly(require);
   const { ContentAssembly } = $ContentAssembly(require);
-  const seqOps = $SequenceOps(require);
-  const queryOps = $QueryOps(require);
   const cursorOps = $CursorOps(require);
+  const queryOps = $QueryOps(require);
+  const seqOps = $SequenceOps(require);
 
   // I'm reminded why I absolutely HATE classes...  HATE!  HATE!
   // If the word "hate" were written on every micro-angstrom of my...
@@ -229,19 +228,19 @@ const theModule = usModule((require, exports) => {
       // the suffix on the assembly before the cut or the prefix after the cut.
       // Replace them with empty fragments, as needed.
       const { prefix, suffix } = this;
-      const afterPrefix = !prefix.content ? prefix : ss.createFragment("", 0, prefix);
-      const beforeSuffix = !suffix.content ? suffix : ss.createFragment("", 0, suffix);
+      const afterPrefix = ss.asEmptyFragment(prefix);
+      const beforeSuffix = ss.asEmptyFragment(suffix);
 
       // Because we're changing the prefix and suffix, we're going to invoke
       // the constructor directly instead of using `fromDerived`.
       return [
         new TokenizedAssembly(
-          prefix, toImmutable(beforeCut), beforeSuffix,
+          prefix, beforeCut, beforeSuffix,
           beforeTokens, this.#codec,
           this.isContiguous, this.source
         ),
         new TokenizedAssembly(
-          afterPrefix, toImmutable(afterCut), suffix,
+          afterPrefix, afterCut, suffix,
           afterTokens, this.#codec,
           this.isContiguous, this.source
         )
@@ -279,7 +278,7 @@ const theModule = usModule((require, exports) => {
           tokensIn,
           this.text
         );
-        return [ss.createFragment("", 0, prefix), theTokens];
+        return [ss.asEmptyFragment(prefix), theTokens];
       });
 
       // This must use the tokens from the prefix and adjust the full-text
@@ -298,7 +297,7 @@ const theModule = usModule((require, exports) => {
           tokensIn,
           [...this.content, this.suffix].map(ss.asContent).join("")
         );
-        return [ss.createFragment("", 0, suffix), theTokens];
+        return [ss.asEmptyFragment(suffix), theTokens];
       });
 
       return new TokenizedAssembly(
