@@ -7,14 +7,14 @@ import $CursorOps from "./assemblies/cursorOps";
 import $QueryOps from "./assemblies/queryOps";
 import $SequenceOps from "./assemblies/sequenceOps";
 import $TextSplitterService from "./TextSplitterService";
-import $FragmentAssembly from "./FragmentAssembly";
-import $ContentAssembly from "./ContentAssembly";
+import $OldFragmentAssembly from "./FragmentAssembly";
+import $FragmentAssembly from "./assemblies/Fragment";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { TextFragment } from "./TextSplitterService";
-import type { ContinuityOptions } from "./ContentAssembly";
+import type { ContinuityOptions } from "./assemblies/Fragment";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
+import type { IFragmentAssembly } from "./assemblies/_interfaces";
 import type { Cursor } from "./cursors";
 
 export interface DerivedOptions extends ContinuityOptions {
@@ -28,8 +28,8 @@ const TOKEN_MENDING_RANGE = 5;
 
 const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
-  const { FragmentAssembly } = $FragmentAssembly(require);
-  const { ContentAssembly } = $ContentAssembly(require);
+  const { FragmentAssembly } = $OldFragmentAssembly(require);
+  const fragAssembly = $FragmentAssembly(require);
   const cursorOps = $CursorOps(require);
   const queryOps = $QueryOps(require);
   const seqOps = $SequenceOps(require);
@@ -159,7 +159,7 @@ const theModule = usModule((require, exports) => {
       });
 
       // Being lazy; this will do all the checks we want done.
-      const theDerived = ContentAssembly.fromDerived(
+      const theDerived = fragAssembly.fromDerived(
         fragments, originAssembly, { assumeContinuity: true }
       );
 

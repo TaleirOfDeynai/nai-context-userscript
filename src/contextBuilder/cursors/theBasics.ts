@@ -6,7 +6,7 @@ import fullText, { FullTextCursor } from "./FullText";
 
 import type { TextFragment } from "../TextSplitterService";
 import type { MatchResult } from "../MatcherService";
-import type { IFragmentAssembly } from "../assemblies/Fragment";
+import type { Assembly } from "../assemblies";
 
 /** Represents a range from one {@link FragmentCursor} to another. */
 export type Selection = readonly [FragmentCursor, FragmentCursor];
@@ -23,7 +23,7 @@ export default usModule((require, exports) => {
 
   /** Creates a cursor of the given type. */
   const create = (
-    origin: IFragmentAssembly,
+    origin: Assembly.IFragment,
     offset: number,
     type: CursorType
   ): AnyCursor => {
@@ -61,7 +61,7 @@ export default usModule((require, exports) => {
    */
   const toSelection = (
     match: MatchResult,
-    origin: IFragmentAssembly,
+    origin: Assembly.IFragment,
     type: CursorType
   ): Selection => {
     const { index, length } = match;

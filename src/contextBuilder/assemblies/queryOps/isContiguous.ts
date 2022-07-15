@@ -2,7 +2,7 @@ import { usModule } from "@utils/usModule";
 import { isBoolean } from "@utils/is";
 import $TextSplitterService from "../../TextSplitterService";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);

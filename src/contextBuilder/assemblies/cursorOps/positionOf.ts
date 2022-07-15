@@ -5,7 +5,7 @@ import $Cursors from "../../cursors";
 import $QueryOps from "../queryOps";
 
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export type CursorPosition = "prefix" | "content" | "suffix" | "unrelated";
 

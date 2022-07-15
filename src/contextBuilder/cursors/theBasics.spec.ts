@@ -8,9 +8,9 @@ import { dew } from "@utils/dew";
 import $TheBasics from "./theBasics";
 
 import type { MatchResult } from "../MatcherService";
-import type { IFragmentAssembly } from "../assemblies/Fragment";
+import type { Assembly } from "../assemblies";
 
-const mockOrigin: IFragmentAssembly = dew(() => {
+const mockOrigin: Assembly.IFragment = dew(() => {
   const prefix = mockFragment("", 0);
   const content = [mockFragment(mockStory, 10)];
   const suffix = mockFragment("", mockStory.length + 20);
@@ -50,7 +50,7 @@ describe("isCursorInside", () => {
 describe("asFragmentCursor", () => {
   const { asFragmentCursor } = $TheBasics(fakeRequire);
 
-  // This relies heavily on `FragmentAssembly.fromFullText`.
+  // This relies heavily on `cursorOps.fromFullText`.
   // We're only going to test that it attempts the conversion when
   // it is necessary, so we're not double-testing.
 

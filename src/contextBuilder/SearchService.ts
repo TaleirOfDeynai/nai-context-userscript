@@ -27,8 +27,8 @@ import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherFn, MatchResult as TextResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
-import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContextContent } from "./ContextContent";
+import type { Assembly } from "./assemblies";
 import type { Cursor } from "./cursors";
 
 export type KeyedContent = ContextContent<IContextField & { keys: string[] }>;
@@ -217,7 +217,7 @@ export default usModule((require, exports) => {
   }
 
   const toAssemblyResult =
-    (assembly: IFragmentAssembly, type: Cursor.Any["type"]) =>
+    (assembly: Assembly.IFragment, type: Cursor.Any["type"]) =>
     (theMatch: TextResult): AssemblyResult => {
       return Object.freeze(Object.assign(Object.create(theMatch), {
         selection: cursors.toSelection(theMatch, assembly, type)
@@ -230,7 +230,7 @@ export default usModule((require, exports) => {
    */
   function search(
     /** The assembly to search. */
-    assembly: IFragmentAssembly,
+    assembly: Assembly.IFragment,
     /** The set of keys, or something that can provide keys, to match with. */
     matchable: Matchable,
     /**
@@ -284,7 +284,7 @@ export default usModule((require, exports) => {
    */
   function searchForLore<T extends KeyedContent>(
     /** The text-like thing to search. */
-    assembly: IFragmentAssembly,
+    assembly: Assembly.IFragment,
     /** The entries to include in the search. */
     entries: T[],
     /**

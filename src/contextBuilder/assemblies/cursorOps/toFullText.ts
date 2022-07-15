@@ -6,7 +6,7 @@ import $QueryOps from "../queryOps";
 import $IsFoundIn from "./isFoundIn";
 
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);

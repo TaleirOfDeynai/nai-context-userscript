@@ -11,7 +11,7 @@ import type { UndefOr } from "@utils/utility-types";
 import type { ReduceFn } from "@utils/iterables";
 import type { TextFragment } from "../../TextSplitterService";
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 type OffsetResult = [offset: number, distance: number];
 

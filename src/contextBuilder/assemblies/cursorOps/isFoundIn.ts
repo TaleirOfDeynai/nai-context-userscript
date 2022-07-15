@@ -4,7 +4,7 @@ import $Cursors from "../../cursors";
 import $QueryOps from "../queryOps";
 
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export default usModule((require, exports) => {
   const cursors = $Cursors(require);

@@ -5,7 +5,7 @@ import { toImmutable } from "@utils/iterables";
 import { isSource } from "../queryOps/theBasics";
 
 import type { TextFragment } from "../../TextSplitterService";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export interface ISafeAssembly extends IFragmentAssembly {
   content: readonly TextFragment[];

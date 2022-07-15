@@ -3,7 +3,7 @@ import { toImmutable } from "@utils/iterables";
 import $TextSplitterService from "../../TextSplitterService";
 import $QueryOps from "../queryOps";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export type AffixSplitResult = Pick<IFragmentAssembly, "prefix" | "suffix">;
 

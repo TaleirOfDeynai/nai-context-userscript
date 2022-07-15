@@ -1,18 +1,18 @@
 import type { TextFragment } from "../TextSplitterService";
-import type { IFragmentAssembly } from "../assemblies/Fragment";
+import type { Assembly } from "../assemblies";
 
 /**
  * A cursor targeting a position in a specific {@link TextFragment}
- * from the {@link IFragmentAssembly} indicated as the `origin`.
+ * from the {@link Assembly.IFragment} indicated as the `origin`.
  */
 export interface FragmentCursor {
   readonly type: "fragment";
-  readonly origin: IFragmentAssembly;
+  readonly origin: Assembly.IFragment;
   readonly offset: number;
 }
 
 /** Creates a fragment cursor. */
-const fragment = (origin: IFragmentAssembly, offset: number): FragmentCursor =>
+const fragment = (origin: Assembly.IFragment, offset: number): FragmentCursor =>
   Object.freeze({ type: "fragment", origin, offset });
 
 export default fragment;

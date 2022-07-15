@@ -4,7 +4,7 @@ import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
 
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 import type { TextFragment } from "../../TextSplitterService";
 import type { IterDirection } from "./cursorForDir";
 

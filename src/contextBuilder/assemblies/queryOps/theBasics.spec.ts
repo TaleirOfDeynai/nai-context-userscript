@@ -4,7 +4,7 @@ import { generateData, NO_AFFIX } from "@spec/helpers-assembly";
 import { iterReverse } from "@utils/iterables";
 import * as theBasics from "./theBasics";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 describe("iterateOn", () => {
   describe("in order", () => {

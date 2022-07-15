@@ -3,7 +3,7 @@ import $QueryOps from "../queryOps";
 import $CursorOps from "../cursorOps";
 
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 import type { IterDirection } from "./cursorForDir";
 import type { PositionResult } from "./locateInsertion";
 
@@ -19,8 +19,11 @@ export default usModule((require, exports) => {
    * If the cursor could go either way, it will favor toward the top.
    */
   const shuntOut = (
+    /** The assembly to work with. */
     assembly: IFragmentAssembly,
+    /** The cursor defining the location we're being shunt from. */
     cursor: Cursor.Fragment,
+    /** The shunt mode to use. */
     mode: IterDirection | "nearest" = "nearest"
   ): PositionResult => {
     // We actually want to convert this to a full-text cursor, as it

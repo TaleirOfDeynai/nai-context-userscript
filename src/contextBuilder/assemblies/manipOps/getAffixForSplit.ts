@@ -1,7 +1,7 @@
 import { usModule } from "@utils/usModule";
 import $TextSplitterService from "../../TextSplitterService";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export type AffixSplitResult = Pick<IFragmentAssembly, "prefix" | "suffix">;
 

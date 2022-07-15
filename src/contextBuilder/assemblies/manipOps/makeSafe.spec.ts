@@ -7,7 +7,7 @@ import { isArray, isPojo } from "@utils/is";
 import { iterReverse } from "@utils/iterables";
 import makeSafe from "./makeSafe";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 describe("makeSafe", () => {
   describe("assertions", () => {

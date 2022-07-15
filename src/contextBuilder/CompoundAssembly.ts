@@ -11,25 +11,23 @@ import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
 import type { BudgetedSource } from "./rx/3-selection/_shared";
 import type * as PosOps from "./assemblies/positionOps";
-import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { ContextContent } from "./ContextContent";
-import type { FragmentAssembly } from "./FragmentAssembly";
-import type { TokenizedAssembly } from "./TokenizedAssembly";
 import type { AssemblyResultMap } from "./SearchService";
 import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
+import type { Assembly } from "./assemblies";
 import type { Cursor } from "./cursors";
 
 /** The bare minimum needed for an assembly. */
 interface AssemblyLike {
-  readonly text: TokenizedAssembly["text"];
-  readonly tokens: TokenizedAssembly["tokens"];
-  readonly source: FragmentAssembly["source"];
+  readonly text: string;
+  readonly tokens: Tokens;
+  readonly source: unknown;
 
-  isFoundIn: FragmentAssembly["isFoundIn"];
-  entryPosition: FragmentAssembly["entryPosition"];
-  locateInsertion: FragmentAssembly["locateInsertion"];
-  shuntOut: FragmentAssembly["shuntOut"];
-  splitAt?: TokenizedAssembly["splitAt"];
+  isFoundIn: Assembly.Fragment["isFoundIn"];
+  entryPosition: Assembly.Fragment["entryPosition"];
+  locateInsertion: Assembly.Fragment["locateInsertion"];
+  shuntOut: Assembly.Fragment["shuntOut"];
+  splitAt?: Assembly.Tokenized["splitAt"];
 }
 
 /** The bare minimum needed for content. */
@@ -116,7 +114,7 @@ const theModule = usModule((require, exports) => {
    * consumed tokens and handling the insertion of {@link ContextContent}
    * into the location it needs to be.
    * 
-   * This is essentially a collection of {@link TokenizedAssembly}.
+   * This is essentially a collection of {@link Assembly.Tokenized}.
    */
   class CompoundAssembly {
     constructor(codec: AugmentedTokenCodec, tokenBudget: number) {
@@ -132,7 +130,7 @@ const theModule = usModule((require, exports) => {
     #codec: AugmentedTokenCodec;
     #fragments: AssemblyLike[];
     #knownSources: Set<SourceLike>;
-    #textToSource: Map<IFragmentAssembly, SourceLike>;
+    #textToSource: Map<unknown, SourceLike>;
 
     /** The full, concatenated text of the assembly. */
     get text(): string {
@@ -164,7 +162,7 @@ const theModule = usModule((require, exports) => {
       this.#fragments = newFrags;
       this.#tokens = tokens;
       this.#knownSources.add(source);
-      this.#textToSource.set(inserted.source, source);
+      this.#textToSource.set(inserted.source ?? inserted, source);
 
       // Make sure we clean up the entry.
       await source.entry.finalize?.();
@@ -488,7 +486,7 @@ const theModule = usModule((require, exports) => {
      * Maps an assembly back to its {@link SourceLike}.
      */
     findSource(text: AssemblyLike): UndefOr<SourceLike> {
-      return this.#textToSource.get(text.source);
+      return this.#textToSource.get(text.source ?? text);
     }
 
     /**

@@ -10,7 +10,7 @@ import $ContentCursorOf from "../cursorOps/contentCursorOf";
 import $SplitAt from "./splitAt";
 
 import type { SpyInstance } from "jest-mock";
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 type SplitResult = [IFragmentAssembly, IFragmentAssembly];
 

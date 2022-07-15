@@ -2,7 +2,7 @@ import { mockFragment, toFragmentSeq } from "@spec/helpers-splitter";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
-import type { IFragmentAssembly } from "@src/contextBuilder/assemblies/Fragment";
+import type { Assembly } from "@src/contextBuilder/assemblies";
 import type { Cursor } from "@src/contextBuilder/cursors";
 
 export interface GenerateOpts {
@@ -17,8 +17,8 @@ interface BaseData {
   suffix: TextFragment;
 }
 
-/** This fits the minimum {@link IFragmentAssembly} interface. */
-export interface AssemblyData extends BaseData, Omit<IFragmentAssembly, "content"> {
+/** This fits the minimum {@link Assembly.IFragment} interface. */
+export interface AssemblyData extends BaseData, Omit<Assembly.IFragment, "content"> {
   /** The maximum offset of the content. */
   maxOffset: number;
   /** Short-hand to create a fragment cursor. */
@@ -37,7 +37,7 @@ export interface BoundCursors {
 export interface AssemblyInit extends BaseData {
   maxOffset?: number;
   isContiguous?: boolean;
-  source?: IFragmentAssembly | null;
+  source?: Assembly.IFragment | null;
 }
 
 /**

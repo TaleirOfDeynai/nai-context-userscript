@@ -7,12 +7,12 @@ import $CursorOps from "./assemblies/cursorOps";
 import $PositionOps from "./assemblies/positionOps";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { IFragmentAssembly } from "./assemblies/Fragment";
 import type { AssemblyStats } from "./assemblies/sequenceOps";
 import type { CursorPosition } from "./assemblies/cursorOps";
 import type * as PosOps from "./assemblies/positionOps";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimType } from "./TrimmingProviders";
+import type { Assembly } from "./assemblies";
 import type { Cursor } from "./cursors";
 
 const theModule = usModule((require, exports) => {
@@ -34,13 +34,13 @@ const theModule = usModule((require, exports) => {
    * Finally, they can be split at specific offsets using an
    * {@link Cursor.Any}, which is handy for assembly.
    */
-  abstract class FragmentAssembly implements IFragmentAssembly, Iterable<TextFragment> {
+  abstract class FragmentAssembly implements Assembly.IFragment, Iterable<TextFragment> {
     constructor(
       prefix: TextFragment,
       content: Iterable<TextFragment>,
       suffix: TextFragment,
       isContiguous: boolean,
-      source: IFragmentAssembly | null
+      source: Assembly.IFragment | null
     ) {
       assert(
         "Expected `source` to be a source assembly.",
@@ -108,10 +108,10 @@ const theModule = usModule((require, exports) => {
      * The source of this assembly.  If `isSource` is `true`, this
      * will return itself, so this will always get a source fragment.
      */
-    get source(): IFragmentAssembly {
+    get source(): Assembly.IFragment {
       return this.#source ?? this;
     }
-    readonly #source: IFragmentAssembly | null;
+    readonly #source: Assembly.IFragment | null;
 
     /** Whether this assembly was generated directly from a source text. */
     get isSource(): boolean {
@@ -336,7 +336,7 @@ const theModule = usModule((require, exports) => {
      * If they are related, {@link Cursor.Any text cursors} for one assembly
      * should have meaning to the other.
      */
-    isRelatedTo(otherAssembly: IFragmentAssembly) {
+    isRelatedTo(otherAssembly: Assembly.IFragment) {
       return queryOps.checkRelated(this, otherAssembly);
     }
   }

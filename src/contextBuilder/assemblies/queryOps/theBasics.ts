@@ -1,7 +1,7 @@
 import { isString } from "@utils/is";
 import { iterReverse, isEmpty as isIterEmpty } from "@utils/iterables";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 /** Iterates through any `assembly`.  May be `reversed`. */
 export function* iterateOn(

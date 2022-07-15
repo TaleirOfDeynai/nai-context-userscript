@@ -1,161 +1,306 @@
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
+import { dew } from "@utils/dew";
+import { assert } from "@utils/assert";
+import { chain, toImmutable, mapIter } from "@utils/iterables";
+import $TextSplitterService from "../TextSplitterService";
+import $CursorOps from "./cursorOps";
 import $ManipOps from "./manipOps";
+import $PositionOps from "./positionOps";
 import $QueryOps from "./queryOps";
+import $BaseAssembly from "./Base";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { TextFragment } from "../TextSplitterService";
-import type { AssemblyStats } from "./sequenceOps";
-import type { ISafeAssembly } from "./manipOps";
-
-// For JSDoc links...
+import type { ContextConfig } from "@nai/Lorebook";
+import type { TextFragment, TextOrFragment } from "../TextSplitterService";
+import type { TrimType } from "../TrimmingProviders";
 import type { Cursor } from "../cursors";
+import type { IFragmentAssembly } from "./_interfaces";
+import type * as PosOps from "./positionOps";
 
-export interface IFragmentAssembly {
+export interface ContinuityOptions {
   /**
-   * The prefix fragment.
+   * When the source content is a collection of fragments, whether to make
+   * assumptions on if the fragments are contiguous.
    * 
-   * May be an empty fragment.
+   * Setting this to `true` can save time when creating a lot of derived
+   * assemblies by skipping the iteration to check for continuity in the
+   * fragments.
    */
-  prefix: TextFragment;
-  /**
-   * The content fragments.
-   * 
-   * May be an empty iterable, but should not contain fragments
-   * with empty content (the operators are not designed for that).
-   */
-  content: Iterable<TextFragment>;
-  /**
-   * The suffix fragment.
-   * 
-   * May be an empty fragment.
-   */
-  suffix: TextFragment;
-  /**
-   * The source of the assembly.
-   * 
-   * By convention, if this property returns this assembly, the
-   * assembly is considered to be the source of its own content.
-   * 
-   * When nullish, it is treated as its own source by default.
-   */
-  readonly source?: IFragmentAssembly;
-
-  // These properties may be set for caching purposes.
-
-  /** The full, concatenated text of the assembly. */
-  readonly text?: string;
-  /** The stats for this assembly. */
-  readonly stats?: AssemblyStats;
-  /** The stats for only the {@link content} portion of the assembly. */
-  readonly contentStats?: AssemblyStats;
-  /** Whether `content` is contiguous. */
-  readonly isContiguous?: boolean;
+  assumeContinuity?: boolean;
 }
 
+export interface MakeAssemblyOptions extends ContinuityOptions {
+  prefix?: ContextConfig["prefix"];
+  suffix?: ContextConfig["suffix"];
+}
+
+const defaultMakeOptions: Required<MakeAssemblyOptions> = {
+  prefix: "",
+  suffix: "",
+  assumeContinuity: false
+};
+
 const theModule = usModule((require, exports) => {
+  const ss = $TextSplitterService(require);
+  const cursorOps = $CursorOps(require);
   const manipOps = $ManipOps(require);
+  const posOps = $PositionOps(require);
   const queryOps = $QueryOps(require);
+  const { BaseAssembly } = $BaseAssembly(require);
 
   /**
-   * An abstraction that standardizes how text is assembled with prefixes
-   * and suffixes taken into account.
+   * A class fitting {@link IFragmentAssembly} that provides caching facilities
+   * and convenient access to the limited set of operators used for context
+   * content sourcing.
    * 
-   * It aids searching by ensuring that a {@link Cursor.Any} for some source
-   * text will retain consistent offsets as it travels through various parts
-   * of the program.
-   * 
-   * These are also used for trimming and filtering, as the `content` can
-   * be any number of fragments, even if non-contiguous or out-of-order.
-   * 
-   * Finally, they can be split at specific offsets using a
-   * {@link Cursor.Fragment}, which is handy for assembly.
+   * It essentially acts as a wrapper around a plain-object assembly.
    */
-  class FragmentAssembly implements IFragmentAssembly, Iterable<TextFragment> {
+  class FragmentAssembly extends BaseAssembly {
     constructor(
       wrapped: IFragmentAssembly,
       isContiguous: boolean
     ) {
-      // A couple of things: if we were given a `FragmentAssembly`, we'll
-      // just reuse its wrapped instance.  Otherwise, we need to safe it.
-      this.#wrapped
-        = wrapped instanceof FragmentAssembly ? wrapped.#wrapped
-        : manipOps.makeSafe(wrapped);
-
-      this.#isContiguous = isContiguous;
+      super(wrapped, isContiguous);
     }
 
-    #wrapped: ISafeAssembly;
-
-    /** The prefix fragment. */
-    get prefix() { return this.#wrapped.prefix; }
-
-    /** The content fragments. */
-    get content() { return this.#wrapped.content; }
-
-    /** The suffix fragment. */
-    get suffix() { return this.#wrapped.suffix; }
-
-    /** The full, concatenated text of the assembly. */
-    get text(): string {
-      return this.#text ??= queryOps.getText(this, true);
-    }
-    #text: UndefOr<string> = undefined;
-
-    /** The stats for this assembly. */
-    get stats(): AssemblyStats {
-      return this.#assemblyStats ??= queryOps.getStats(this, true);
-    }
-    #assemblyStats: UndefOr<AssemblyStats> = undefined;
-
-    /** The stats for only the {@link content} portion of the assembly. */
-    get contentStats(): AssemblyStats {
-      return this.#contentStats ??= queryOps.getContentStats(this, true);
-    }
-    #contentStats: UndefOr<AssemblyStats> = undefined;
-
-    /**
-     * The source of this assembly.  If `isSource` is `true`, this
-     * will return itself, so this will always get a source assembly.
-     */
-    get source(): IFragmentAssembly {
-      const source = queryOps.getSource(this.#wrapped);
-      return source === this.#wrapped ? this : source;
+    /** Bound version of {@link cursorOps.isFoundIn}. */
+    isFoundIn(cursor: Cursor.Fragment): boolean {
+      return cursorOps.isFoundIn(this, cursor);
     }
 
-    /** Whether this assembly was generated directly from a source text. */
-    get isSource(): boolean {
-      return this.source === this;
+    /** Bound version of {@link posOps.entryPosition}. */
+    entryPosition(
+      /** Which direction to iterate. */
+      direction: PosOps.IterDirection,
+      /** The type of insertion to be done. */
+      insertionType?: TrimType
+    ): Cursor.Fragment {
+      return posOps.entryPosition(this, direction, insertionType);
     }
 
-    /** Whether either `prefix` and `suffix` are non-empty. */
-    get isAffixed() {
-      return queryOps.isAffixed(this.#wrapped);
+    /** Bound version of {@link posOps.locateInsertion}. */
+    locateInsertion(
+      /** The type of insertion being done. */
+      insertionType: TrimType,
+      /** An object describing how to locate the insertion. */
+      positionData: Readonly<PosOps.InsertionPosition>
+    ): PosOps.PositionResult {
+      return posOps.locateInsertion(this, insertionType, positionData);
     }
 
-    /** Whether `content` is contiguous. */
-    get isContiguous() {
-      return this.#isContiguous;
+    /** Bound version of {@link posOps.shuntOut}. */
+    shuntOut(
+      /** The cursor defining the location we're being shunt from. */
+      cursor: Cursor.Fragment,
+      /** The shunt mode to use. */
+      mode?: PosOps.IterDirection | "nearest"
+    ): PosOps.PositionResult {
+      return posOps.shuntOut(this, cursor, mode);
     }
-    readonly #isContiguous: boolean;
 
-    /** Whether this assembly is entirely empty or not. */
-    get isEmpty() {
-      return !this.isAffixed && !this.content.length;
+    /** Bound version of {@link manipOps.splitAt}. */
+    splitAt(
+      /** The cursor demarking the position of the cut. */
+      cursor: Cursor.Fragment,
+      /**
+       * If `true` and no fragment exists in the assembly for the position,
+       * the next best position will be used instead as a fallback.
+       */
+      loose: boolean = false
+    ): UndefOr<[FragmentAssembly, FragmentAssembly]> {
+      return manipOps.splitAt(this, cursor, loose)?.map((a) => {
+        return new FragmentAssembly(a, this.isContiguous);
+      }) as [FragmentAssembly, FragmentAssembly];
     }
 
-    /**
-     * Iterator that yields all fragments that are not empty.  This can
-     * include both the {@link prefix} and the {@link suffix}.
-     */
-    [Symbol.iterator](): Iterator<TextFragment> {
-      return queryOps.iterateOn(this.#wrapped);
+    /** Bound version of {@link manipOps.removeAffix}. */
+    asOnlyContent(): FragmentAssembly {
+      const result = manipOps.removeAffix(this);
+
+      // If we're already only-content, `removeAffix` will return its input.
+      if (result === this) return this;
+
+      return new FragmentAssembly(result, this.isContiguous);
     }
   }
 
+  /**
+   * Checks if the given `assembly` is a {@link FragmentAssembly}.
+   * 
+   * Specifically, the class; it may still be an object that fits the
+   * interface, but it's not a {@link FragmentAssembly}.
+   */
+  function isInstance(assembly: unknown): assembly is FragmentAssembly {
+    return assembly instanceof FragmentAssembly;
+  }
+
+  /**
+   * Converts the given assembly into a {@link FragmentAssembly}.
+   */
+  function castTo(assembly: IFragmentAssembly) {
+    if (isInstance(assembly)) return assembly;
+    return new FragmentAssembly(assembly, queryOps.isContiguous(assembly));
+  }
+
+  /**
+   * Creates a new source assembly from a single string or {@link TextFragment}.
+   */
+  function fromSource(sourceText: TextOrFragment, options?: MakeAssemblyOptions) {
+    const { prefix, suffix } = { ...defaultMakeOptions, ...options };
+
+    const prefixFragment = ss.createFragment(prefix, 0);
+
+    const sourceFragment = dew(() => {
+      let content: string;
+      let offset = ss.afterFragment(prefixFragment);
+      if (typeof sourceText === "string") content = sourceText;
+      else {
+        content = sourceText.content;
+        offset += sourceText.offset;
+      }
+      
+      if (!content) return undefined;
+      return ss.createFragment(content, offset);
+    });
+
+    const suffixOffset = ss.afterFragment(sourceFragment ?? prefixFragment);
+    const suffixFragment = ss.createFragment(suffix, suffixOffset);
+
+    const rawAssembly = {
+      prefix: prefixFragment,
+      content: toImmutable(sourceFragment ? [sourceFragment] : []),
+      suffix: suffixFragment,
+    };
+
+    // Can only be contiguous.
+    return new FragmentAssembly(rawAssembly, true);
+  }
+
+  /**
+   * Creates a new source assembly from a collection of {@link TextFragment}.
+   */
+  function fromFragments(sourceFrags: Iterable<TextFragment>, options?: MakeAssemblyOptions) {
+    const { prefix, suffix, assumeContinuity } = { ...defaultMakeOptions, ...options };
+
+    const adjustedFrags = chain(sourceFrags)
+      .filter((f) => Boolean(f.content))
+      .thru((frags) => {
+        if (!prefix) return frags;
+        return mapIter(
+          frags,
+          (f) => ss.createFragment(f.content, prefix.length + f.offset)
+        );
+      })
+      .value(toImmutable);
+
+    const maxOffset = chain(adjustedFrags)
+      .map(ss.afterFragment)
+      .reduce(0, Math.max);
+
+    const rawAssembly = {
+      prefix: ss.createFragment(prefix, 0),
+      content: adjustedFrags,
+      suffix: ss.createFragment(suffix, maxOffset),
+    };
+
+    return new FragmentAssembly(
+      rawAssembly,
+      assumeContinuity ? true : ss.isContiguous(adjustedFrags)
+    );
+  }
+
+  /**
+   * Creates a new assembly derived from the given `originAssembly`.  The given
+   * `fragments` should have originated from the origin assembly's
+   * {@link IFragmentAssembly.content content}.
+   * 
+   * If `fragments` contains the origin's `prefix` and `suffix`, they are
+   * filtered out automatically.  This is because `FragmentAssembly` is itself
+   * an `Iterable<TextFragment>` and sometimes you just wanna apply a simple
+   * transformation on its fragments, like a filter.
+   */
+  function fromDerived(
+    /** The fragments making up the derivative's content. */
+    fragments: Iterable<TextFragment>,
+    /**
+     * The assembly whose fragments were used to make the given fragments.
+     * This assembly does not need to be a source assembly.
+     */
+    originAssembly: IFragmentAssembly,
+    /**
+     * Whether to make assumptions on if the fragments are contiguous.
+     * 
+     * Setting this to `true` can save time when creating a lot of derived
+     * assemblies by skipping the iteration to check for continuity in the
+     * fragments.
+     */
+    options?: ContinuityOptions
+  ) {
+    // Fast path: the underlying data of `FragmentAssembly` is immutable, so if
+    // we're given one, just spit it right back out.
+    if (isInstance(fragments)) {
+      // But make sure we're still internally consistent.
+      assert(
+        "Expected the assembly to be related to `originAssembly`.",
+        queryOps.checkRelated(fragments, originAssembly)
+      );
+      return fragments;
+    }
+
+    // Make sure we actually have the source assembly.
+    const source = queryOps.getSource(originAssembly);
+    // Use the given instance's prefix and suffix, though.  It may now
+    // differ from the source due to splitting and the like.
+    const { prefix, suffix } = originAssembly;
+
+    const localFrags = chain(fragments)
+      // Just make sure the prefix and suffix fragments are not included.
+      .filter((v) => v !== prefix && v !== suffix)
+      .value(toImmutable);
+
+    const assumeContinuity = options?.assumeContinuity ?? false;
+
+    const assembly = new FragmentAssembly(
+      { prefix, content: localFrags, suffix, source },
+      // We'll assume the derived assembly has the same continuity as
+      // its origin assembly.
+      assumeContinuity ? queryOps.isContiguous(originAssembly) : ss.isContiguous(localFrags)
+    );
+
+    // Also sanity check the content if thorough logging is enabled.
+    if (usConfig.debugLogging || usConfig.inTestEnv) {
+      const oldStats = queryOps.getContentStats(source);
+      const newStats = assembly.contentStats;
+      assert(
+        "Expected minimum offset to be in range of source.",
+        newStats.minOffset >= oldStats.minOffset
+      );
+      assert(
+        "Expected maximum offset to be in range of source.",
+        newStats.maxOffset <= oldStats.maxOffset
+      );
+    }
+
+    return assembly;
+  }
+
   return Object.assign(exports, {
-    FragmentAssembly
+    isInstance,
+    castTo,
+    fromSource,
+    fromFragments,
+    fromDerived
   });
 });
 
 export default theModule;
-export type FragmentAssembly = InstanceType<ReturnType<typeof theModule>["FragmentAssembly"]>;
+
+// Perform some TypeScript sorcery to get the class' instance type.
+namespace Sorcery {
+  type TheModule = ReturnType<typeof theModule>;
+  type CastToFn = TheModule["castTo"];
+  export type FragmentAssembly = ReturnType<CastToFn>;
+}
+
+export type FragmentAssembly = Sorcery.FragmentAssembly;

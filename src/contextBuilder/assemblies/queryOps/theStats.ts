@@ -4,7 +4,7 @@ import $TextSplitterService from "../../TextSplitterService";
 import $GetStats from "../sequenceOps/getStats";
 import { iterateOn, getSource, isAffixed } from "./theBasics";
 
-import type { IFragmentAssembly } from "../Fragment";
+import type { IFragmentAssembly } from "../_interfaces";
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);

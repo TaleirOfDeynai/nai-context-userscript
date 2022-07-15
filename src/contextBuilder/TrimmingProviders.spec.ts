@@ -8,9 +8,9 @@ import { dew } from "@utils/dew";
 import { chain, interweave, flatMap, iterReverse, skipRight } from "@utils/iterables";
 import $TrimmingProviders from "./TrimmingProviders";
 
-import type { FragmentAssembly } from "./FragmentAssembly";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimProvider, SplitterFn } from "./TrimmingProviders";
+import type { Assembly } from "./assemblies";
 
 const providers = $TrimmingProviders(fakeRequire);
 
@@ -122,7 +122,7 @@ describe("comment removal", () => {
   });
 
   // These currently only interact with the `content` property.
-  const mockAssembly = (lines: readonly string[]): FragmentAssembly => {
+  const mockAssembly = (lines: readonly string[]): Assembly.Fragment => {
     const content = chain(lines)
       .thru((iter) => interweave("\n", iter))
       .value((iter) => Object.freeze([mockFragment([...iter].join(""), 10)]));
