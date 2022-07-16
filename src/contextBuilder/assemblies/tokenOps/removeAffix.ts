@@ -1,5 +1,4 @@
 import { usModule } from "@utils/usModule";
-import { dew } from "@utils/dew";
 import { assertExists } from "@utils/assert";
 import { protoExtend } from "@utils/object";
 import { isEmpty, first, last } from "@utils/iterables";
@@ -9,7 +8,7 @@ import $ManipOps from "../manipOps";
 import $QueryOps from "../queryOps";
 import $SplitAt from "./splitAt";
 
-import type { AugmentedTokenCodec, Tokens } from "../../TokenizerService";
+import type { AugmentedTokenCodec } from "../../TokenizerService";
 import type { ITokenizedAssembly } from "../_interfaces";
 
 const NO_TOKENS: Pick<ITokenizedAssembly, "tokens">
@@ -27,8 +26,8 @@ export default usModule((require, exports) => {
   ): Promise<ITokenizedAssembly> => {
     if (!assembly.prefix.content) return assembly;
 
-    // This needs to be cursor on the content, so the position after
-    // the prefix is the one before the first content fragment.
+    // This needs to be a cursor on the content, so the position
+    // after the prefix is the one before the first content fragment.
     const offset = ss.beforeFragment(first(assembly.content) as any);
     const cursor = makeCursor(assembly, offset);
     const { assemblies } = assertExists(
@@ -46,8 +45,8 @@ export default usModule((require, exports) => {
   ): Promise<ITokenizedAssembly> => {
     if (!assembly.suffix.content) return assembly;
 
-    // This needs to be cursor on the content, so the position before
-    // the suffix is the one after the last content fragment.
+    // This needs to be a cursor on the content, so the position
+    // before the suffix is the one after the last content fragment.
     const offset = ss.afterFragment(last(assembly.content) as any);
     const cursor = makeCursor(assembly, offset);
     const { assemblies } = assertExists(
@@ -83,7 +82,7 @@ export default usModule((require, exports) => {
     );
 
     // This can basically be considered two splits: one after the prefix,
-    // and one after the suffix.  We'll isolate these into their own helpers.
+    // and one before the suffix.  We'll isolate these into their own helpers.
     assembly = await removePrefix(assembly, tokenCodec);
     return await removeSuffix(assembly, tokenCodec);
   };
