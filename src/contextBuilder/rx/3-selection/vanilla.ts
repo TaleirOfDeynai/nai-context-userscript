@@ -19,6 +19,7 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { chain } from "@utils/iterables";
+import $QueryOps from "../../assemblies/queryOps";
 import { asBudgeted } from "./_shared";
 import Sorters from "./_sorters";
 
@@ -35,6 +36,8 @@ type RangedSource = ExtendField<ActivatedSource, {
 }>;
 
 export default usModule((require, exports) => {
+  const queryOps = $QueryOps(require);
+
   /**
    * Sorts all inputs and emits them in order of their formalized insertion
    * priority.  This will also calculate each emitted element's budget stats.
@@ -66,7 +69,7 @@ export default usModule((require, exports) => {
 
     return (sources: rx.Observable<ActivatedSource>) => storySource.pipe(
       rxop.exhaustMap((s) => {
-        const { maxOffset } = s.entry.searchedText.stats;
+        const { maxOffset } = queryOps.getStats(s.entry.searchedText);
 
         return sources.pipe(
           // Activation does not take search range into account.  We'll do

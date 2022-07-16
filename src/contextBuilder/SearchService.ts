@@ -18,7 +18,8 @@ import * as Iterables from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import $MatcherService from "./MatcherService";
 import $TextSplitterService from "./TextSplitterService";
-import $FragmentAssembly from "./FragmentAssembly";
+import $QueryOps from "./assemblies/queryOps";
+import $Cursors from "./cursors";
 
 import type { Maybe, UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
@@ -26,14 +27,15 @@ import type { AnyResult as NaiMatchResult } from "@nai/MatchResults";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { MatcherFn, MatchResult as TextResult } from "./MatcherService";
 import type { TextOrFragment } from "./TextSplitterService";
-import type { FragmentAssembly, AnyCursor, FragmentSelection } from "./FragmentAssembly";
 import type { ContextContent } from "./ContextContent";
+import type { Assembly } from "./assemblies";
+import type { Cursor } from "./cursors";
 
 export type KeyedContent = ContextContent<IContextField & { keys: string[] }>;
 export type Matchable = Iterable<string> | KeyedContent;
 
 export interface AssemblyResult extends TextResult {
-  readonly selection: FragmentSelection;
+  readonly selection: Cursor.Selection;
 }
 
 export type TextResultMap = Map<string, readonly TextResult[]>;
@@ -45,7 +47,8 @@ const logger = createLogger("SearchService");
 export default usModule((require, exports) => {
   const matcherService = $MatcherService(require);
   const splitterService = $TextSplitterService(require);
-  const { toSelection } = $FragmentAssembly(require);
+  const cursors = $Cursors(require);
+  const queryOps = $QueryOps(require);
 
   /** A set of texts search since the last maintenance cycle. */
   let textsSearched = new Set<string>();
@@ -214,10 +217,10 @@ export default usModule((require, exports) => {
   }
 
   const toAssemblyResult =
-    (assembly: FragmentAssembly, type: AnyCursor["type"]) =>
+    (assembly: Assembly.IFragment, type: Cursor.Any["type"]) =>
     (theMatch: TextResult): AssemblyResult => {
       return Object.freeze(Object.assign(Object.create(theMatch), {
-        selection: toSelection(theMatch, assembly, type)
+        selection: cursors.toSelection(theMatch, assembly, type)
       }));
     };
 
@@ -227,7 +230,7 @@ export default usModule((require, exports) => {
    */
   function search(
     /** The assembly to search. */
-    assembly: FragmentAssembly,
+    assembly: Assembly.IFragment,
     /** The set of keys, or something that can provide keys, to match with. */
     matchable: Matchable,
     /**
@@ -236,8 +239,8 @@ export default usModule((require, exports) => {
      */
     forceFullText = false
   ): AssemblyResultMap {
-    const fullText = assembly.fullText;
-    const lineText = forceFullText ? undefined : assembly;
+    const fullText = queryOps.getText(assembly);
+    const lineText = forceFullText ? undefined : queryOps.iterateOn(assembly);
     const results = doSearching(fullText, lineText, matchable);
     
     // We need to convert these matches into a variant using the more
@@ -281,7 +284,7 @@ export default usModule((require, exports) => {
    */
   function searchForLore<T extends KeyedContent>(
     /** The text-like thing to search. */
-    assembly: FragmentAssembly,
+    assembly: Assembly.IFragment,
     /** The entries to include in the search. */
     entries: T[],
     /**

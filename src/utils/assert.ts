@@ -1,4 +1,6 @@
+import _hasIn from "lodash/hasIn";
 import { isInstance, isNumber, isString } from "./is";
+
 import type { TypePredicate } from "./is";
 
 /**
@@ -24,13 +26,35 @@ const assertAs = <T>(msg: string, checkFn: TypePredicate<T>, value: any): T => {
 const assertExists = <T>(msg: string, value: T): Exclude<T, undefined | null> =>
   assertAs(msg, isInstance, value);
 
-type Lengthy = string | { length: number };
+type Lengthy = { length: number };
 type Sized = { size: number };
 interface Ranged {
   /** The minimum value of the range. */
   min: number,
   /** The maximum value of the range. */
   max: number
+};
+
+const isLengthy = (value: any): value is Lengthy =>
+  isString(value) || _hasIn(value, "length");
+const isSized = (value: any): value is Sized =>
+  _hasIn(value, "size");
+const hasMin = (value: unknown): value is Pick<Ranged, "min"> =>
+  _hasIn(value, "min");
+const hasMax = (value: unknown): value is Pick<Ranged, "max"> =>
+  _hasIn(value, "max");
+
+const getMin = (value: unknown): number => {
+  if (hasMin(value)) return value.min;
+  return 0;
+};
+
+const getMax = (value: unknown): number => {
+  if (isNumber(value)) return value;
+  if (isLengthy(value)) return value.length;
+  if (isSized(value)) return value.size;
+  if (hasMax(value)) return value.max;
+  throw new Error("Unsupported value type.");
 };
 
 /** Validates that `value` is between `0` and `max`. */
@@ -71,20 +95,8 @@ function assertInBounds(
   ref: number | Lengthy | Sized | Ranged,
   inclusive = false
 ) {
-  let min = 0;
-  let max = 0;
-
-  // Gotta be careful with strings, as you can't use the `in` operator
-  // on them, since they're technically a value type.
-  if (isNumber(ref)) max = ref;
-  else if (isString(ref)) max = ref.length;
-  else if ("length" in ref) max = ref.length;
-  else if ("size" in ref) max = ref.size;
-  else {
-    min = ref.min;
-    max = ref.max;
-  }
-
+  const min = getMin(ref);
+  const max = getMax(ref);
   assert(msg, value >= min && (inclusive ? value <= max : value < max));
 }
 

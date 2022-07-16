@@ -7,16 +7,15 @@ import ContextModule from "@nai/ContextModule";
 import UUID from "@nai/UUID";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TrimmingService from "./TrimmingService";
-import $ContentAssembly from "./ContentAssembly";
+import $FragmentAssembly from "./assemblies/Fragment";
+import $QueryOps from "./assemblies/queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
 import type { ContextConfig, LoreEntryConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
-import type { FragmentAssembly } from "./FragmentAssembly";
-import type { ContentAssembly } from "./ContentAssembly";
-import type { TokenizedAssembly } from "./TokenizedAssembly";
+import type { Assembly } from "./assemblies";
 
 /**
  * TODO:
@@ -24,9 +23,7 @@ import type { TokenizedAssembly } from "./TokenizedAssembly";
  *   context assembly later on.
  */
 
-type AnyAssembly = ContentAssembly | TokenizedAssembly;
-
-type InFlightTrimming = Promise<UndefOr<TokenizedAssembly>>;
+type InFlightTrimming = Promise<UndefOr<Assembly.Tokenized>>;
 
 export interface StoryContent extends IContextField {
   allowInnerInsertion: boolean;
@@ -59,9 +56,10 @@ const theModule = usModule((require, exports) => {
   const eventModule = require(EventModule);
   const { ContextField } = require(ContextModule);
   const providers = $TrimmingProviders(require);
+  const queryOps = $QueryOps(require);
 
   const { createTrimmer, execTrimTokens, trimByLength } = $TrimmingService(require);
-  const { ContentAssembly } = $ContentAssembly(require);
+  const assembly = $FragmentAssembly(require);
 
   const getBudget = ({ tokenBudget }: ContextConfig, contextParams: ContextParams) => {
     // Invalid values default to `contextSize`.
@@ -101,7 +99,7 @@ const theModule = usModule((require, exports) => {
   };
 
   /**
-   * Does the nasty business of getting the {@link FragmentAssembly} that will
+   * Does the nasty business of getting the {@link Assembly.Fragment} that will
    * be used for keyword searching.
    */
   const getSearchAssembly = dew(() => {
@@ -109,7 +107,7 @@ const theModule = usModule((require, exports) => {
       trimmer: Trimmer,
       contextConfig: ContextConfig,
       contextParams: ContextParams
-    ): Promise<AnyAssembly> => {
+    ): Promise<Assembly.AnyFragment> => {
       // For the story, we will always need to trim it to size.  What varies
       // is whether we trim by tokens or length.  We also need to sort out
       // whether to remove comments or not.
@@ -120,7 +118,7 @@ const theModule = usModule((require, exports) => {
         const result = trimByLength(trimmer.origin, contextParams.storyLength, trimConfig);
         if (result) return result;
         // Fallback to an empty story block.
-        return ContentAssembly.fromDerived([], trimmer.origin);
+        return assembly.fromDerived([], trimmer.origin);
       }
 
       const innerTrimmer = dew(() => {
@@ -140,24 +138,24 @@ const theModule = usModule((require, exports) => {
       const result = await execTrimTokens(innerTrimmer, contextParams.contextSize);
       if (result) return result;
       // Fallback to an empty story block.
-      return ContentAssembly.fromDerived([], trimmer.origin);
+      return assembly.fromDerived([], trimmer.origin);
     };
 
     const _forLore = (
       trimmer: Trimmer,
       contextParams: ContextParams
-    ): AnyAssembly => {
-      const origin = trimmer.origin as AnyAssembly;
+    ): Assembly.AnyFragment => {
+      const origin = trimmer.origin;
       // The trimmer has the unmodified origin assembly.  We only need to
       // change things up if we need to remove comments for search.
       if (!contextParams.removeComments) return origin;
-      if (!reComment.test(origin.fullText)) return origin;
+      if (!reComment.test(queryOps.getText(origin))) return origin;
       const provider = getProvider(true, "doNotTrim", contextParams);
       // The do-not-trim provider does all its work in `preProcess`.
       const fragments = provider.preProcess(origin);
       // If we get the `content` reference back, we removed nothing.
       if (fragments === origin.content) return origin;
-      return ContentAssembly.fromDerived(fragments, origin);
+      return assembly.fromDerived(fragments, origin);
     }
 
     return async (
@@ -165,7 +163,7 @@ const theModule = usModule((require, exports) => {
       trimmer: Trimmer,
       contextConfig: ContextConfig,
       contextParams: ContextParams
-    ): Promise<FragmentAssembly> => {
+    ): Promise<Assembly.AnyFragment> => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);
@@ -185,7 +183,7 @@ const theModule = usModule((require, exports) => {
 
     constructor(
       origField: T,
-      searchText: FragmentAssembly,
+      searchText: Assembly.IFragment,
       trimmer: Trimmer | ReplayTrimmer,
       contextParams: ContextParams
     ) {
@@ -211,7 +209,7 @@ const theModule = usModule((require, exports) => {
       const { maximumTrimType, trimDirection } = contextConfig;
       const provider = getProvider(false, trimDirection, contextParams);
       const trimmer = createTrimmer(
-        ContentAssembly.fromSource(text, contextConfig),
+        assembly.fromSource(text, contextConfig),
         contextParams,
         { provider, maximumTrimType, preserveEnds: false },
         // Token reservations are most likely to benefit from replay.
@@ -231,7 +229,7 @@ const theModule = usModule((require, exports) => {
       const sourceText = dew(() => {
         const ev = new eventModule.PreContextEvent(storyText);
         const handled = storyState.handleEvent(ev);
-        return ContentAssembly.fromSource(handled.event.contextText, contextConfig);
+        return assembly.fromSource(handled.event.contextText, contextConfig);
       });
       const provider = getProvider(false, trimDirection, contextParams);
       const trimmer = createTrimmer(
@@ -243,7 +241,7 @@ const theModule = usModule((require, exports) => {
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
 
       const field: StoryContent = Object.assign(
-        new ContextField(contextConfig, searchText.fullText),
+        new ContextField(contextConfig, searchText.text),
         // The story has some implied insertion rules that we're making
         // explicit here.
         { allowInnerInsertion: false, allowInsertionInside: true }
@@ -258,7 +256,7 @@ const theModule = usModule((require, exports) => {
     #contextConfig: ContextConfig;
     #trimmer: Trimmer | ReplayTrimmer;
 
-    #searchText: FragmentAssembly;
+    #searchText: Assembly.IFragment;
 
     /** Storage for the maximum token count allowed by the budget. */
     #maxTokenCount: UndefOr<number>;
@@ -296,12 +294,12 @@ const theModule = usModule((require, exports) => {
     }
 
     /** The fragment assembly used for searching. */
-    get searchedText(): FragmentAssembly {
+    get searchedText(): Assembly.IFragment {
       return this.#searchText;
     }
 
     /** The fragment assembly used for trimming/insertion. */
-    get insertedText(): FragmentAssembly {
+    get insertedText(): Assembly.IFragment {
       return this.#trimmer.origin;
     }
 

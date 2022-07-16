@@ -1,4 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
+import fakeRequire from "@spec/fakeRequire";
 import { quickString } from "@spec/quick";
 import { collection as phrasesEnglish } from "@spec/phrases-english";
 import { collection as phrasesSpanish } from "@spec/phrases-spanish";
@@ -8,19 +9,6 @@ import * as helpers from "@spec/helpers-splitter";
 
 import { chain, interweave } from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
-import AppConstants from "@nai/AppConstants";
-
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    case AppConstants: return {
-      // This influences `byLineFromEnd`.  We're setting it especially
-      // small to test its behavior without needing large bodies of
-      // text.
-      contextSize: 10
-    };
-    default: return {};
-  }
-};
 
 const textSplitter = $TextSplitterService(fakeRequire);
 
@@ -73,6 +61,20 @@ describe("asContent", () => {
 
   it("should work with fragments", () => {
     expect(asContent(testFrag)).toBe(testFrag.content);
+  });
+});
+
+describe("asEmptyFragment", () => {
+  const { asEmptyFragment } = textSplitter;
+
+  it("should produce an empty fragment with the same offset", () => {
+    const testFrag = mockFragment("Test Fragment", 10);
+    expect(asEmptyFragment(testFrag)).toEqual({ content: "", offset: 10 });
+  });
+
+  it("should reuse the fragment when already empty", () => {
+    const testFrag = mockFragment("", 10);
+    expect(asEmptyFragment(testFrag)).toBe(testFrag);
   });
 });
 

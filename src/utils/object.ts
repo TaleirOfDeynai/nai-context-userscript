@@ -14,7 +14,7 @@ type ExtendObj<T extends {}, U extends {}> = T & Readonly<{
 export function protoExtend(proto: Function, extensions: any): unknown;
 export function protoExtend<T extends {}, U extends {}>(proto: T, extensions: U): ExtendObj<T, U>;
 export function protoExtend(proto: any, extensions: any): any {
-  // Using ` Object.create` on a function causes it to no longer
+  // Using `Object.create` on a function causes it to no longer
   // be callable for some reason.  I dunno.  I guess the hidden
   // `[[Call]]` property is not inheritable for some reason.
   assert("Cannot proto-extend a function.", typeof proto !== "function");

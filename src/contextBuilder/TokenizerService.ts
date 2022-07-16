@@ -1,3 +1,4 @@
+import _hasIn from "lodash/hasIn";
 import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
@@ -83,6 +84,12 @@ export interface TokenData {
 }
 
 namespace TokenOffset {
+  /** When the offset is at the start or end of the decoded string. */
+  interface OnEnd {
+    type: "before" | "after";
+  }
+
+  /** When a single token must be split in two. */
   interface Single {
     type: "single";
     /** The data of the token. */
@@ -91,6 +98,7 @@ namespace TokenOffset {
     remainder: number;
   }
   
+  /** When the offset landed directly between two tokens. */
   interface Double {
     type: "double";
     /** The data of the token before the offset. */
@@ -101,7 +109,7 @@ namespace TokenOffset {
     remainder: 0;
   }
   
-  export type Result = Single | Double;
+  export type Result = OnEnd | Single | Double;
 }
 
 export type TokenOffsetResult = TokenOffset.Result;
@@ -118,10 +126,14 @@ export interface AugmentedTokenCodec extends AsyncTokenCodec {
    * Searches the given `tokens` to locate a range of indices in `tokens`
    * that contains the cursor at some `offset` number of characters.
    * 
-   * It returns a range, since the offset could lie between two tokens.
-   * If it does not, both elements of the returned array will be equal.
+   * If the offset lies within a token, the range will be a "single" token
+   * result with a remainder indicating how many characters into the token
+   * the offset actually lies.
    * 
-   * @todo Investigate if a binary search would be more efficient.
+   * If the offset lies between two tokens, the range will be a "double"
+   * result with a remainder of 0.
+   * 
+   * If `tokens` was empty, returns `undefined`.
    */
   findOffset(
     /** The array of tokens to search. */
@@ -480,6 +492,7 @@ export default usModule((require, exports) => {
       /** The source text of the `tokens`. */
       sourceText?: string
     ): Promise<UndefOr<TokenOffsetResult>> => {
+      // We cannot produce a helpful result with an empty array.
       if (!tokens.length) return undefined;
 
       // If we were not given the source text, we'll need to decode it.
@@ -487,7 +500,9 @@ export default usModule((require, exports) => {
 
       assertInBounds(
         "Expected `offset` to be in bounds of the source text.",
-        offset, sourceText
+        offset, sourceText,
+        // The offset at `sourceText.length` is an allowed offset.
+        true
       );
 
       // Setup our initial part.
@@ -496,6 +511,12 @@ export default usModule((require, exports) => {
         tokens,
         fragment: textSplitter.createFragment(sourceText, 0)
       };
+
+      // Fast-path: For offset 0, just indicate before.
+      if (offset === 0) return { type: "before" };
+
+      // Fast-path: For offset `sourceText.length`, just indicate after.
+      if (offset === sourceText.length) return { type: "after" };
 
       while (curPart.tokens.length > 3) {
         const [leftPart, rightPart] = await bifurcate(curPart);
@@ -722,8 +743,8 @@ export default usModule((require, exports) => {
   /** Checks if `value` satisfies the {@link SomeTokenCodec} interface. */
   const isCodec = (value: any): value is SomeTokenCodec => {
     if (!isObject(value)) return false;
-    if (!("encode" in value)) return false;
-    if (!("decode" in value)) return false;
+    if (!_hasIn(value, "encode")) return false;
+    if (!_hasIn(value, "decode")) return false;
     if (!isFunction(value.encode)) return false;
     if (!isFunction(value.decode)) return false;
     return true;

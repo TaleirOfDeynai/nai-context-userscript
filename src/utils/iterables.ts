@@ -1,8 +1,11 @@
-import { isString, isIterable, isArray, TypePredicate } from "./is";
+import _hasIn from "lodash/hasIn";
+import { isIterable, isArray } from "./is";
+import { isString, isObject, isNumber } from "./is";
 import { assert } from "./assert";
 
 import type { PredicateFn } from "./functions";
 import type { AnyValueOf, Maybe, UndefOr } from "./utility-types";
+import type { TypePredicate } from "./is";
 
 /** Basic key-value pair, as a tuple. */
 export type KVP<K = string | number, V = any> = readonly [K, V];
@@ -89,6 +92,28 @@ export const toImmutable = <T>(iterable: Iterable<T>): readonly T[] => {
   if (!isArray(iterable)) return Object.freeze([...iterable]);
   if (Object.isFrozen(iterable)) return iterable;
   return Object.freeze(iterable.slice());
+};
+
+const hasSize = (value: unknown): value is { size: number } => {
+  if (!isObject(value)) return false;
+  if (value instanceof Map) return true;
+  if (value instanceof Set) return true;
+  // @ts-ignore - `_hasIn` does not actually narrow the type.
+  if (_hasIn(value, "size")) return isNumber(value.size);
+  return false;
+};
+
+/**
+ * Determines if the given iterable is empty.
+ * 
+ * WARNING: this can invoke the iterator of the iterable; avoid
+ * using with {@link IterableIterator} or any kind of lazy iterator.
+ */
+export const isEmpty = (iterable: Iterable<unknown>): boolean => {
+  if (isArray(iterable)) return !iterable.length;
+  if (isString(iterable)) return !iterable.length;
+  if (hasSize(iterable)) return !iterable.size;
+  return !iterable[Symbol.iterator]().next().done;
 };
 
 /**

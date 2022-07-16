@@ -1,5 +1,6 @@
 import { describe, it, expect } from "@jest/globals";
 import { beforeEach } from "@jest/globals";
+import fakeRequire from "@spec/fakeRequire";
 import { toFragmentSeq } from "@spec/helpers-splitter";
 import * as helpers from "@spec/helpers-tokenizer";
 import * as mockStory from "@spec/mock-story";
@@ -9,17 +10,6 @@ import { chain, iterReverse, interweave, iterPosition } from "@utils/iterables";
 import { skip, take, skipRight, takeRight } from "@utils/iterables";
 import * as AI from "@utils/asyncIterables";
 import $TokenizerService, { AugmentedTokenCodec } from "./TokenizerService";
-import AppConstants from "@nai/AppConstants";
-
-const fakeRequire: any = (module: any) => {
-  switch (module) {
-    // Imported by `TextSplitterService`.
-    case AppConstants: return {
-      contextSize: 2000
-    };
-    default: return {};
-  }
-};
 
 const tokenizer = $TokenizerService(fakeRequire);
 const { mockCodec } = helpers;
@@ -195,6 +185,13 @@ describe("AugmentedTokenCodec", () => {
       });
     });
 
+    it("should work with an offset at the beginning", async () => {
+      const tokens = [211, 212, 213, 211, 212, 213]; // "112233112233"
+
+      const result = await findOffset(tokens, 0);
+      expect(result).toEqual({ type: "before" });
+    });
+
     it("should work with the offset being dead center", async () => {
       // This is a bit of a gotcha.  When doing a binary search,
       // it is possible for the offset to be in both halves because
@@ -216,6 +213,13 @@ describe("AugmentedTokenCodec", () => {
         }),
         remainder: 0
       });
+    });
+
+    it("should work with an offset at the end", async () => {
+      const tokens = [211, 212, 213, 211, 212, 213]; // "112233112233"
+
+      const result = await findOffset(tokens, 12);
+      expect(result).toEqual({ type: "after" });
     });
 
     it("should work with a large amount of tokens", async () => {
@@ -271,6 +275,11 @@ describe("AugmentedTokenCodec", () => {
 
       await expect(tooLo()).rejects.toThrow();
       await expect(tooHi()).rejects.toThrow();
+    });
+
+    it("should return `undefined` for an empty array", async () => {
+      const result = await findOffset([], 0);
+      expect(result).toBeUndefined();
     });
   });
 });
