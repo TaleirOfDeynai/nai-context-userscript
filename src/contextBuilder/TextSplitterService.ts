@@ -181,8 +181,7 @@ export default usModule((require, exports) => {
   const afterFragment = (f: TextFragment) => f.offset + f.content.length;
 
   /**
-   * Checks if a given cursor's offset appears to be inside a given
-   * fragment.
+   * Checks if the given offset appears to be inside a given fragment.
    */
   const isOffsetInside = (offset: number, fragment: TextFragment) => {
     if (offset < beforeFragment(fragment)) return false;
