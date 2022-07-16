@@ -19,7 +19,7 @@
         "url": "https://github.com/TaleirOfDeynai/nai-context-userscript/issues"
     },
     "author": "TaleirOfDeynai",
-    "license": "UNLICENSE",
+    "license": "MIT",
     "scripts": {
         "test": "jest",
         "build": "npx rollup --config rollup.config.mjs",
