@@ -2,7 +2,7 @@ import { eachValueFrom } from "@utils/rx";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { createLogger } from "@utils/logging";
-import $CompoundAssembly from "../../CompoundAssembly";
+import $CompoundAssembly from "../../assemblies/Compound";
 
 import type { ContextParams } from "../../ParamsService";
 import type { BudgetedSource } from "../3-selection/_shared";

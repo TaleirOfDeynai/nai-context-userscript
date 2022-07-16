@@ -45,7 +45,7 @@ const mockNewAssembly = (
   srcContent: string,
   srcPrefix?: string,
   srcSuffix?: string
-): Assembly.Any => {
+): Assembly.AnyFragment => {
   const prefix = mockFragment(srcPrefix ?? "", 0);
   const content = mockFragment(srcContent, 0, prefix);
   const suffix = mockFragment(srcSuffix ?? "", 0, content);

@@ -45,7 +45,7 @@ export interface TrimResult {
 export interface Trimmer {
   (): AsyncIterable<TrimResult>;
   readonly provider: TrimProvider;
-  readonly origin: Assembly.Any;
+  readonly origin: Assembly.AnyFragment;
 };
 
 export interface ReplayTrimResult {
@@ -55,7 +55,7 @@ export interface ReplayTrimResult {
 
 export interface ReplayTrimmer extends ReplayWrapper<ReplayTrimResult> {
   readonly provider: TrimProvider;
-  readonly origin: Assembly.Any;
+  readonly origin: Assembly.AnyFragment;
 };
 
 const EMPTY = async function*() {};
@@ -101,7 +101,7 @@ export default usModule((require, exports) => {
    * be trimmed multiple times.
    */
   function createTrimmer(
-    assembly: Assembly.Any,
+    assembly: Assembly.AnyFragment,
     contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: true
@@ -112,7 +112,7 @@ export default usModule((require, exports) => {
    * encoder on fragments it has already encoded before.
    */
   function createTrimmer(
-    assembly: Assembly.Any,
+    assembly: Assembly.AnyFragment,
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay?: false
@@ -121,14 +121,14 @@ export default usModule((require, exports) => {
    * Creates a trimmer.  It is ambiguous whether or not it does replay caching.
    */
   function createTrimmer(
-    assembly: Assembly.Any,
+    assembly: Assembly.AnyFragment,
     contextParams: ContextParams,
     options: Partial<TrimOptions>,
     doReplay: boolean
   ): Trimmer | ReplayTrimmer;
   // Actual implementation.
   function createTrimmer(
-    assembly: Assembly.Any,
+    assembly: Assembly.AnyFragment,
     contextParams: ContextParams,
     options?: Partial<TrimOptions>,
     doReplay = false
@@ -271,7 +271,7 @@ export default usModule((require, exports) => {
    */
   async function trimByTokens(
     /** The content to trim. */
-    assembly: Assembly.Any,
+    assembly: Assembly.AnyFragment,
     /** The token budget. */
     tokenBudget: number,
     /** The context parameters object. */

@@ -5,17 +5,18 @@ import { isFunction } from "@utils/is";
 import { assert, assertExists, assertInBounds } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain } from "@utils/iterables";
-import $SearchService from "./SearchService";
+import $SearchService from "../SearchService";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
-import type { BudgetedSource } from "./rx/3-selection/_shared";
-import type * as PosOps from "./assemblies/positionOps";
-import type { ContextContent } from "./ContextContent";
-import type { AssemblyResultMap } from "./SearchService";
-import type { AugmentedTokenCodec, Tokens } from "./TokenizerService";
-import type { Assembly } from "./assemblies";
-import type { Cursor } from "./cursors";
+import type { BudgetedSource } from "../rx/3-selection/_shared";
+import type { ContextContent } from "../ContextContent";
+import type { AssemblyResultMap } from "../SearchService";
+import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
+import type { Cursor } from "../cursors";
+import type { FragmentAssembly } from "./Fragment";
+import type { TokenizedAssembly } from "./Tokenized";
+import type * as PosOps from "./positionOps";
 
 /** The bare minimum needed for an assembly. */
 interface AssemblyLike {
@@ -23,11 +24,11 @@ interface AssemblyLike {
   readonly tokens: Tokens;
   readonly source: unknown;
 
-  isFoundIn: Assembly.Fragment["isFoundIn"];
-  entryPosition: Assembly.Tokenized["entryPosition"];
-  locateInsertion: Assembly.Tokenized["locateInsertion"];
-  shuntOut: Assembly.Tokenized["shuntOut"];
-  splitAt?: Assembly.Tokenized["splitAt"];
+  isFoundIn: FragmentAssembly["isFoundIn"];
+  entryPosition: TokenizedAssembly["entryPosition"];
+  locateInsertion: TokenizedAssembly["locateInsertion"];
+  shuntOut: TokenizedAssembly["shuntOut"];
+  splitAt?: TokenizedAssembly["splitAt"];
 }
 
 /** The bare minimum needed for content. */
@@ -114,7 +115,7 @@ const theModule = usModule((require, exports) => {
    * consumed tokens and handling the insertion of {@link ContextContent}
    * into the location it needs to be.
    * 
-   * This is essentially a collection of {@link Assembly.Tokenized}.
+   * This is essentially a collection of {@link TokenizedAssembly}.
    */
   class CompoundAssembly {
     constructor(codec: AugmentedTokenCodec, tokenBudget: number) {
