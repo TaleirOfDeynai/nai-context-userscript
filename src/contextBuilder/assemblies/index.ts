@@ -12,7 +12,7 @@ import type { IFragmentAssembly } from "./_interfaces";
 import type { ITokenizedAssembly } from "./_interfaces";
 import type { BaseAssembly } from "./Base";
 import type { FragmentAssembly } from "./Fragment";
-import type { TokenizedAssembly } from "../TokenizedAssembly"; // Temporary
+import type { TokenizedAssembly } from "./Tokenized";
 
 export namespace Assembly {
   export type IFragment = IFragmentAssembly;
@@ -20,6 +20,9 @@ export namespace Assembly {
   export type Base = BaseAssembly;
   export type Fragment = FragmentAssembly;
   export type Tokenized = TokenizedAssembly;
+
+  /** Either of the class-based assemblies. */
+  export type Any = FragmentAssembly | TokenizedAssembly;
 }
 
 export default usModule((require, exports) => {

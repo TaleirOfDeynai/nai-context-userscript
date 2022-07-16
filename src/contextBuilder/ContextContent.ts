@@ -107,7 +107,7 @@ const theModule = usModule((require, exports) => {
       trimmer: Trimmer,
       contextConfig: ContextConfig,
       contextParams: ContextParams
-    ): Promise<Assembly.IFragment> => {
+    ): Promise<Assembly.Any> => {
       // For the story, we will always need to trim it to size.  What varies
       // is whether we trim by tokens or length.  We also need to sort out
       // whether to remove comments or not.
@@ -144,7 +144,7 @@ const theModule = usModule((require, exports) => {
     const _forLore = (
       trimmer: Trimmer,
       contextParams: ContextParams
-    ): Assembly.IFragment => {
+    ): Assembly.Any => {
       const origin = trimmer.origin;
       // The trimmer has the unmodified origin assembly.  We only need to
       // change things up if we need to remove comments for search.
@@ -163,7 +163,7 @@ const theModule = usModule((require, exports) => {
       trimmer: Trimmer,
       contextConfig: ContextConfig,
       contextParams: ContextParams
-    ): Promise<Assembly.IFragment> => {
+    ): Promise<Assembly.Any> => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);

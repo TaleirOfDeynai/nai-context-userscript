@@ -69,36 +69,6 @@ const theModule = usModule((require, exports) => {
       return cursorOps.isFoundIn(this, cursor);
     }
 
-    /** Bound version of {@link posOps.entryPosition}. */
-    entryPosition(
-      /** Which direction to iterate. */
-      direction: PosOps.IterDirection,
-      /** The type of insertion to be done. */
-      insertionType?: TrimType
-    ): Cursor.Fragment {
-      return posOps.entryPosition(this, direction, insertionType);
-    }
-
-    /** Bound version of {@link posOps.locateInsertion}. */
-    locateInsertion(
-      /** The type of insertion being done. */
-      insertionType: TrimType,
-      /** An object describing how to locate the insertion. */
-      positionData: Readonly<PosOps.InsertionPosition>
-    ): PosOps.PositionResult {
-      return posOps.locateInsertion(this, insertionType, positionData);
-    }
-
-    /** Bound version of {@link posOps.shuntOut}. */
-    shuntOut(
-      /** The cursor defining the location we're being shunt from. */
-      cursor: Cursor.Fragment,
-      /** The shunt mode to use. */
-      mode?: PosOps.IterDirection | "nearest"
-    ): PosOps.PositionResult {
-      return posOps.shuntOut(this, cursor, mode);
-    }
-
     /** Bound version of {@link manipOps.splitAt}. */
     splitAt(
       /** The cursor demarking the position of the cut. */

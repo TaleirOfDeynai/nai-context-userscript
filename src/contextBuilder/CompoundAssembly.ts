@@ -24,9 +24,9 @@ interface AssemblyLike {
   readonly source: unknown;
 
   isFoundIn: Assembly.Fragment["isFoundIn"];
-  entryPosition: Assembly.Fragment["entryPosition"];
-  locateInsertion: Assembly.Fragment["locateInsertion"];
-  shuntOut: Assembly.Fragment["shuntOut"];
+  entryPosition: Assembly.Tokenized["entryPosition"];
+  locateInsertion: Assembly.Tokenized["locateInsertion"];
+  shuntOut: Assembly.Tokenized["shuntOut"];
   splitAt?: Assembly.Tokenized["splitAt"];
 }
 

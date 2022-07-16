@@ -10,7 +10,7 @@ import $TokenizerService from "./TokenizerService";
 import $TrimmingService from "./TrimmingService";
 import $TrimmingProviders from "./TrimmingProviders";
 import $FragmentAssembly from "./assemblies/Fragment";
-import $TokenizedAssembly from "./TokenizedAssembly";
+import $TokenizedAssembly from "./assemblies/Tokenized";
 
 import type { SpyInstance } from "jest-mock";
 import type { TextFragment } from "./TextSplitterService";
@@ -20,7 +20,7 @@ import type { ContextParams } from "./ParamsService";
 import type { Assembly } from "./assemblies";
 
 type FragmentFromDerived = ReturnType<typeof $FragmentAssembly>["fromDerived"];
-type TokenizedFromDerived = ReturnType<typeof $TokenizedAssembly>["TokenizedAssembly"]["fromDerived"];
+type TokenizedFromDerived = ReturnType<typeof $TokenizedAssembly>["fromDerived"];
 
 const mockAssembly = <T extends Assembly.IFragment = Assembly.IFragment>(
   content: Iterable<TextFragment>,
@@ -45,7 +45,7 @@ const mockNewAssembly = (
   srcContent: string,
   srcPrefix?: string,
   srcSuffix?: string
-): Assembly.IFragment => {
+): Assembly.Any => {
   const prefix = mockFragment(srcPrefix ?? "", 0);
   const content = mockFragment(srcContent, 0, prefix);
   const suffix = mockFragment(srcSuffix ?? "", 0, content);
@@ -67,7 +67,7 @@ fakeRequire.inject($TokenizedAssembly, (exports, jestFn) => {
     const assembly = mockAssembly<Assembly.Tokenized>(f, o.prefix, o.suffix, { tokens });
     return Promise.resolve(assembly);
   });
-  Object.assign(exports.TokenizedAssembly, { fromDerived: spyDeriveTokenized });
+  Object.assign(exports, { fromDerived: spyDeriveTokenized });
   return exports;
 });
 
