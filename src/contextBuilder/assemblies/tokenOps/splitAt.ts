@@ -1,17 +1,18 @@
 import { usModule } from "@utils/usModule";
-import { isArray } from "@utils/is";
+import { protoExtend } from "@utils/object";
+import { getText } from "../queryOps/theBasics";
 import $CursorOps from "../cursorOps";
-import $SequenceOps from "../sequenceOps";
-import $AffixForSplit from "./getAffixForSplit";
-import { getSource } from "../queryOps/theBasics";
+import $ManipOps from "../manipOps";
+import getTokensForSplit from "./getTokensForSplit";
 
-import type { UndefOr } from "@utils/utility-types";
+import type { AugmentedTokenCodec } from "../../TokenizerService";
 import type { Cursor } from "../../cursors";
-import type { IFragmentAssembly } from "../_interfaces";
+import type { ITokenizedAssembly } from "../_interfaces";
+import type { UndefOr } from "@utils/utility-types";
 
-export interface FragmentSplitResult {
+export interface TokenizedSplitResult {
   /** The split assemblies. */
-  assemblies: [IFragmentAssembly, IFragmentAssembly];
+  assemblies: [ITokenizedAssembly, ITokenizedAssembly];
   /**
    * The cursor indicating the position of the split in the parent assembly.
    * This can change when using `loose` mode.
@@ -21,8 +22,7 @@ export interface FragmentSplitResult {
 
 export default usModule((require, exports) => {
   const cursorOps = $CursorOps(require);
-  const seqOps = $SequenceOps(require);
-  const { getAffixForSplit } = $AffixForSplit(require);
+  const manipOps = $ManipOps(require);
 
   /**
    * Given a cursor placed within this assembly's content, splits this
@@ -34,10 +34,14 @@ export default usModule((require, exports) => {
    * assembly will be empty, and so may differ from their shared source.
    * 
    * If a cut cannot be made, `undefined` is returned.
+   * 
+   * This version handles the `tokens` of the assembly as well.
    */
-  const splitAt = (
+  const splitAt = async(
     /** The assembly to split. */
-    assembly: IFragmentAssembly,
+    assembly: ITokenizedAssembly,
+    /** The token codec to use. */
+    tokenCodec: AugmentedTokenCodec,
     /**
      * The cursor demarking the position of the cut.
      * 
@@ -50,30 +54,25 @@ export default usModule((require, exports) => {
      * fallback.
      */
     loose: boolean = false
-  ): UndefOr<FragmentSplitResult> => {
-    const usedCursor = cursorOps.contentCursorOf(assembly, cursor, loose);
-    if (!usedCursor) return undefined;
+  ): Promise<UndefOr<TokenizedSplitResult>> => {
+    const result = manipOps.splitAt(assembly, cursor, loose);
+    if (!result) return undefined;
 
-    const content = isArray(assembly.content) ? assembly.content : [...assembly.content];
-    const [beforeCut, afterCut] = seqOps.splitAt(content, usedCursor);
-    const [beforeAffix, afterAffix] = getAffixForSplit(assembly);
+    const [beforeTokens, afterTokens] = await getTokensForSplit(
+      tokenCodec,
+      cursorOps.toFullText(assembly, result.cursor).offset,
+      assembly.tokens,
+      getText(assembly)
+    );
 
     return {
       assemblies: [
-        Object.freeze({
-          ...beforeAffix,
-          content: beforeCut,
-          source: getSource(assembly)
-        }),
-        Object.freeze({
-          ...afterAffix,
-          content: afterCut,
-          source: getSource(assembly)
-        })
+        protoExtend(result.assemblies[0], { tokens: beforeTokens }),
+        protoExtend(result.assemblies[1], { tokens: afterTokens })
       ],
-      cursor: usedCursor
+      cursor: result.cursor
     };
-  };
+  }
  
   return Object.assign(exports, {
     splitAt

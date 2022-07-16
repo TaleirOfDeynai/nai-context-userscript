@@ -5,14 +5,13 @@ import { getEmptyFrag } from "@spec/helpers-splitter";
 import { insideFrag, beforeFrag } from "@spec/helpers-assembly";
 import { contiguousFrags, offsetFrags } from "@spec/helpers-assembly";
 
+import { assertExists } from "@utils/assert";
 import { first } from "@utils/iterables";
 import $ContentCursorOf from "../cursorOps/contentCursorOf";
 import $SplitAt from "./splitAt";
 
 import type { SpyInstance } from "jest-mock";
 import type { IFragmentAssembly } from "../_interfaces";
-
-type SplitResult = [IFragmentAssembly, IFragmentAssembly];
 
 let spyContentCursorOf: SpyInstance<ReturnType<typeof $ContentCursorOf>["contentCursorOf"]>;
 fakeRequire.inject($ContentCursorOf, (exports, jestFn) => {
@@ -62,17 +61,23 @@ describe("splitSequenceAt", () => {
       const offset = beforeFrag(slicedFrag) + sliceOffset;
       const cursor = testData.inFrag(offset);
 
-      const result = splitAt(testData, cursor) as SplitResult;
+      const result = assertExists(
+        "Expected a defined result.",
+        splitAt(testData, cursor)
+      );
 
       // Left of the cut.
-      expect(result[0].prefix).toBe(offsetFrags.prefix);
-      expect(result[0].content).toEqual(expect.any(Array));
-      expect(result[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
+      expect(result.assemblies[0].prefix).toBe(offsetFrags.prefix);
+      expect(result.assemblies[0].content).toEqual(expect.any(Array));
+      expect(result.assemblies[0].suffix).toEqual(getEmptyFrag(offsetFrags.suffix));
 
       // Right of the cut.
-      expect(result[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
-      expect(result[1].content).toEqual(expect.any(Array));
-      expect(result[1].suffix).toBe(offsetFrags.suffix);
+      expect(result.assemblies[1].prefix).toEqual(getEmptyFrag(offsetFrags.prefix));
+      expect(result.assemblies[1].content).toEqual(expect.any(Array));
+      expect(result.assemblies[1].suffix).toBe(offsetFrags.suffix);
+
+      // The cursor ultimately used...  Which should be unchanged.
+      expect(result.cursor).toBe(cursor);
     });
   });
 

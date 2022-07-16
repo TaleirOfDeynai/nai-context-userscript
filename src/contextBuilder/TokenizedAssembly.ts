@@ -2,10 +2,8 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
-import makeCursor from "./cursors/Fragment";
-import $CursorOps from "./assemblies/cursorOps";
 import $QueryOps from "./assemblies/queryOps";
-import $SequenceOps from "./assemblies/sequenceOps";
+import $TokenOps from "./assemblies/tokenOps";
 import $TextSplitterService from "./TextSplitterService";
 import $OldFragmentAssembly from "./FragmentAssembly";
 import $FragmentAssembly from "./assemblies/Fragment";
@@ -24,54 +22,12 @@ export interface DerivedOptions extends ContinuityOptions {
   tokens?: Tokens;
 }
 
-const TOKEN_MENDING_RANGE = 5;
-
 const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const { FragmentAssembly } = $OldFragmentAssembly(require);
   const fragAssembly = $FragmentAssembly(require);
-  const cursorOps = $CursorOps(require);
   const queryOps = $QueryOps(require);
-  const seqOps = $SequenceOps(require);
-
-  // I'm reminded why I absolutely HATE classes...  HATE!  HATE!
-  // If the word "hate" were written on every micro-angstrom of my...
-
-  const getTokensForSplit = async (
-    codec: AugmentedTokenCodec,
-    offset: number,
-    tokens: Tokens,
-    fullText: string
-  ): Promise<[Tokens, Tokens]> => {
-    const result = assertExists(
-      "Expected to locate the cursor in the tokens.",
-      await codec.findOffset(tokens, offset, fullText)
-    );
-
-    if (result.type === "double") {
-      // We don't need to do anything special in this case because the
-      // cursor falls between two sets of tokens.
-      const index = result.max.index;
-      return [
-        tokens.slice(0, index),
-        tokens.slice(index)
-      ];
-    }
-    else {
-      // In this case, we're splitting a single token into two parts,
-      // which means we will need two new tokens, and the ends at the
-      // cut could even encode differently.
-      const splitToken = result.data.value;
-      const left = splitToken.slice(0, result.remainder);
-      const right = splitToken.slice(result.remainder);
-
-      const index = result.data.index;
-      return Promise.all([
-        codec.mendTokens([tokens.slice(0, index), left], TOKEN_MENDING_RANGE),
-        codec.mendTokens([right, tokens.slice(index + 1)], TOKEN_MENDING_RANGE)
-      ]);
-    }
-  }
+  const tokenOps = $TokenOps(require);
 
   /**
    * An abstraction that standardizes how text is assembled with prefixes
@@ -213,38 +169,15 @@ const theModule = usModule((require, exports) => {
        */
       loose: boolean = false
     ): Promise<UndefOr<[TokenizedAssembly, TokenizedAssembly]>> {
-      const usedCursor = cursorOps.contentCursorOf(this, cursor, loose);
-      if (!usedCursor) return undefined;
-      
-      const [beforeCut, afterCut] = seqOps.splitAt(this.content, usedCursor);
-      const [beforeTokens, afterTokens] = await getTokensForSplit(
-        this.#codec,
-        cursorOps.toFullText(this, usedCursor).offset,
-        this.#tokens,
-        this.text
-      );
+      const result = await tokenOps.splitAt(this, this.#codec, cursor, loose);
 
-      // If we're splitting this assembly, it doesn't make sense to preserve
-      // the suffix on the assembly before the cut or the prefix after the cut.
-      // Replace them with empty fragments, as needed.
-      const { prefix, suffix } = this;
-      const afterPrefix = ss.asEmptyFragment(prefix);
-      const beforeSuffix = ss.asEmptyFragment(suffix);
-
-      // Because we're changing the prefix and suffix, we're going to invoke
-      // the constructor directly instead of using `fromDerived`.
-      return [
-        new TokenizedAssembly(
-          prefix, beforeCut, beforeSuffix,
-          beforeTokens, this.#codec,
+      return result?.assemblies.map((a) => {
+        return new TokenizedAssembly(
+          a.prefix, a.content, a.suffix,
+          a.tokens, this.#codec,
           this.isContiguous, this.source
-        ),
-        new TokenizedAssembly(
-          afterPrefix, afterCut, suffix,
-          afterTokens, this.#codec,
-          this.isContiguous, this.source
-        )
-      ];
+        );
+      }) as [TokenizedAssembly, TokenizedAssembly];
     }
 
     /**
@@ -254,55 +187,14 @@ const theModule = usModule((require, exports) => {
      * work as expected.
      */
     async asOnlyContent(): Promise<TokenizedAssembly> {
-      // No need if we don't have a prefix or suffix.
-      if (!queryOps.isAffixed(this)) return this;
+      const result = await tokenOps.removeAffix(this, this.#codec);
 
-      // This can be seen as splitting the prefix and suffix from the rest
-      // of the content, so we will want to get tokens for each of these
-      // splits we make.
-
-      const { prefix, suffix } = this;
-
-      // Starts with the current tokens and drops the prefix from them.
-      const [nextPrefix, noPrefixTokens] = await dew(async () => {
-        const tokensIn = this.#tokens;
-        if (!prefix.content) return [prefix, tokensIn];
-
-        const ftCursor = cursorOps.toFullText(
-          this,
-          makeCursor(this, ss.afterFragment(prefix))
-        );
-        const [, theTokens] = await getTokensForSplit(
-          this.#codec,
-          ftCursor.offset,
-          tokensIn,
-          this.text
-        );
-        return [ss.asEmptyFragment(prefix), theTokens];
-      });
-
-      // This must use the tokens from the prefix and adjust the full-text
-      // cursor for the now missing prefix portion.
-      const [nextSuffix, finalTokens] = await dew(async () => {
-        const tokensIn = noPrefixTokens;
-        if (!suffix.content) return [suffix, tokensIn];
-
-        const ftCursor = cursorOps.toFullText(
-          this,
-          makeCursor(this, ss.beforeFragment(suffix))
-        );
-        const [theTokens] = await getTokensForSplit(
-          this.#codec,
-          ftCursor.offset - prefix.content.length,
-          tokensIn,
-          [...this.content, this.suffix].map(ss.asContent).join("")
-        );
-        return [ss.asEmptyFragment(suffix), theTokens];
-      });
+      // If we're already only-content, `removeAffix` will return its input.
+      if (result === this) return this;
 
       return new TokenizedAssembly(
-        nextPrefix, this.content, nextSuffix,
-        finalTokens, this.#codec,
+        result.prefix, result.content, result.suffix,
+        result.tokens, this.#codec,
         this.isContiguous, this.source
       );
     }

@@ -1,25 +1,22 @@
 /**
- * Module related to manipulating `IFragmentAssembly`.
+ * Module related to manipulating `ITokenizedAssembly`.
  */
 
 import { usModule } from "@utils/usModule";
  
 // Direct imports...
-import makeSafe from "./makeSafe";
+import getTokensForSplit from "./getTokensForSplit";
 
 // User-script imports...
-import $GetAffixForSplit from "./getAffixForSplit";
 import $RemoveAffix from "./removeAffix";
 import $SplitAt from "./splitAt";
 
 // Type re-exports...
-export { ISafeAssembly } from "./makeSafe";
-export { FragmentSplitResult } from "./splitAt";
+export { TokenizedSplitResult } from "./splitAt";
   
 export default usModule((require, exports) => {
   return Object.assign(exports, {
-    makeSafe,
-    ...$GetAffixForSplit(require),
+    getTokensForSplit,
     ...$RemoveAffix(require),
     ...$SplitAt(require)
   });

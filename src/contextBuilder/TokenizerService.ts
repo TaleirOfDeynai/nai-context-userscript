@@ -119,10 +119,14 @@ export interface AugmentedTokenCodec extends AsyncTokenCodec {
    * Searches the given `tokens` to locate a range of indices in `tokens`
    * that contains the cursor at some `offset` number of characters.
    * 
-   * It returns a range, since the offset could lie between two tokens.
-   * If it does not, both elements of the returned array will be equal.
+   * If the offset lies within a token, the range will be a "single" token
+   * result with a remainder indicating how many characters into the token
+   * the offset actually lies.
    * 
-   * @todo Investigate if a binary search would be more efficient.
+   * If the offset lies between two tokens, the range will be a "double"
+   * result with a remainder of 0.
+   * 
+   * If `tokens` was empty, returns `undefined`.
    */
   findOffset(
     /** The array of tokens to search. */

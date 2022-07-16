@@ -109,7 +109,7 @@ const theModule = usModule((require, exports) => {
        */
       loose: boolean = false
     ): UndefOr<[FragmentAssembly, FragmentAssembly]> {
-      return manipOps.splitAt(this, cursor, loose)?.map((a) => {
+      return manipOps.splitAt(this, cursor, loose)?.assemblies.map((a) => {
         return new FragmentAssembly(a, this.isContiguous);
       }) as [FragmentAssembly, FragmentAssembly];
     }

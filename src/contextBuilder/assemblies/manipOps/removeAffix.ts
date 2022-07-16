@@ -5,8 +5,6 @@ import $QueryOps from "../queryOps";
 
 import type { IFragmentAssembly } from "../_interfaces";
 
-export type AffixSplitResult = Pick<IFragmentAssembly, "prefix" | "suffix">;
-
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const queryOps = $QueryOps(require);
@@ -22,13 +20,13 @@ export default usModule((require, exports) => {
     if (!queryOps.isAffixed(assembly)) return assembly;
 
     // Replace the suffix and prefix with zero-length fragments.
-    return {
+    return Object.freeze({
       prefix: ss.asEmptyFragment(assembly.prefix),
       content: toImmutable(assembly.content),
       suffix: ss.asEmptyFragment(assembly.suffix),
-      source: assembly.source
-    };
-  }
+      source: queryOps.getSource(assembly)
+    });
+  };
  
   return Object.assign(exports, {
     removeAffix
