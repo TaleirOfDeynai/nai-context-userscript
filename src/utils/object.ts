@@ -19,6 +19,12 @@ export function protoExtend(proto: any, extensions: any): any {
   // `[[Call]]` property is not inheritable for some reason.
   assert("Cannot proto-extend a function.", typeof proto !== "function");
 
+  // Why not just `Object.assign` after the `Object.create`?
+  // Because if some property exists on `proto` and it's frozen
+  // or not writable, the assign will prioritize that property
+  // and fail.  But, since we're using it as a prototype, we can
+  // override those properties with new properties on the object
+  // instance.
   const propMap = chain(toPairs(extensions))
     .map(([k, v]) => {
       const descriptor: PropertyDescriptor = {
