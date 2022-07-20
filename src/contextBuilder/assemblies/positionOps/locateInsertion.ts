@@ -109,7 +109,7 @@ export default usModule((require, exports) => {
         // Convert into positions...
         .thru((iter) => positionsFrom(assembly, iter, direction))
         // ...but if we find the initial cursor, skip it...
-        .thru((iter) => skipUntil(iter, (c) => c.offset !== initCursor.offset))
+        .pipe(skipUntil, (c) => c.offset !== initCursor.offset)
         // ...because we're adding it into the first position here.
         .thru((cursors) => concat(initCursor, cursors))
         .value();

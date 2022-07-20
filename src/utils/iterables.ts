@@ -28,6 +28,23 @@ export type CollectFn<TIn, TOut> = TransformFn<TIn, UndefOr<TOut>>;
 export type TupleCollectFn<TIn, TOut extends readonly Primitives[]> = (value: TIn) => UndefOr<[...TOut]>;
 export type TapFn<TValue> = (value: TValue) => unknown;
 
+/**
+ * TypeScript sucks at inferring the return type of a function with
+ * arguments piped into it.
+ * 
+ * It falters with functions that rely heavily on dependent types
+ * to determine its return type, like `flatMap`, and when dealing
+ * with overloaded functions.  So, `DumbPipeTransformFn` cannot
+ * change the output type so dumb TypeScript can handle it.
+ * 
+ * Someday, if TypeScript gets serious about providing complete type
+ * safety, maybe I will be able to have separate `TIn` and `TOut`.
+ * I could not figure out how to massage things so it works with
+ * any function.
+ */
+export type DumbPipeTransformFn<T, TArgs extends unknown[]>
+  = (piped: Iterable<T>, ...args: TArgs) => Iterable<T>;
+
 type UnionToIntersection<T>
   = (T extends any ? (x: T) => any : never) extends
     (x: infer R) => any ? R : never;
@@ -61,6 +78,20 @@ export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   concat<TEl>(...others: (TEl | Iterable<TEl>)[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
   /** Transforms the iterable into a different iterable. */
   thru<TIterOut extends Iterable<unknown>>(xformFn: TransformFn<TIterIn, TIterOut>): ChainComposition<TIterOut>;
+  /**
+   * Applies a transformation function, supplying the chained iterable and `args`
+   * to `fn`.
+   * 
+   * This let's you supply additional arguments to any transformation function that
+   * takes an iterable as its first argument without needing to instantiate a
+   * function for `thru`.
+   * 
+   * As an example, `.pipe(skip, 10)` is equivalent to `.thru((iter) => skip(iter, 10))`.
+   * 
+   * Currently, this is limited to functions that do not change the type of
+   * the elements in the iterable.
+   */
+  pipe<TArgs extends unknown[]>(fn: DumbPipeTransformFn<ElementOf<TIterIn>, TArgs>, ...args: TArgs): ChainComposition<Iterable<ElementOf<TIterIn>>>;
   /** Calls the given function with each value, but yields the values unchanged. */
   tap(tapFn: TapFn<ElementOf<TIterIn>>): ChainComposition<Iterable<ElementOf<TIterIn>>>;
   /** Calls the given function on a materialized array of the iterable, then yields the original values, unchanged. */
@@ -733,6 +764,7 @@ function chain(iterable?: any) {
     collect: (collectFn) => chain(collectIter(iterable, collectFn)),
     concat: (...others) => chain(concat(iterable, ...others)),
     thru: (transformFn) => chain(transformFn(iterable)),
+    pipe: (fn, ...args) => chain(fn(iterable, ...args)),
     tap: (tapFn) => chain(tapEach(iterable, tapFn)),
     tapAll: (tapFn) => chain(tapAll(iterable, tapFn)),
     value: (xformFn?: TransformFn<any, any>) => xformFn ? xformFn(iterable) : iterable,

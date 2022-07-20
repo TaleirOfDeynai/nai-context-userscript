@@ -124,7 +124,7 @@ describe("comment removal", () => {
   // These currently only interact with the `content` property.
   const mockAssembly = (lines: readonly string[]): Assembly.Fragment => {
     const content = chain(lines)
-      .thru((iter) => interweave(iter, "\n"))
+      .pipe(interweave, "\n")
       .value((iter) => Object.freeze([mockFragment([...iter].join(""), 10)]));
     return Object.freeze({ content }) as any;
   };
@@ -186,7 +186,7 @@ describe("comment removal", () => {
         // Reverse, if needed.
         .thru((iter) => reversed ? iterReverse(iter) : iter)
         // The last fragment is a `"\n"` that should not exist in the result.
-        .thru((iter) => skipRight(iter, 1))
+        .pipe(skipRight, 1)
         .toArray();
 
       expect(result).toEqual(checkFrags);
