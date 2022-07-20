@@ -135,7 +135,7 @@ describe("comment removal", () => {
     reversed: boolean
   ): string => {
     return chain(fragments)
-      .thru((iter) => flatMap(iter, providerFn))
+      .flatMap(providerFn)
       .map(toContent)
       .thru((iter) => reversed ? iterReverse(iter) : iter)
       .value((iter) => [...iter].join(""));

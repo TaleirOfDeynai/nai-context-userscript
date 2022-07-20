@@ -62,6 +62,8 @@ export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   map<TOut extends readonly Primitives[]>(xformFn: TupleTransformFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
   /** Transforms each element. */
   map<TOut>(xformFn: TransformFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
+  /** Transforms each element into an iterable and flattens one level. */
+  flatMap<TOut>(xformFn: TransformFn<ElementOf<TIterIn>, Iterable<TOut>>): ChainComposition<Iterable<TOut>>;
   /** Flattens an iterable of iterables by one level. */
   flatten(): ChainComposition<Iterable<FlatElementOf<TIterIn>>>;
   /** Removes falsey values from the iterable and refines the element's type to remove `undefined` and `null`. */
@@ -759,6 +761,7 @@ function chain(iterable?: any) {
   return {
     reduce: (init, reducer) => reduceIter(iterable, init, reducer),
     map: (transformFn) => chain(mapIter(iterable, transformFn)),
+    flatMap: (transformFn) => chain(flatMap(iterable, transformFn)),
     flatten: () => chain(flatten(iterable)),
     filter: (predicateFn) => chain(filterIter(iterable, predicateFn)),
     collect: (collectFn) => chain(collectIter(iterable, collectFn)),

@@ -208,9 +208,9 @@ export default usModule((require, exports) => {
       matchLine: dew(() => {
         if (!matchLine.length) return new Map();
         return IterOps.chain(lineText)
-          .thru((frags) => IterOps.flatMap(frags, splitterService.byLine))
+          .flatMap(splitterService.byLine)
           .filter(splitterService.hasWords)
-          .thru((frags) => IterOps.flatMap(frags, (f) => findMatches(f, matchLine)))
+          .flatMap((f) => findMatches(f, matchLine))
           .value((kvps) => new Map(kvps));
       })
     };
