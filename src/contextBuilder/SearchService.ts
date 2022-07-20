@@ -14,7 +14,7 @@
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isIterable, isString } from "@utils/is";
-import * as Iterables from "@utils/iterables";
+import * as IterOps from "@utils/iterables";
 import { createLogger } from "@utils/logging";
 import $MatcherService from "./MatcherService";
 import $TextSplitterService from "./TextSplitterService";
@@ -189,16 +189,16 @@ export default usModule((require, exports) => {
     if (lineText == null) return {
       matchFull: findMatches(
         fullText,
-        [...Iterables.mapIter(getKeys(matchable), matcherService.getMatcherFor)]
+        [...IterOps.mapIter(getKeys(matchable), matcherService.getMatcherFor)]
       ),
       matchLine: new Map()
     };
 
-    const { matchFull = [], matchLine = [] } = Iterables.chain(getKeys(matchable))
+    const { matchFull = [], matchLine = [] } = IterOps.chain(getKeys(matchable))
       .map(matcherService.getMatcherFor)
       .map((m) => [m.multiline ? "matchFull" : "matchLine", m] as const)
-      .thru((matchers) => Iterables.partition(matchers))
-      .value(Iterables.fromPairs);
+      .thru(IterOps.partition)
+      .value(IterOps.fromPairs);
     
     return {
       matchFull: dew(() => {
@@ -207,10 +207,10 @@ export default usModule((require, exports) => {
       }),
       matchLine: dew(() => {
         if (!matchLine.length) return new Map();
-        return Iterables.chain(lineText)
-          .thru((frags) => Iterables.flatMap(frags, splitterService.byLine))
+        return IterOps.chain(lineText)
+          .thru((frags) => IterOps.flatMap(frags, splitterService.byLine))
           .filter(splitterService.hasWords)
-          .thru((frags) => Iterables.flatMap(frags, (f) => findMatches(f, matchLine)))
+          .thru((frags) => IterOps.flatMap(frags, (f) => findMatches(f, matchLine)))
           .value((kvps) => new Map(kvps));
       })
     };
@@ -248,9 +248,9 @@ export default usModule((require, exports) => {
     const fullResultFn = toAssemblyResult(assembly, "fullText");
     const lineResultFn = toAssemblyResult(assembly, "fragment");
 
-    return new Map(Iterables.concat(
-      Iterables.mapValuesOf(results.matchFull, (m) => Object.freeze(m.map(fullResultFn))),
-      Iterables.mapValuesOf(results.matchLine, (m) => Object.freeze(m.map(lineResultFn)))
+    return new Map(IterOps.concat(
+      IterOps.mapValuesOf(results.matchFull, (m) => Object.freeze(m.map(fullResultFn))),
+      IterOps.mapValuesOf(results.matchLine, (m) => Object.freeze(m.map(lineResultFn)))
     ));
   }
 
@@ -295,7 +295,7 @@ export default usModule((require, exports) => {
   ): EntryResultMap<T> {
     // We just need to grab all the keys from the entries and pull their
     // collective matches.  We'll only run each key once.
-    const keySet = new Set(Iterables.flatMap(entries, getKeys));
+    const keySet = new Set(IterOps.flatMap(entries, getKeys));
     const keyResults = search(assembly, keySet, forceFullText);
     
     // Now, we can just grab the results for each entry's keys and assemble
@@ -321,9 +321,9 @@ export default usModule((require, exports) => {
   function findLowestIndex(results: Maybe<TextResultMap>) {
     if (!results) return undefined;
 
-    return Iterables.chain(results)
+    return IterOps.chain(results)
       .collect(([k, v]) => {
-        const first = Iterables.first(v);
+        const first = IterOps.first(v);
         return first ? [k, first] : undefined;
       })
       .value((kvps) => {
@@ -346,9 +346,9 @@ export default usModule((require, exports) => {
   function findHighestIndex(results: Maybe<TextResultMap>) {
     if (!results) return undefined;
 
-    return Iterables.chain(results)
+    return IterOps.chain(results)
       .collect(([k, v]) => {
-        const last = Iterables.last(v);
+        const last = IterOps.last(v);
         return last ? [k, last] : undefined;
       })
       .value((kvps) => {

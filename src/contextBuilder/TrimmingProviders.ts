@@ -3,7 +3,7 @@ import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
 import { assertExists } from "@utils/assert";
 import { protoExtend } from "@utils/object";
-import * as Iter from "@utils/iterables";
+import * as IterOps from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TokenizerService from "./TokenizerService";
 
@@ -98,8 +98,8 @@ export default usModule((require, exports) => {
     trimTop: Object.freeze({
       preProcess: basicPreProcess,
       newline: splitterService.byLineFromEnd,
-      sentence: (text) => Iter.iterReverse(splitterService.bySentence(text)),
-      token: (text) => Iter.iterReverse(splitterService.byWord(text)),
+      sentence: (text) => IterOps.iterReverse(splitterService.bySentence(text)),
+      token: (text) => IterOps.iterReverse(splitterService.byWord(text)),
       reversed: true,
       noSequencing: false
     }),
@@ -130,21 +130,21 @@ export default usModule((require, exports) => {
         //   - We want the last non-comment line to also not end with
         //     a newline.
         let dropLastNewLine = false;
-        return Iter.chain(basic.trimBottom.newline(text))
+        return IterOps.chain(basic.trimBottom.newline(text))
           // Chunk it up into the fragments for each line, arranged like:
           // `[StartFrag, ...RestFrags, CurLineEnd?]`
-          .thru((frags) => Iter.buffer(frags, isNewline, true))
+          .thru((frags) => IterOps.buffer(frags, isNewline, true))
           // This removes any chunks with a comment in the `StartFrag` position.
           .thru(function*(lineChunks) {
             for (const frags of lineChunks) {
-              const theStart = Iter.first(frags) as TextFragment;
+              const theStart = IterOps.first(frags) as TextFragment;
               if (reCommentFrag.test(theStart.content)) {
                 // Removing this line by not yielding it.
                 // Check to see if the comment ended with a newline.
                 // If it did not, and this was the last chunk, then
                 // `dropLastNewLine` will instruct the next step to
                 // remove the previous newline.
-                const theEnd = Iter.last(frags) as TextFragment;
+                const theEnd = IterOps.last(frags) as TextFragment;
                 dropLastNewLine = !isNewline(theEnd);
               }
               else {
@@ -176,10 +176,10 @@ export default usModule((require, exports) => {
         // Basically the same as above, only the last fragment in a chunk
         // will be the newline.
         let dropLastNewLine = false;
-        return Iter.chain(basic.trimTop.newline(text))
+        return IterOps.chain(basic.trimTop.newline(text))
           // Chunk it up into the fragments for each line, arranged like:
           // `[...RestFrags, StartFrag, PrevLineEnd?]`
-          .thru((frags) => Iter.buffer(frags, isNewline, true))
+          .thru((frags) => IterOps.buffer(frags, isNewline, true))
           // This removes any chunks with a comment in the `StartFrag` position.
           .thru(function*(lineChunks) {
             for (const frags of lineChunks) {
@@ -212,7 +212,7 @@ export default usModule((require, exports) => {
       }
     }),
     doNotTrim: protoExtend(basic.doNotTrim, {
-      preProcess: (assembly) => Iter.flatMap(
+      preProcess: (assembly) => IterOps.flatMap(
         basic.doNotTrim.preProcess(assembly),
         removeComments.trimBottom.newline
       )
