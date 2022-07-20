@@ -532,8 +532,8 @@ export const concat = function*<T>(
  * Inserts `value` between every element of `iterable`.
  */
 export const interweave = function*<T>(
-  value: T,
-  iterable: Iterable<T>
+  iterable: Iterable<T>,
+  value: T
 ): Iterable<T> {
   const iterator = iterable[Symbol.iterator]();
   let prevEl = iterator.next();

@@ -124,7 +124,7 @@ describe("comment removal", () => {
   // These currently only interact with the `content` property.
   const mockAssembly = (lines: readonly string[]): Assembly.Fragment => {
     const content = chain(lines)
-      .thru((iter) => interweave("\n", iter))
+      .thru((iter) => interweave(iter, "\n"))
       .value((iter) => Object.freeze([mockFragment([...iter].join(""), 10)]));
     return Object.freeze({ content }) as any;
   };

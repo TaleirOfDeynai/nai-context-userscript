@@ -480,13 +480,13 @@ describe("prepend encoder", () => {
 
     // We're using the vanilla buffer size, so we're going to
     // need a lot of fragments.
-    const fullSource = [...interweave(" ", dew(function* () {
+    const fullSource = [...interweave(dew(function* () {
       for (let i = 0; i < 50; i++) {
         if (i % 5 === 0) yield "foobar";
         else yield "foo";
         yield "bar";
       }
-    }))];
+    }), " ")];
     const fullFragments = toFragmentSeq(fullSource, 10);
 
     // Being prepend, we'll skip 20 fragments to get a resume point
@@ -699,13 +699,13 @@ describe("append encoder", () => {
     const prefix = "[ ";
     const suffix = " ]";
 
-    const fullSource = [...interweave(" ", dew(function* () {
+    const fullSource = [...interweave(dew(function* () {
       for (let i = 0; i < 50; i++) {
         if (i % 5 === 0) yield "foobar";
         else yield "foo";
         yield "bar";
       }
-    }))];
+    }), " ")];
     const fullFragments = toFragmentSeq(fullSource, 10);
 
     // Being append, we'll drop the last 20 fragments to get a resume

@@ -391,7 +391,7 @@ describe("bySentence", () => {
       const theSentences = helpers.forSingleLine(collection);
 
       const assembled = chain(theSentences)
-        .thru((sentences) => interweave(" ", sentences))
+        .thru((sentences) => interweave(sentences, " "))
         .toArray();
 
       const singleLine = mockFragment(assembled.join(""), 10);
@@ -405,8 +405,8 @@ describe("bySentence", () => {
       const theLines = helpers.forManyLines(collection);
 
       const assembled = chain(theLines)
-        .map((sentences) => interweave(" ", sentences))
-        .thru((lines) => interweave("\n", lines))
+        .map((sentences) => interweave(sentences, " "))
+        .thru((lines) => interweave(lines, "\n"))
         .flatten()
         .toArray();
       
@@ -445,7 +445,7 @@ describe("bySentence", () => {
         const sections = chain()
           .concat("What are you doing!?")
           .concat("The core samples will get too hot!")
-          .thru((sentences) => interweave(" ", sentences))
+          .thru((sentences) => interweave(sentences, " "))
           .toArray();
         const fragment = mockFragment(sections.join(""), 10);
         expect([...bySentence(fragment)]).toEqual(toExpectSeq(fragment, sections));
@@ -474,7 +474,7 @@ describe("bySentence", () => {
         const secondSentence = "Then she put the contraption down.";
 
         const sections = chain([firstSentence, secondSentence])
-          .thru((sentences) => interweave(" ", sentences))
+          .thru((sentences) => interweave(sentences, " "))
           .toArray();
 
         const fragment = mockFragment(sections.join(""), 10);
@@ -486,7 +486,7 @@ describe("bySentence", () => {
         const secondSentence = "Then she put the contraption down.";
 
         const sections = chain([firstSentence, secondSentence])
-          .thru((sentences) => interweave(" ", sentences))
+          .thru((sentences) => interweave(sentences, " "))
           .toArray();
 
         const fragment = mockFragment(sections.join(""), 10);
@@ -507,7 +507,7 @@ describe("bySentence", () => {
         const secondSentence = "She pouts unhappily.";
 
         const sections = chain([firstSentence, secondSentence])
-          .thru((sentences) => interweave(" ", sentences))
+          .thru((sentences) => interweave(sentences, " "))
           .toArray();
 
         const fragment = mockFragment(sections.join(""), 10);
