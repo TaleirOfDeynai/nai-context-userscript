@@ -61,40 +61,39 @@ describe("entryPosition", () => {
     });
 
     describe("with an insertion type", () => {
-      it("should enter after prefix when it is non-empty", () => {
+      it("should enter before prefix when it is non-empty", () => {
         const testData = theData.base;
         const result = entryPosition(testData, "toBottom", "sentence");
 
         expect(result).toEqual(
-          // Accounting for the `\n` after it.
-          theData.base.inFrag(afterFrag(testData.prefix) - 1)
+          theData.base.inFrag(beforeFrag(testData.prefix))
         );
       });
 
-      it("should enter after first content when prefix is empty", () => {
+      it("should enter before first content when prefix is empty", () => {
         const testData = theData.noPrefix;
         const result = entryPosition(testData, "toBottom", "sentence");
 
         expect(result).toEqual(
-          theData.noPrefix.inFrag(afterFrag(first(testData.content)))
+          theData.noPrefix.inFrag(beforeFrag(first(testData.content)))
         );
       });
 
-      it("should enter after suffix otherwise", () => {
+      it("should enter before suffix otherwise", () => {
         const testData = theData.onlySuffix;
         const result = entryPosition(testData, "toBottom", "sentence");
 
         expect(result).toEqual(
-          theData.onlySuffix.inFrag(afterFrag(testData.suffix))
+          // Accounting for the `\n` before it.
+          theData.onlySuffix.inFrag(beforeFrag(testData.suffix) + 1)
         );
       });
 
-      it("should work with empty assemblies", () => {
+      it("should return same as without insertion type for empty assemblies", () => {
+        const expected = entryPosition(theData.empty, "toBottom");
         const result = entryPosition(theData.empty, "toBottom", "sentence");
 
-        expect(result).toEqual(
-          theData.empty.inFrag(afterFrag(theData.empty.suffix))
-        );
+        expect(result).toEqual(expected);
       });
     });
   });
@@ -166,12 +165,11 @@ describe("entryPosition", () => {
         );
       });
 
-      it("should work with empty assemblies", () => {
+      it("should return same as without insertion type for empty assemblies", () => {
+        const expected = entryPosition(theData.empty, "toTop");
         const result = entryPosition(theData.empty, "toTop", "sentence");
 
-        expect(result).toEqual(
-          theData.empty.inFrag(beforeFrag(theData.empty.prefix))
-        );
+        expect(result).toEqual(expected);
       });
     });
   });

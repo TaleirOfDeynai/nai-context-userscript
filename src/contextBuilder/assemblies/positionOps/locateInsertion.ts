@@ -8,7 +8,6 @@ import $QueryOps from "../queryOps";
 import $CursorOps from "../cursorOps";
 import cursorForDir from "./cursorForDir";
 import $PositionsFrom from "./positionsFrom";
-import $SplitUpFrom from "./splitUpFrom";
 
 import type { TrimType } from "../../TrimmingProviders";
 import type { Cursor } from "../../cursors";
@@ -64,7 +63,6 @@ export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);
   const cursorOps = $CursorOps(require);
   const { positionsFrom } = $PositionsFrom(require);
-  const { splitUpFrom } = $SplitUpFrom(require);
 
   /**
    * Locates a position relative to the given `position`.
@@ -105,9 +103,7 @@ export default usModule((require, exports) => {
       // Tracks how many elements we still need to pass.
       let remainder = offset;
 
-      const cursors = chain(splitUpFrom(assembly, initCursor, insertionType, direction))
-        // Convert into positions...
-        .thru((iter) => positionsFrom(assembly, iter, direction))
+      const cursors = chain(positionsFrom(assembly, initCursor, insertionType, direction))
         // ...but if we find the initial cursor, skip it...
         .pipe(skipUntil, (c) => c.offset !== initCursor.offset)
         // ...because we're adding it into the first position here.

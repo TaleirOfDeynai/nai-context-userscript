@@ -51,9 +51,22 @@ describe("locateInsertion", () => {
       suffix: suffixFrags.map(toContent).join("")
     });
 
+    /** To help with test understandability. */
+    const fragFor = (pattern: "PREFIX" | "SUFFIX" | `Fragment ${number}`) => {
+      switch (pattern) {
+        case "PREFIX": return rawFrags[0];
+        case "SUFFIX": return rawFrags[rawFrags.length - 1];
+        default: {
+          const index = rawFrags.findIndex((f) => f.content.startsWith(pattern));
+          return rawFrags[index];
+        }
+      }
+    };
+
     return {
       rawFrags,
       prefixFrags, contentFrags, suffixFrags,
+      fragFor,
       data
     };
   });
@@ -88,7 +101,7 @@ describe("locateInsertion", () => {
     // In NovelAI, this would be `insertionPosition === 0`.
     describe("with offset of 0 (to bottom)", () => {
       it("should return the same result cursor", () => {
-        const offset = insideFrag(simulated.rawFrags[8]);
+        const offset = insideFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toBottom", 0);
         const result = locateInsertion(testData, "sentence", position);
@@ -100,7 +113,7 @@ describe("locateInsertion", () => {
     // In NovelAI, this would be `insertionPosition === -1`.
     describe("with offset of 0 (to top)", () => {
       it("should return the same result cursor", () => {
-        const offset = insideFrag(simulated.rawFrags[8]);
+        const offset = insideFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toTop", 0);
         const result = locateInsertion(testData, "sentence", position);
@@ -111,27 +124,27 @@ describe("locateInsertion", () => {
 
     // In NovelAI, this would be `insertionPosition === 1`.
     describe("with offset of 1 (to bottom)", () => {
-      it("should position result cursor at end of fragment", () => {
-        const offset = insideFrag(simulated.rawFrags[8]);
+      it("should position result cursor at start of next fragment", () => {
+        const offset = insideFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toBottom", 1);
         const result = locateInsertion(testData, "sentence", position);
 
         expect(result).toEqual({
           type: "inside",
-          cursor: testData.inFrag(afterFrag(simulated.rawFrags[8]))
+          cursor: testData.inFrag(beforeFrag(simulated.fragFor("Fragment 5")))
         });
       });
 
-      it("should work with input cursor at the end of the fragment", () => {
-        const offset = afterFrag(simulated.rawFrags[8]);
+      it("should work with input cursor at the start of the fragment", () => {
+        const offset = beforeFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toBottom", 1);
         const result = locateInsertion(testData, "sentence", position);
 
         expect(result).toEqual({
           type: "inside",
-          cursor: testData.inFrag(afterFrag(simulated.rawFrags[10]))
+          cursor: testData.inFrag(beforeFrag(simulated.fragFor("Fragment 5")))
         });
       });
     });
@@ -139,54 +152,52 @@ describe("locateInsertion", () => {
     // In NovelAI, this would be `insertionPosition === -2`.
     describe("with offset of 1 (to top)", () => {
       it("should position result cursor at start of fragment", () => {
-        const offset = insideFrag(simulated.rawFrags[8]);
+        const offset = insideFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toTop", 1);
         const result = locateInsertion(testData, "sentence", position);
 
         expect(result).toEqual({
           type: "inside",
-          cursor: testData.inFrag(beforeFrag(simulated.rawFrags[8]))
+          cursor: testData.inFrag(beforeFrag(simulated.fragFor("Fragment 4")))
         });
       });
 
       it("should work with input cursor at the start of the fragment", () => {
-        const offset = beforeFrag(simulated.rawFrags[8]);
+        const offset = beforeFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toTop", 1);
         const result = locateInsertion(testData, "sentence", position);
 
         expect(result).toEqual({
           type: "inside",
-          cursor: testData.inFrag(beforeFrag(simulated.rawFrags[6]))
+          cursor: testData.inFrag(beforeFrag(simulated.fragFor("Fragment 3")))
         });
       });
     });
 
     describe("with offsets greater than 1", () => {
-      it("should position result cursor after multiple elements", () => {
-        const offset = insideFrag(simulated.rawFrags[8]);
+      it("should position result cursor (to bottom)", () => {
+        const offset = insideFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toBottom", 3);
         const result = locateInsertion(testData, "sentence", position);
 
         expect(result).toEqual({
           type: "inside",
-          // After the fragment with text: "Fragment 6."
-          cursor: testData.inFrag(afterFrag(simulated.rawFrags[12]))
+          cursor: testData.inFrag(beforeFrag(simulated.fragFor("Fragment 7")))
         });
       });
 
-      it("should position result cursor before multiple elements", () => {
-        const offset = insideFrag(simulated.rawFrags[8]);
+      it("should position result cursor (to top)", () => {
+        const offset = insideFrag(simulated.fragFor("Fragment 4"));
         const cursor = testData.inFrag(offset);
         const position = mockPosition(cursor, "toTop", 3);
         const result = locateInsertion(testData, "sentence", position);
 
         expect(result).toEqual({
           type: "inside",
-          // Before the fragment with text: "Fragment 2."
-          cursor: testData.inFrag(beforeFrag(simulated.rawFrags[4]))
+          cursor: testData.inFrag(beforeFrag(simulated.fragFor("Fragment 2")))
         });
       });
     });
@@ -208,13 +219,13 @@ describe("locateInsertion", () => {
     it("should position cursor between two empty newline characters (to bottom)", () => {
       const offset = beforeFrag(first(rawFrags));
       const cursor = testData.inFrag(offset);
-      const position = mockPosition(cursor, "toBottom", 3);
+      const position = mockPosition(cursor, "toBottom", 2);
       const result = locateInsertion(testData, "sentence", position);
 
       expect(result).toEqual({
         type: "inside",
         // After the first "\n" and before the second "\n".
-        cursor: testData.inFrag(afterFrag(rawFrags[3]))
+        cursor: testData.inFrag(beforeFrag(rawFrags[4]))
       });
     });
 
@@ -227,7 +238,7 @@ describe("locateInsertion", () => {
       expect(result).toEqual({
         type: "inside",
         // After the first "\n" and before the second "\n".
-        cursor: testData.inFrag(afterFrag(rawFrags[3]))
+        cursor: testData.inFrag(beforeFrag(rawFrags[4]))
       });
     });
   });
@@ -256,7 +267,7 @@ describe("locateInsertion", () => {
     const testData = simulated.data;
 
     it("should indicate `insertBefore`", () => {
-      const offset = insideFrag(simulated.contentFrags[2]);
+      const offset = insideFrag(simulated.fragFor("Fragment 2"));
       const cursor = testData.inFrag(offset);
       const position = mockPosition(cursor, "toTop", 3);
       const result = locateInsertion(testData, "sentence", position);
@@ -272,14 +283,15 @@ describe("locateInsertion", () => {
     const testData = simulated.data;
 
     it("should indicate `insertAfter`", () => {
-      const offset = insideFrag(simulated.contentFrags[10]);
+      const offset = insideFrag(simulated.fragFor("Fragment 6"));
       const cursor = testData.inFrag(offset);
-      const position = mockPosition(cursor, "toBottom", 3);
+      const position = mockPosition(cursor, "toBottom", 2);
       const result = locateInsertion(testData, "sentence", position);
 
       expect(result).toEqual({
         type: "insertAfter",
-        shunted: 0
+        // Shunted from the start of "SUFFIX" to the end.
+        shunted: simulated.fragFor("SUFFIX").content.length
       });
     });
   });
@@ -291,12 +303,11 @@ describe("locateInsertion", () => {
       // With `toBottom` and an offset of `6`, we expect to move through
       // fragments like this:
       // - 0: (at location of cursor)
-      // - 1: "Fragment 6."
-      // - 2: "Fragment 7."
-      // - 3: "SUFFIX"
-      // - 4: "Next 1."
-      // - 5: "Next 2."
-      // - 6: "Next 3."
+      // - 1: "Fragment 7."
+      // - 2: "SUFFIX"
+      // - 3: "Next 1."
+      // - 4: "Next 2."
+      // - 5: "Next 3."
 
       // But we can only move until we hit "Suffix".  That means there is
       // some amount of moves that must be passed on to the next fragment.
@@ -304,18 +315,18 @@ describe("locateInsertion", () => {
       // 1: "Next 2."
       // 2: "Next 3."
 
-      const offset = insideFrag(simulated.contentFrags[10]);
+      const offset = insideFrag(simulated.fragFor("Fragment 6"));
       const cursor = testData.inFrag(offset);
-      const position = mockPosition(cursor, "toBottom", 6);
+      const position = mockPosition(cursor, "toBottom", 5);
       const result = locateInsertion(testData, "sentence", position);
 
       expect(result).toEqual({ type: "toBottom", remainder: 2 });
     });
 
     it("should be able to continue with offset `0` (to bottom)", () => {
-      const offset = insideFrag(simulated.contentFrags[10]);
+      const offset = insideFrag(simulated.fragFor("Fragment 6"));
       const cursor = testData.inFrag(offset);
-      const position = mockPosition(cursor, "toBottom", 4);
+      const position = mockPosition(cursor, "toBottom", 3);
       const result = locateInsertion(testData, "sentence", position);
 
       expect(result).toEqual({ type: "toBottom", remainder: 0 });          
@@ -338,7 +349,7 @@ describe("locateInsertion", () => {
       // 1: "Previous 2."
       // 0: "Previous 1."
 
-      const offset = insideFrag(simulated.contentFrags[3]);
+      const offset = insideFrag(simulated.fragFor("Fragment 2"));
       const cursor = testData.inFrag(offset);
       const position = mockPosition(cursor, "toTop", 6);
       const result = locateInsertion(testData, "sentence", position);
@@ -347,7 +358,7 @@ describe("locateInsertion", () => {
     });
 
     it("should be able to continue with offset `0` (to top)", () => {
-      const offset = insideFrag(simulated.contentFrags[3]);
+      const offset = insideFrag(simulated.fragFor("Fragment 2"));
       const cursor = testData.inFrag(offset);
       const position = mockPosition(cursor, "toTop", 4);
       const result = locateInsertion(testData, "sentence", position);
@@ -360,8 +371,8 @@ describe("locateInsertion", () => {
     const testData = simulated.data;
 
     const selection = [
-      testData.inFrag(beforeFrag(simulated.contentFrags[3])),
-      testData.inFrag(afterFrag(simulated.contentFrags[3]))
+      testData.inFrag(beforeFrag(simulated.fragFor("Fragment 2"))),
+      testData.inFrag(afterFrag(simulated.fragFor("Fragment 2")))
     ] as const;
 
     it("should use the second cursor when iterating to bottom", () => {
@@ -381,7 +392,7 @@ describe("locateInsertion", () => {
     const testData = simulated.data;
 
     it.failing("should FAIL if offset is negative", () => {
-      const offset = insideFrag(simulated.contentFrags[3]);
+      const offset = insideFrag(simulated.fragFor("Fragment 2"));
       const cursor = testData.inFrag(offset);
       const position = mockPosition(cursor, "toBottom", -1);
       locateInsertion(testData, "sentence", position);
@@ -454,13 +465,13 @@ describe("locateInsertion", () => {
     it("when iterating to bottom", () => {
       // From inside of: Top 2.
       const startOffset = insideFrag(topData.content[2]);
-      // To end of: Bottom 2.
-      const endOffset = afterFrag(botData.content[2]);
+      // To start of: Bottom 2.
+      const endOffset = beforeFrag(botData.content[2]);
 
-      // We expect to need to travel across 11 positions:
-      // 0:I 1:T2 2:T3 3:S 4:P 5:M1 6:M2 7:M3 8:S 9:P 10:B1 11:B2
+      // We expect to need to travel across 10 positions:
+      // 0:I 1:T3 2:S 3:P 4:M1 5:M2 6:M3 7:S 8:P 9:B1 10:B2
       const cursor = topAssembly.inFrag(startOffset);
-      const position = mockPosition(cursor, "toBottom", 11);
+      const position = mockPosition(cursor, "toBottom", 10);
       const result = getResult(assemblies, position);
 
       expect(result).toEqual({

@@ -3,7 +3,6 @@ import { chain, first, last } from "@utils/iterables";
 import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
 import $PositionsFrom from "./positionsFrom";
-import $SplitUpFrom from "./splitUpFrom";
 
 import type { TrimType } from "../../TrimmingProviders";
 import type { Cursor } from "../../cursors";
@@ -13,7 +12,6 @@ import type { IterDirection } from "./cursorForDir";
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const { positionsFrom } = $PositionsFrom(require);
-  const { splitUpFrom } = $SplitUpFrom(require);
 
   /**
    * Gets a cursor for entering this assembly during iteration.
@@ -44,8 +42,7 @@ export default usModule((require, exports) => {
   ): Cursor.Fragment => {
     if (insertionType) {
       const initCursor = entryPosition(assembly, direction);
-      return chain(splitUpFrom(assembly, initCursor, insertionType, direction))
-        .thru((iter) => positionsFrom(assembly, iter, direction))
+      return chain(positionsFrom(assembly, initCursor, insertionType, direction))
         .value((c) => first(c) ?? initCursor);
     }
     else if (direction === "toTop") {
