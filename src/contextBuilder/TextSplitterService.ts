@@ -1,8 +1,8 @@
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert, assertExists } from "@utils/assert";
-import { iterReverse, countBy } from "@utils/iterables";
-import { isArray, isString } from "@utils/is";
+import { chain, iterReverse, countBy, batch } from "@utils/iterables";
+import { isString } from "@utils/is";
 import AppConstants from "@nai/AppConstants";
 
 import type { UndefOr } from "@utils/utility-types";
@@ -156,6 +156,12 @@ export default usModule((require, exports) => {
   const asEmptyFragment = (fragment: TextFragment) =>
     !fragment.content ? fragment : createFragment("", 0, fragment);
 
+  /** Retrieves the starting offset of a fragment. */
+  const beforeFragment = (f: TextFragment) => f.offset;
+
+  /** Retrieves the ending offset of a fragment. */
+  const afterFragment = (f: TextFragment) => f.offset + f.content.length;
+
   /**
    * Combines many sequential fragments into a single fragment.
    * 
@@ -166,19 +172,25 @@ export default usModule((require, exports) => {
    * is preserved and any information about gaps that existed in `fragments`
    * will be lost.
    */
-  const mergeFragments = (fragments: Iterable<TextFragment>): TextFragment => {
-    const parts = isArray(fragments) ? fragments : [...fragments];
-    assert("Expected at least one text fragment.", parts.length > 0);
-    const content = parts.map(asContent).join("");
-    const [{ offset }] = parts;
+  const mergeFragments = (fragments: TextFragment[]): TextFragment => {
+    assert("Expected at least one text fragment.", fragments.length > 0);
+    const content = fragments.map(asContent).join("");
+    const [{ offset }] = fragments;
     return { content, offset };
   };
 
-  /** Retrieves the starting offset of a fragment. */
-  const beforeFragment = (f: TextFragment) => f.offset;
+  /** Internal function; checks if `curFrag` comes after `prevFrag`. */
+  const isSequentialPair = (curFrag: TextFragment, prevFrag: TextFragment) =>
+    beforeFragment(curFrag) === afterFragment(prevFrag);
 
-  /** Retrieves the ending offset of a fragment. */
-  const afterFragment = (f: TextFragment) => f.offset + f.content.length;
+  /**
+   * Finds sequential sections of fragments that have been split apart
+   * and merges them back into a single fragment.
+   */
+  const defragment = (fragments: Iterable<TextFragment>) => chain(fragments)
+    .thru((iter) => batch(iter, isSequentialPair))
+    .map(mergeFragments)
+    .value();
 
   /**
    * Checks if the given offset appears to be inside a given fragment.
@@ -511,8 +523,9 @@ export default usModule((require, exports) => {
     asEmptyFragment,
     beforeFragment,
     afterFragment,
-    isOffsetInside,
     mergeFragments,
+    defragment,
+    isOffsetInside,
     isContiguous,
     splitFragmentAt,
     makeFragmenter

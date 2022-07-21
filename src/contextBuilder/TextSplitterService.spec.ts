@@ -78,6 +78,38 @@ describe("asEmptyFragment", () => {
   });
 });
 
+describe("defragment", () => {
+  const { defragment } = textSplitter;
+
+  it("should defragment a single contiguous sequence", () => {
+    const testFrags = helpers.toFragmentSeq(
+      ["This a", " broken ", "sequence of fragments."], 10
+    );
+
+    const result = [...defragment(testFrags)];
+
+    expect(result).toEqual([
+      mockFragment("This a broken sequence of fragments.", 10)
+    ]);
+  });
+
+  it("should defragment multiple contiguous sequences", () => {
+    const testFrags = [
+      ...helpers.toFragmentSeq(["First", " sequence."], 50),
+      ...helpers.toFragmentSeq(["Second", " sequence."], 0),
+      ...helpers.toFragmentSeq(["Third", " sequence."], 100)
+    ];
+
+    const result = [...defragment(testFrags)];
+
+    expect(result).toEqual([
+      mockFragment("First sequence.", 50),
+      mockFragment("Second sequence.", 0),
+      mockFragment("Third sequence.", 100)
+    ]);
+  });
+});
+
 describe("isContiguous", () => {
   const { isContiguous } = textSplitter;
 
