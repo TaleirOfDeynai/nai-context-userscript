@@ -21,6 +21,8 @@ import type { Cursor } from "../cursors";
 import type { IFragmentAssembly, ITokenizedAssembly } from "./_interfaces";
 import type * as PosOps from "./positionOps";
 
+type AnyIAssembly = IFragmentAssembly | ITokenizedAssembly;
+
 export interface DerivedOptions extends ContinuityOptions {
   /** Required when not deriving from another `TokenizedAssembly`. */
   codec?: AugmentedTokenCodec;
@@ -147,14 +149,13 @@ const theModule = usModule((require, exports) => {
   /** Helper to ensure we have tokens on the assembly. */
   async function asRootAssembly(
     tokenCodec: AugmentedTokenCodec,
-    assembly: IFragmentAssembly,
+    assembly: AnyIAssembly,
     tokens?: Tokens
   ): Promise<ITokenizedAssembly> {
     tokens = tokens ?? await dew(() => {
-      // @ts-ignore - We're checking you dumb piece of shit.
-      if ("tokens" in assembly) return assembly.tokens as Tokens;
+      if ("tokens" in assembly) return assembly.tokens;
       return tokenCodec.encode(queryOps.getText(assembly));
-    })
+    });
     return protoExtend(manipOps.makeSafe(assembly), { tokens });
   }
 
@@ -168,7 +169,7 @@ const theModule = usModule((require, exports) => {
     /** The token codec to use when a conversion is needed. */
     tokenCodec: AugmentedTokenCodec,
     /** The assembly to cast. */
-    assembly: IFragmentAssembly
+    assembly: AnyIAssembly
   ) {
     if (isInstance(assembly)) return assembly;
     return new TokenizedAssembly(

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "@jest/globals";
 import { beforeEach } from "@jest/globals";
 import fakeRequire from "@spec/fakeRequire";
-import { mockFragment } from "@spec/helpers-splitter";
+import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { mockCodec as rawCodec } from "@spec/helpers-tokenizer";
 import { generateData } from "@spec/helpers-assembly";
 
@@ -52,6 +52,15 @@ describe("castTo", () => {
 
     expect(result).not.toBe(testData);
     expect(isInstance(result)).toBe(true);
+  });
+
+  it("should use `tokens` when provided", async () => {
+    const testData = foobarFrags;
+    const fullText = testData.content.map(toContent).join("");
+    const tokens = Object.freeze(await mockCodec.encode(fullText));
+    const result = await castTo(mockCodec, { ...foobarFrags, tokens });
+
+    expect(result.tokens).toBe(tokens);
   });
 
   it("should return the same instance for an instance", async () => {

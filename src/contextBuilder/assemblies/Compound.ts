@@ -5,21 +5,27 @@ import { isFunction } from "@utils/is";
 import { assert, assertExists, assertInBounds } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain } from "@utils/iterables";
+import cursorForDir from "./positionOps/cursorForDir";
 import $SearchService from "../SearchService";
+import $TextSplitterService from "../TextSplitterService";
+import $TokenizedAssembly from "./Tokenized";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
 import type { BudgetedSource } from "../rx/3-selection/_shared";
 import type { ContextContent } from "../ContextContent";
 import type { AssemblyResultMap } from "../SearchService";
+import type { TextFragment } from "../TextSplitterService";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
 import type { Cursor } from "../cursors";
 import type { FragmentAssembly } from "./Fragment";
 import type { TokenizedAssembly } from "./Tokenized";
 import type * as PosOps from "./positionOps";
 
+// TODO: I think we probably should defragment assemblies...
+
 /** The bare minimum needed for an assembly. */
-interface AssemblyLike {
+export interface AssemblyLike {
   readonly text: string;
   readonly tokens: Tokens;
   readonly source: unknown;
@@ -32,7 +38,7 @@ interface AssemblyLike {
 }
 
 /** The bare minimum needed for content. */
-interface ContentLike {
+export interface ContentLike {
   readonly field: IContextField;
   readonly fieldConfig: Record<string, unknown>;
   readonly contextConfig: ContextContent["contextConfig"];
@@ -43,7 +49,7 @@ interface ContentLike {
 }
 
 /** The bare minimum needed for the source. */
-interface SourceLike {
+export interface SourceLike {
   readonly identifier: BudgetedSource["identifier"];
   readonly type: BudgetedSource["type"];
   readonly activations: BudgetedSource["activations"];
@@ -57,7 +63,7 @@ export interface InsertionIterationState extends PosOps.InsertionPosition {
   index: number;
 }
 
-namespace Insertion {
+export namespace Insertion {
   export interface Target {
     readonly index: number;
     readonly assembly: AssemblyLike;
@@ -99,14 +105,14 @@ namespace Insertion {
   export type Result = RejectedResult | InitResult | MainResult;
 }
 
-export type InsertionResult = Insertion.Result;
-
 const REJECTED_INSERT: Insertion.RejectedResult = Object.freeze({
   type: "rejected", tokensUsed: 0, shunted: 0
 });
 
 const theModule = usModule((require, exports) => {
   const { findHighestIndex } = $SearchService(require);
+  const ss = $TextSplitterService(require);
+  const tokenized = $TokenizedAssembly(require);
 
   const toTokens = (f: AssemblyLike) => f.tokens;
 
@@ -116,32 +122,41 @@ const theModule = usModule((require, exports) => {
    * into the location it needs to be.
    * 
    * This is essentially a collection of {@link TokenizedAssembly}.
+   * 
+   * Unlike a normal assembly, this type of assembly is not immutable and
+   * does not work with the standard assembly operators.
    */
   class CompoundAssembly {
     constructor(codec: AugmentedTokenCodec, tokenBudget: number) {
       this.#codec = codec;
       this.#tokenBudget = tokenBudget;
 
-      this.#fragments = [];
+      this.#assemblies = [];
       this.#tokens = [];
       this.#knownSources = new Set();
       this.#textToSource = new Map();
     }
 
     #codec: AugmentedTokenCodec;
-    #fragments: AssemblyLike[];
+    #assemblies: AssemblyLike[];
     #knownSources: Set<SourceLike>;
     #textToSource: Map<unknown, SourceLike>;
 
     /** The full, concatenated text of the assembly. */
     get text(): string {
-      return this.#fragments.map((a) => a.text).join("");
+      return this.#assemblies.map((a) => a.text).join("");
     }
 
+    /** The current tokens of the assembly. */
     get tokens(): Tokens {
       return this.#tokens;
     }
     #tokens: Tokens;
+
+    /** A compound assembly is always its own source. */
+    get source(): this {
+      return this;
+    }
 
     get tokenBudget() {
       return this.#tokenBudget;
@@ -153,14 +168,14 @@ const theModule = usModule((require, exports) => {
     }
 
     async #updateState(
-      newFrags: AssemblyLike[],
+      newAssemblies: AssemblyLike[],
       tokens: Tokens,
       source: SourceLike,
       inserted: AssemblyLike
     ) {
       const diffLength = tokens.length - this.#tokens.length;
 
-      this.#fragments = newFrags;
+      this.#assemblies = newAssemblies;
       this.#tokens = tokens;
       this.#knownSources.add(source);
       this.#textToSource.set(inserted.source ?? inserted, source);
@@ -179,8 +194,8 @@ const theModule = usModule((require, exports) => {
 
     #findStart(source: SourceLike): UndefOr<InsertionIterationState> {
       assert(
-        "Must have at least one text to find a starting location.",
-        this.#fragments.length > 0
+        "Must have at least one assembly to find a starting location.",
+        this.#assemblies.length > 0
       );
 
       const { fieldConfig, contextConfig: { insertionPosition } } = source.entry;
@@ -207,12 +222,12 @@ const theModule = usModule((require, exports) => {
         if (matches.size === 0) return undefined;
 
         // To get the one closest to the bottom, iterate in reverse.
-        const fragments = chain(this.#fragments)
+        const assemblies = chain(this.#assemblies)
           .thru(IterOps.iterPosition)
           .thru(IterOps.iterReverse)
           .value();
 
-        for (const [index, location] of fragments) {
+        for (const [index, location] of assemblies) {
           // TODO: If `location` is composite, we should search inside it.
           const source = this.findSource(location);
           if (!source) continue;
@@ -220,7 +235,7 @@ const theModule = usModule((require, exports) => {
           const selection = matches.get(source);
           if (!selection) continue;
 
-          const position = direction === "toTop" ? selection[0] : selection[1];
+          const position = cursorForDir(selection, direction);
           if (!location.isFoundIn(position)) continue;
 
           return {
@@ -232,10 +247,10 @@ const theModule = usModule((require, exports) => {
         return undefined;
       }
       else {
-        const index = direction === "toTop" ? this.#fragments.length - 1 : 0;
+        const index = direction === "toTop" ? this.#assemblies.length - 1 : 0;
         // We specifically want the position without the insertion type.
         // This places the cursor at the start/end of all the text.
-        const position = this.#fragments[index].entryPosition(direction);
+        const position = this.#assemblies[index].entryPosition(direction);
 
         return {
           direction, index, position,
@@ -271,7 +286,7 @@ const theModule = usModule((require, exports) => {
       const { index } = iterState;
       const assembly = assertExists(
         `Expected to find an assembly at index ${index}`,
-        this.#fragments.at(index)
+        this.#assemblies.at(index)
       );
       const source = this.findSource(assembly);
       return Object.freeze({ index, assembly, source });
@@ -281,7 +296,7 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       inserted: AssemblyLike
     ): Promise<Insertion.InitResult> {
-      assert("Expected to be empty.", this.#fragments.length === 0);
+      assert("Expected to be empty.", this.#assemblies.length === 0);
       const tokensUsed = await this.#updateState(
         [inserted], inserted.tokens, source, inserted
       );
@@ -307,25 +322,25 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       inserted: AssemblyLike,
       overrides?: Pick<Insertion.AfterResult, "type" | "target">
-    ): Promise<InsertionResult> {
+    ): Promise<Insertion.Result> {
       const type = overrides?.type ?? "insertBefore";
       const target = overrides?.target ?? this.#makeTarget(iterState);
 
       const { index } = iterState;
-      const oldFrags = this.#fragments;
+      const oldAsm = this.#assemblies;
 
       assertInBounds(
-        "Expected `index` to be in bounds of `fragments` or one after.",
-        index, oldFrags, true
+        "Expected `index` to be in bounds of `assemblies` or one after.",
+        index, oldAsm, true
       );
 
-      const fragsBefore = oldFrags.slice(0, index);
-      const fragsAfter = oldFrags.slice(index);
+      const asmBefore = oldAsm.slice(0, index);
+      const asmAfter = oldAsm.slice(index);
 
-      const newFrags = [...fragsBefore, inserted, ...fragsAfter];
-      const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
+      const newAsm = [...asmBefore, inserted, ...asmAfter];
+      const tokens = await this.#codec.mendTokens(newAsm.map(toTokens));
 
-      const tokensUsed = await this.#updateState(newFrags, tokens, source, inserted);
+      const tokensUsed = await this.#updateState(newAsm, tokens, source, inserted);
       return { type, target, tokensUsed, shunted: 0 };
     }
 
@@ -350,19 +365,19 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       inserted: AssemblyLike,
       shuntRef: Cursor.Fragment | PosOps.PositionResult
-    ): Promise<InsertionResult> {
+    ): Promise<Insertion.Result> {
       const { index } = iterState;
 
       assertInBounds(
-        "Expected `index` to be in bounds of `fragments`.",
-        index, this.#fragments
+        "Expected `index` to be in bounds of `assemblies`.",
+        index, this.#assemblies
       );
 
       const result = dew(() => {
         if (shuntRef.type !== "fragment") return shuntRef;
         const { shuntingMode } = usConfig.assembly;
         const direction = shuntingMode === "inDirection" ? iterState.direction : "nearest";
-        return this.#fragments[index].shuntOut(shuntRef, direction);
+        return this.#assemblies[index].shuntOut(shuntRef, direction);
       });
 
       switch (result.type) {
@@ -381,21 +396,21 @@ const theModule = usModule((require, exports) => {
       }
     }
 
-    /** Inserts into the fragment at `index`. */
+    /** Inserts into the assembly at `index`. */
     async #doInsertInside(
       iterState: InsertionIterationState,
       cursor: Cursor.Fragment,
       source: SourceLike,
       inserted: AssemblyLike
-    ): Promise<InsertionResult> {
+    ): Promise<Insertion.Result> {
       const { index } = iterState;
-      const oldFrags = this.#fragments;
+      const oldAsm = this.#assemblies;
 
       assert("Expected `index` to be in range.", index >= 0);
-      assert("Expected `index` to be in range.", index < oldFrags.length);
+      assert("Expected `index` to be in range.", index < oldAsm.length);
 
-      const fragsBefore = oldFrags.slice(0, index);
-      const fragsAfter = oldFrags.slice(index + 1);
+      const asmBefore = oldAsm.slice(0, index);
+      const asmAfter = oldAsm.slice(index + 1);
 
       const target = this.#makeTarget(iterState);
 
@@ -416,10 +431,10 @@ const theModule = usModule((require, exports) => {
         if (!splitResult) break checks;
 
         const [splitBefore, splitAfter] = splitResult;
-        const newFrags = [...fragsBefore, splitBefore, inserted, splitAfter, ...fragsAfter];
-        const tokens = await this.#codec.mendTokens(newFrags.map(toTokens));
+        const newAsm = [...asmBefore, splitBefore, inserted, splitAfter, ...asmAfter];
+        const tokens = await this.#codec.mendTokens(newAsm.map(toTokens));
 
-        const tokensUsed = await this.#updateState(newFrags, tokens, source, inserted);
+        const tokensUsed = await this.#updateState(newAsm, tokens, source, inserted);
         return { type: "inside", target, tokensUsed, shunted: 0 };
       }
 
@@ -430,12 +445,12 @@ const theModule = usModule((require, exports) => {
     async insert(
       source: SourceLike,
       budget: number = this.#determineBudget(source)
-    ): Promise<InsertionResult> {
+    ): Promise<Insertion.Result> {
       // Fast-path: no budget, instant rejection.
       if (!budget) return REJECTED_INSERT;
 
       // Fast-path: no fancy stuff for the first thing inserted.
-      if (!this.#fragments.length) {
+      if (!this.#assemblies.length) {
         const inserted = await this.#getAssembly(source.entry, budget);
         if (!inserted) return REJECTED_INSERT;
 
@@ -454,8 +469,8 @@ const theModule = usModule((require, exports) => {
 
       while (true) {
         const { index } = iterState;
-        const frag = this.#fragments[index];
-        const result = frag.locateInsertion(insertionType, iterState);
+        const curAsm = this.#assemblies[index];
+        const result = curAsm.locateInsertion(insertionType, iterState);
         switch (result.type) {
           case "insertBefore":
           case "insertAfter":
@@ -466,16 +481,16 @@ const theModule = usModule((require, exports) => {
           case "toBottom": {
             const offset = result.type === "toTop" ? -1 : 1;
             const nextIndex = index + offset;
-            const nextFrag = this.#fragments.at(nextIndex);
+            const nextAsm = this.#assemblies.at(nextIndex);
 
-            if (!nextFrag) {
+            if (!nextAsm) {
               if (result.type === "toBottom")
                 return await this.#doInsertAfter(iterState, source, inserted);
               return await this.#doInsertBefore(iterState, source, inserted);
             }
 
             iterState.index = nextIndex;
-            iterState.position = nextFrag.entryPosition(result.type, insertionType);
+            iterState.position = nextAsm.entryPosition(result.type, insertionType);
             iterState.offset = result.remainder;
             continue;
           }
@@ -486,8 +501,8 @@ const theModule = usModule((require, exports) => {
     /**
      * Maps an assembly back to its {@link SourceLike}.
      */
-    findSource(text: AssemblyLike): UndefOr<SourceLike> {
-      return this.#textToSource.get(text.source ?? text);
+    findSource(assembly: AssemblyLike): UndefOr<SourceLike> {
+      return this.#textToSource.get(assembly.source ?? assembly);
     }
 
     /**
@@ -502,6 +517,30 @@ const theModule = usModule((require, exports) => {
       const canInsert = Boolean(toInsert.fieldConfig.allowInnerInsertion ?? true);
       const canSplit = Boolean(toSplit.fieldConfig.allowInsertionInside ?? false);
       return canInsert && canSplit;
+    }
+
+    /**
+     * Converts this compound assembly into a stand-alone {@link TokenizedAssembly}.
+     * 
+     * The conversion is a destructive process.  All information about assemblies
+     * that were inserted will be lost and cursors targeting those assemblies will
+     * not be able to be used with this assembly.
+     */
+    toAssembly(): Promise<TokenizedAssembly> {
+      const content: TextFragment[] = [];
+
+      let offset = 0;
+      for (const { text } of this.#assemblies) {
+        content.push(ss.createFragment(text, offset));
+        offset += text.length;
+      }
+
+      return tokenized.castTo(this.#codec, {
+        prefix: ss.createFragment("", 0),
+        content: Object.freeze(content),
+        suffix: ss.createFragment("", offset),
+        tokens: this.tokens
+      });
     }
   }
 
