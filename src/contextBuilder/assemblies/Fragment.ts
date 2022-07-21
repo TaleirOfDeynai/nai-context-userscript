@@ -107,6 +107,8 @@ const theModule = usModule((require, exports) => {
 
   /**
    * Converts the given assembly into a {@link FragmentAssembly}.
+   * 
+   * Warning: This will not defragment the contents of the assembly.
    */
   function castTo(assembly: IFragmentAssembly) {
     if (isInstance(assembly)) return assembly;
@@ -162,6 +164,7 @@ const theModule = usModule((require, exports) => {
           (f) => ss.createFragment(f.content, prefix.length + f.offset)
         );
       })
+      .thru(ss.defragment)
       .value(toImmutable);
 
     const maxOffset = chain(adjustedFrags)
@@ -225,8 +228,10 @@ const theModule = usModule((require, exports) => {
     const { prefix, suffix } = originAssembly;
 
     const localFrags = chain(fragments)
-      // Just make sure the prefix and suffix fragments are not included.
+      // Make sure the prefix and suffix fragments are not included.
       .filter((v) => v !== prefix && v !== suffix)
+      // And defragment them.
+      .thru(ss.defragment)
       .value(toImmutable);
 
     const assumeContinuity = options?.assumeContinuity ?? false;

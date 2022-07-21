@@ -1,4 +1,5 @@
-import { mockFragment, toFragmentSeq } from "@spec/helpers-splitter";
+import { mockFragment, toFragmentSeq, toContent } from "@spec/helpers-splitter";
+import { first } from "@utils/iterables";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "@src/contextBuilder/TextSplitterService";
@@ -90,6 +91,10 @@ export const insideFrag = (frag: UndefOr<TextFragment>) =>
 /** Gets the position just after a fragment. */
 export const afterFrag = (frag: UndefOr<TextFragment>) =>
   !frag ? 0 : frag.offset + frag.content.length;
+
+/** Merges a sequence of fragments into a single fragment. */
+export const asMerged = (frags: readonly TextFragment[]) =>
+  mockFragment(frags.map(toContent).join(""), beforeFrag(first(frags)));
 
 /** Generates the data for a standard test assembly. */
 export const generateData = (

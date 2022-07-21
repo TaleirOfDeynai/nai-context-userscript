@@ -15,14 +15,11 @@ import type { IContextField } from "@nai/ContextModule";
 import type { BudgetedSource } from "../rx/3-selection/_shared";
 import type { ContextContent } from "../ContextContent";
 import type { AssemblyResultMap } from "../SearchService";
-import type { TextFragment } from "../TextSplitterService";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
 import type { Cursor } from "../cursors";
 import type { FragmentAssembly } from "./Fragment";
 import type { TokenizedAssembly } from "./Tokenized";
 import type * as PosOps from "./positionOps";
-
-// TODO: I think we probably should defragment assemblies...
 
 /** The bare minimum needed for an assembly. */
 export interface AssemblyLike {
@@ -527,18 +524,12 @@ const theModule = usModule((require, exports) => {
      * not be able to be used with this assembly.
      */
     toAssembly(): Promise<TokenizedAssembly> {
-      const content: TextFragment[] = [];
-
-      let offset = 0;
-      for (const { text } of this.#assemblies) {
-        content.push(ss.createFragment(text, offset));
-        offset += text.length;
-      }
+      const { text } = this;
 
       return tokenized.castTo(this.#codec, {
         prefix: ss.createFragment("", 0),
-        content: Object.freeze(content),
-        suffix: ss.createFragment("", offset),
+        content: Object.freeze([ss.createFragment(text, 0)]),
+        suffix: ss.createFragment("", text.length),
         tokens: this.tokens
       });
     }

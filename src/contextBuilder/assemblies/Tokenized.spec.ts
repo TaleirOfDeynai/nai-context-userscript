@@ -3,7 +3,7 @@ import { beforeEach } from "@jest/globals";
 import fakeRequire from "@spec/fakeRequire";
 import { mockFragment, toContent } from "@spec/helpers-splitter";
 import { mockCodec as rawCodec } from "@spec/helpers-tokenizer";
-import { generateData } from "@spec/helpers-assembly";
+import { generateData, asMerged } from "@spec/helpers-assembly";
 
 import { dew } from "@utils/dew";
 import $TokenizerService from "../TokenizerService";
@@ -116,6 +116,16 @@ describe("fromDerived", () => {
     });
   });
 
+  it("should merge sequential fragments", async () => {
+    // Just dropping the whitespace between index `2` and `4`.
+    const firstSeq = foobarFrags.content.slice(0, 3);
+    const secondSeq = foobarFrags.content.slice(4, 5);
+    const derivedFrags = [...firstSeq, ...secondSeq];
+    const result = await fromDerived(derivedFrags, originAssembly);
+
+    expect(result.content).toEqual([asMerged(firstSeq), asMerged(secondSeq)]);
+  });
+
   it("should remove the prefix/suffix fragment of the origin assembly from content", async () => {
     // Specifically for the case you convert another `FragmentAssembly` into
     // an iterable and do a transform on it without removing the prefix
@@ -125,7 +135,7 @@ describe("fromDerived", () => {
     const derivedFrags = [originAssembly.prefix, ...reducedFrags, originAssembly.suffix];
     const result = await fromDerived(derivedFrags, originAssembly);
 
-    expect(result.content).toEqual(reducedFrags);
+    expect(result.content).toEqual([asMerged(reducedFrags)]);
     expect(result.content).not.toBe(derivedFrags);
   });
 

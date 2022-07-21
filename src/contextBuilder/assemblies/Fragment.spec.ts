@@ -2,6 +2,7 @@ import { describe, it, expect } from "@jest/globals";
 import fakeRequire from "@spec/fakeRequire";
 import { mockStory } from "@spec/mock-story";
 import { getEmptyFrag, mockFragment } from "@spec/helpers-splitter";
+import { asMerged } from "@spec/helpers-assembly";
 import { contiguousFrags, offsetFrags } from "@spec/helpers-assembly";
 
 import $FragmentAssembly from "./Fragment";
@@ -101,7 +102,7 @@ describe("fromFragments", () => {
     expect(result.content).not.toBe(content);
     expect(result.content).toBeInstanceOf(Array);
     expect(Object.isFrozen(result.content)).toBe(true);
-    expect(result.content).toEqual(content);
+    expect(result.content).toEqual([asMerged(content)]);
 
     expect(result.prefix).toEqual(mockFragment("", 0));
     expect(result.suffix).toEqual(mockFragment("", maxOffset));
@@ -118,7 +119,7 @@ describe("fromFragments", () => {
     expect(result.content).not.toBe(genIterator);
     expect(result.content).toBeInstanceOf(Array);
     expect(Object.isFrozen(result.content)).toBe(true);
-    expect(result.content).toEqual(content);
+    expect(result.content).toEqual([asMerged(content)]);
 
     expect(result.prefix).toEqual(mockFragment("", 0));
     expect(result.suffix).toEqual(mockFragment("", maxOffset));
@@ -136,9 +137,9 @@ describe("fromFragments", () => {
     expect(result.content).not.toBe(content);
     expect(result.content).toBeInstanceOf(Array);
     expect(Object.isFrozen(result.content)).toBe(true);
-    expect(result.content).toEqual(
-      content.map((f) => mockFragment(f.content, f.offset + 7))
-    );
+    expect(result.content).toEqual([
+      asMerged(content.map((f) => mockFragment(f.content, f.offset + 7)))
+    ]);
 
     expect(result.prefix).toEqual(mockFragment("PREFIX\n", 0));
     expect(result.suffix).toEqual(mockFragment("\nSUFFIX", maxOffset + 7));
@@ -147,17 +148,18 @@ describe("fromFragments", () => {
   it("should filter out any empty fragments", () => {
     const { content } = offsetFrags;
 
+    const firstSeq = content.slice(0, 2);
+    const secondSeq = content.slice(3);
+
     const fragments = [
-      ...content.slice(0, 2),
+      ...firstSeq,
       getEmptyFrag(content[2]),
-      ...content.slice(3)
+      ...secondSeq
     ];
+  
     const result = fromFragments(fragments);
 
-    expect(result.content).toEqual([
-      ...content.slice(0, 2),
-      ...content.slice(3)
-    ]);
+    expect(result.content).toEqual([asMerged(firstSeq), asMerged(secondSeq)]);
   });
 
   it.todo("should assume continuity when told to");
@@ -207,6 +209,16 @@ describe("fromDerived", () => {
     });
   });
 
+  it("should merge sequential fragments", async () => {
+    // Just dropping the whitespace between index `2` and `4`.
+    const firstSeq = offsetFrags.content.slice(0, 3);
+    const secondSeq = offsetFrags.content.slice(4, 5);
+    const derivedFrags = [...firstSeq, ...secondSeq];
+    const result = await fromDerived(derivedFrags, parentData);
+
+    expect(result.content).toEqual([asMerged(firstSeq), asMerged(secondSeq)]);
+  });
+
   it("should remove the prefix/suffix fragment of the origin assembly from content", () => {
     // Specifically for the case you convert another `FragmentAssembly` into
     // an iterable and do a transform on it without removing the prefix
@@ -216,7 +228,7 @@ describe("fromDerived", () => {
     const derivedFrags = [parentData.prefix, ...reducedFrags, parentData.suffix];
     const result = fromDerived(derivedFrags, parentData);
 
-    expect(result.content).toEqual(reducedFrags);
+    expect(result.content).toEqual([asMerged(reducedFrags)]);
     expect(result.content).not.toBe(derivedFrags);
   });
 

@@ -164,6 +164,8 @@ const theModule = usModule((require, exports) => {
    * 
    * A token codec is required, in case a conversion needs to be made;
    * the assembly's text will need to be encoded.
+   * 
+   * Warning: This will not defragment the contents of the assembly.
    */
   async function castTo(
     /** The token codec to use when a conversion is needed. */
