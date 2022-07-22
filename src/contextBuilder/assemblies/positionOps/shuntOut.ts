@@ -5,7 +5,7 @@ import $CursorOps from "../cursorOps";
 import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../_interfaces";
 import type { IterDirection } from "./cursorForDir";
-import type { PositionResult } from "./locateInsertion";
+import type { Position } from "./locateInsertion";
 
 export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);
@@ -25,7 +25,7 @@ export default usModule((require, exports) => {
     cursor: Cursor.Fragment,
     /** The shunt mode to use. */
     mode: IterDirection | "nearest" = "nearest"
-  ): PositionResult => {
+  ): Position.InsertResult => {
     // We actually want to convert this to a full-text cursor, as it
     // simplifies a lot of this.
     const { offset } = cursorOps.toFullText(assembly, cursor);

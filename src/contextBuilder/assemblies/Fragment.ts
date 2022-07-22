@@ -6,17 +6,14 @@ import { chain, toImmutable, mapIter } from "@utils/iterables";
 import $TextSplitterService from "../TextSplitterService";
 import $CursorOps from "./cursorOps";
 import $ManipOps from "./manipOps";
-import $PositionOps from "./positionOps";
 import $QueryOps from "./queryOps";
 import $BaseAssembly from "./Base";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "../TextSplitterService";
-import type { TrimType } from "../TrimmingProviders";
 import type { Cursor } from "../cursors";
 import type { IFragmentAssembly } from "./_interfaces";
-import type * as PosOps from "./positionOps";
 
 export interface ContinuityOptions {
   /**
@@ -45,7 +42,6 @@ const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
   const cursorOps = $CursorOps(require);
   const manipOps = $ManipOps(require);
-  const posOps = $PositionOps(require);
   const queryOps = $QueryOps(require);
   const { BaseAssembly } = $BaseAssembly(require);
 
@@ -62,6 +58,11 @@ const theModule = usModule((require, exports) => {
       isContiguous: boolean
     ) {
       super(wrapped, isContiguous);
+    }
+
+    /** Bound version of {@link queryOps.checkRelated}. */
+    isRelatedTo(other: IFragmentAssembly): boolean {
+      return queryOps.checkRelated(this, other);
     }
 
     /** Bound version of {@link cursorOps.isFoundIn}. */

@@ -2,7 +2,7 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isFunction } from "@utils/is";
-import { assert, assertExists, assertInBounds } from "@utils/assert";
+import { assert, assertAs, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain } from "@utils/iterables";
 import cursorForDir from "./positionOps/cursorForDir";
@@ -17,16 +17,17 @@ import type { ContextContent } from "../ContextContent";
 import type { AssemblyResultMap } from "../SearchService";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
 import type { Cursor } from "../cursors";
+import type { ITokenizedAssembly } from "./_interfaces";
 import type { FragmentAssembly } from "./Fragment";
 import type { TokenizedAssembly } from "./Tokenized";
-import type * as PosOps from "./positionOps";
+import type { Position, IterDirection, InsertionPosition } from "./positionOps";
 
 /** The bare minimum needed for an assembly. */
-export interface AssemblyLike {
+export interface AssemblyLike extends ITokenizedAssembly {
   readonly text: string;
-  readonly tokens: Tokens;
-  readonly source: unknown;
+  readonly isEmpty: boolean;
 
+  isRelatedTo: FragmentAssembly["isRelatedTo"];
   isFoundIn: FragmentAssembly["isFoundIn"];
   entryPosition: TokenizedAssembly["entryPosition"];
   locateInsertion: TokenizedAssembly["locateInsertion"];
@@ -59,9 +60,8 @@ export interface SourceLike {
 
 export type ShuntingMode = "nearest" | "inDirection";
 
-export interface InsertionIterationState extends PosOps.InsertionPosition {
-  index: number;
-}
+// A short-hand type alias.
+type ActionableResult = Position.SuccessResult | Position.InsertResult;
 
 export namespace Insertion {
   export interface Target {
@@ -83,7 +83,7 @@ export namespace Insertion {
   }
 
   interface MainBase {
-    readonly type: Exclude<PosOps.PositionResult["type"], PosOps.IterDirection>;
+    readonly type: Exclude<Position.Result["type"], IterDirection>;
     readonly target: Target;
     readonly tokensUsed: number;
     readonly shunted: number;
@@ -103,11 +103,25 @@ export namespace Insertion {
 
   type MainResult = InsertResult | BeforeResult | AfterResult;
   export type Result = RejectedResult | InitResult | MainResult;
+
+  export namespace Iteration {
+    export interface State extends InsertionPosition {
+      source: SourceLike;
+      target: Target;
+    }
+
+    export interface Result extends Readonly<State> {
+      readonly result: ActionableResult;
+    }
+  }
 }
 
 const REJECTED_INSERT: Insertion.RejectedResult = Object.freeze({
   type: "rejected", tokensUsed: 0, shunted: 0
 });
+
+const isInsertResult = (result: ActionableResult): result is Position.InsertResult =>
+  result.type !== "inside";
 
 const theModule = usModule((require, exports) => {
   const { findHighestIndex } = $SearchService(require);
@@ -137,10 +151,25 @@ const theModule = usModule((require, exports) => {
       this.#textToSource = new Map();
     }
 
-    #codec: AugmentedTokenCodec;
-    #assemblies: AssemblyLike[];
     #knownSources: Set<SourceLike>;
     #textToSource: Map<unknown, SourceLike>;
+
+    /** The codec used to encode the tokens in this assembly. */
+    protected get codec(): AugmentedTokenCodec {
+      return this.#codec;
+    }
+    readonly #codec: AugmentedTokenCodec;
+
+    /**
+     * The assemblies that make up this assembly.
+     * 
+     * Do not mutate this array directly.  Don't do it!
+     */
+    protected get assemblies(): readonly AssemblyLike[] {
+      // Scout's honor you won't mutate this array.
+      return this.#assemblies;
+    }
+    #assemblies: AssemblyLike[];
 
     /** The full, concatenated text of the assembly. */
     get text(): string {
@@ -153,11 +182,6 @@ const theModule = usModule((require, exports) => {
     }
     #tokens: Tokens;
 
-    /** A compound assembly is always its own source. */
-    get source(): this {
-      return this;
-    }
-
     get tokenBudget() {
       return this.#tokenBudget;
     }
@@ -165,6 +189,11 @@ const theModule = usModule((require, exports) => {
 
     get availableTokens() {
       return Math.max(0, this.tokenBudget - this.tokens.length);
+    }
+
+    /** A protected method to handle the mending of the tokens. */
+    protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
+      return await this.codec.mendTokens(tokensToMend);
     }
 
     async #updateState(
@@ -192,7 +221,7 @@ const theModule = usModule((require, exports) => {
       return activations.get("cascade")?.matches.get(target.entry.field);
     }
 
-    #findStart(source: SourceLike): UndefOr<InsertionIterationState> {
+    #findStart(source: SourceLike): UndefOr<Insertion.Iteration.State> {
       assert(
         "Must have at least one assembly to find a starting location.",
         this.#assemblies.length > 0
@@ -246,8 +275,13 @@ const theModule = usModule((require, exports) => {
           });
           if (!cursor) continue;
 
+          const target = assertExists(
+            `Expected assembly at ${index} to exist.`,
+            this.#makeTarget(index)
+          );
+
           return {
-            direction, index, cursor,
+            direction, cursor, source, target,
             offset: Math.abs(insertionPosition + remOffset)
           };
         }
@@ -260,8 +294,13 @@ const theModule = usModule((require, exports) => {
         // This places the cursor at the start/end of all the text.
         const cursor = this.#assemblies[index].entryPosition(direction);
 
+        const target = assertExists(
+          `Expected assembly at ${index} to exist.`,
+          this.#makeTarget(index)
+        );
+
         return {
-          direction, index, cursor,
+          direction, cursor, source, target,
           offset: Math.abs(insertionPosition + remOffset)
         };
       }
@@ -290,12 +329,10 @@ const theModule = usModule((require, exports) => {
       return assembly;
     }
 
-    #makeTarget(iterState: InsertionIterationState): Insertion.Target {
-      const { index } = iterState;
-      const assembly = assertExists(
-        `Expected to find an assembly at index ${index}`,
-        this.#assemblies.at(index)
-      );
+    #makeTarget(index: number): UndefOr<Insertion.Target> {
+      const assembly = this.#assemblies.at(index);
+      if (!assembly) return undefined;
+
       const source = this.findSource(assembly);
       return Object.freeze({ index, assembly, source });
     }
@@ -312,115 +349,67 @@ const theModule = usModule((require, exports) => {
       return { type: "initial", tokensUsed, shunted: 0 };
     }
 
-    /** Special override exclusively for `doInsertAfter`. */
-    async #doInsertBefore(
-      iterState: InsertionIterationState,
+    /** Inserts adjacent to `index`, based on `iterState.result.type`. */
+    async #doInsertAdjacent(
+      iterState: Insertion.Iteration.Result,
       source: SourceLike,
       inserted: AssemblyLike,
-      overrides: Pick<Insertion.AfterResult, "type" | "target">
-    ): Promise<Insertion.AfterResult>;
-    /** Inserts before `index`. */
-    async #doInsertBefore(
-      iterState: InsertionIterationState,
-      source: SourceLike,
-      inserted: AssemblyLike
-    ): Promise<Insertion.BeforeResult>;
-    async #doInsertBefore(
-      iterState: InsertionIterationState,
-      source: SourceLike,
-      inserted: AssemblyLike,
-      overrides?: Pick<Insertion.AfterResult, "type" | "target">
-    ): Promise<Insertion.Result> {
-      const type = overrides?.type ?? "insertBefore";
-      const target = overrides?.target ?? this.#makeTarget(iterState);
-
-      const { index } = iterState;
+      type?: Position.InsertResult["type"]
+    ): Promise<Insertion.AfterResult | Insertion.BeforeResult> {
+      const { target } = iterState;
       const oldAsm = this.#assemblies;
 
-      assertInBounds(
-        "Expected `index` to be in bounds of `assemblies` or one after.",
-        index, oldAsm, true
-      );
+      type ??= assertAs(
+        "Expected `iterState.result` to be an `InsertResult`.",
+        isInsertResult, iterState.result
+      ).type;
 
+      const index = target.index + (type === "insertAfter" ? 1 : 0);
       const asmBefore = oldAsm.slice(0, index);
       const asmAfter = oldAsm.slice(index);
 
       const newAsm = [...asmBefore, inserted, ...asmAfter];
-      const tokens = await this.#codec.mendTokens(newAsm.map(toTokens));
+      const tokens = await this.mendTokens(newAsm.map(toTokens));
 
       const tokensUsed = await this.#updateState(newAsm, tokens, source, inserted);
       return { type, target, tokensUsed, shunted: 0 };
     }
 
-    /** Inserts after `index`. */
-    async #doInsertAfter(
-      iterState: InsertionIterationState,
-      source: SourceLike,
-      inserted: AssemblyLike
-    ): Promise<Insertion.AfterResult> {
-      // Yeah, just insert it before the next one.  Don't have to do
-      // two separate implementations this way.  :P
-      return await this.#doInsertBefore(
-        { ...iterState, index: iterState.index + 1 },
-        source,
-        inserted,
-        { type: "insertAfter", target: this.#makeTarget(iterState) }
-      );
-    }
-
     async #doShuntOut(
-      iterState: InsertionIterationState,
+      iterResult: Insertion.Iteration.Result,
       source: SourceLike,
       inserted: AssemblyLike,
-      shuntRef: Cursor.Fragment | PosOps.PositionResult
+      shuntRef: Cursor.Fragment | ActionableResult
     ): Promise<Insertion.Result> {
-      const { index } = iterState;
-
-      assertInBounds(
-        "Expected `index` to be in bounds of `assemblies`.",
-        index, this.#assemblies
-      );
+      const { target } = iterResult;
 
       const result = dew(() => {
         if (shuntRef.type !== "fragment") return shuntRef;
         const { shuntingMode } = usConfig.assembly;
-        const direction = shuntingMode === "inDirection" ? iterState.direction : "nearest";
-        return this.#assemblies[index].shuntOut(shuntRef, direction);
+        const direction = shuntingMode === "inDirection" ? iterResult.direction : "nearest";
+        return target.assembly.shuntOut(shuntRef, direction);
       });
 
-      switch (result.type) {
-        case "insertBefore": return {
-          ...await this.#doInsertBefore(iterState, source, inserted),
-          shunted: result.shunted
-        };
-        case "insertAfter": return {
-          ...await this.#doInsertAfter(iterState, source, inserted),
-          shunted: result.shunted
-        };
-        // This should not be possible unless the implementation of `shuntOut`
-        // changes to allow it...  In which case, this error will hopefully
-        // let us know something needs to change here.
-        default: throw new Error(`Unexpected shunt direction: ${result.type}`);
-      }
+      // This should not be possible unless the implementation of `shuntOut`
+      // changes to allow it...  In which case, this error will hopefully
+      // let us know something needs to change here.
+      if (!isInsertResult(result))
+        throw new Error(`Unexpected shunt direction: ${result.type}`);
+
+      return {
+        ...await this.#doInsertAdjacent(iterResult, source, inserted, result.type),
+        shunted: result.shunted
+      };
     }
 
     /** Inserts into the assembly at `index`. */
     async #doInsertInside(
-      iterState: InsertionIterationState,
-      cursor: Cursor.Fragment,
+      iterResult: Insertion.Iteration.Result,
       source: SourceLike,
       inserted: AssemblyLike
     ): Promise<Insertion.Result> {
-      const { index } = iterState;
+      const { target, cursor } = iterResult;
       const oldAsm = this.#assemblies;
-
-      assert("Expected `index` to be in range.", index >= 0);
-      assert("Expected `index` to be in range.", index < oldAsm.length);
-
-      const asmBefore = oldAsm.slice(0, index);
-      const asmAfter = oldAsm.slice(index + 1);
-
-      const target = this.#makeTarget(iterState);
 
       checks: {
         // If there is no source, we can't check if we can even split.
@@ -438,16 +427,72 @@ const theModule = usModule((require, exports) => {
         // in case.
         if (!splitResult) break checks;
 
+        const asmBefore = oldAsm.slice(0, target.index);
+        const asmAfter = oldAsm.slice(target.index + 1);
+
         const [splitBefore, splitAfter] = splitResult;
         const newAsm = [...asmBefore, splitBefore, inserted, splitAfter, ...asmAfter];
-        const tokens = await this.#codec.mendTokens(newAsm.map(toTokens));
+        const tokens = await this.mendTokens(newAsm.map(toTokens));
 
         const tokensUsed = await this.#updateState(newAsm, tokens, source, inserted);
         return { type: "inside", target, tokensUsed, shunted: 0 };
       }
 
       // If we got kicked out of the `checks` block, we must do a shunt.
-      return await this.#doShuntOut(iterState, source, inserted, cursor);
+      return await this.#doShuntOut(iterResult, source, inserted, cursor);
+    }
+
+    *#iterateInsertion(
+      initState: Insertion.Iteration.State
+    ): Iterable<Insertion.Iteration.Result> {
+      let state = initState;
+
+      const { insertionType } = initState.source.entry.contextConfig;
+
+      // We'll allow only one reversal to avoid infinite loops.
+      let didReversal = false;
+
+      while (true) {
+        const { index } = state.target;
+        const curAsm = this.#assemblies[index];
+
+        // Check for emptiness; `SubContext` will report empty when it
+        // has no assemblies inside it, in which case we should skip it.
+        if (!curAsm.isEmpty) {
+          const result = curAsm.locateInsertion(insertionType, state);
+
+          switch (result.type) {
+            case "toTop":
+            case "toBottom":
+              state.offset = result.remainder;
+
+              if (state.direction === result.type) break;
+              if (didReversal) return;
+              state.direction = result.type;
+              didReversal = true;
+              break;
+            default:
+              yield Object.freeze({ ...state, result });
+          }
+        }
+
+        const offset = state.direction === "toTop" ? -1 : 1;
+        const nextIndex = index + offset;
+        const nextTarget = this.#makeTarget(nextIndex);
+
+        if (!nextTarget) {
+          // We hit the end.  Insert it before or after the last target.
+          const type = state.direction === "toTop" ? "insertBefore" : "insertAfter";
+          yield Object.freeze({ ...state, result: { type, shunted: 0 } as const });
+          return;
+        }
+
+        state.target = nextTarget;
+        state.cursor = nextTarget.assembly.entryPosition(
+          state.direction,
+          insertionType
+        );
+      }
     }
 
     async insert(
@@ -466,44 +511,28 @@ const theModule = usModule((require, exports) => {
       }
 
       // Can we locate a place to start our search for its insertion location?
-      const iterState = this.#findStart(source);
-      if (!iterState) return REJECTED_INSERT;
+      const startState = this.#findStart(source);
+      if (!startState) return REJECTED_INSERT;
 
       // Can we fit it into the budget?
       const inserted = await this.#getAssembly(source.entry, budget);
       if (!inserted) return REJECTED_INSERT;
 
-      const { insertionType } = source.entry.contextConfig;
-
-      while (true) {
-        const { index } = iterState;
-        const curAsm = this.#assemblies[index];
-        const result = curAsm.locateInsertion(insertionType, iterState);
-        switch (result.type) {
+      for (const iterResult of this.#iterateInsertion(startState)) {
+        const { result } = iterResult;
+        switch (iterResult.result.type) {
           case "insertBefore":
           case "insertAfter":
-            return await this.#doShuntOut(iterState, source, inserted, result);
+            return await this.#doShuntOut(iterResult, source, inserted, result);
           case "inside":
-            return await this.#doInsertInside(iterState, result.cursor, source, inserted);
-          case "toTop":
-          case "toBottom": {
-            const offset = result.type === "toTop" ? -1 : 1;
-            const nextIndex = index + offset;
-            const nextAsm = this.#assemblies.at(nextIndex);
-
-            if (!nextAsm) {
-              if (result.type === "toBottom")
-                return await this.#doInsertAfter(iterState, source, inserted);
-              return await this.#doInsertBefore(iterState, source, inserted);
-            }
-
-            iterState.index = nextIndex;
-            iterState.cursor = nextAsm.entryPosition(result.type, insertionType);
-            iterState.offset = result.remainder;
-            continue;
-          }
+            return await this.#doInsertInside(iterResult, source, inserted);
+          default:
+            throw new Error(`Unexpected insertion type: ${(result as any).type}`);
         }
       }
+
+      // Should not happen, but let me know if it does.
+      throw new Error("Unexpected end of iteration.");
     }
 
     /**
@@ -528,7 +557,7 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Converts this compound assembly into a stand-alone {@link TokenizedAssembly}.
+     * Converts this compound assembly into a static {@link TokenizedAssembly}.
      * 
      * The conversion is a destructive process.  All information about assemblies
      * that were inserted will be lost and cursors targeting those assemblies will
@@ -537,7 +566,7 @@ const theModule = usModule((require, exports) => {
     toAssembly(): Promise<TokenizedAssembly> {
       const { text } = this;
 
-      return tokenized.castTo(this.#codec, {
+      return tokenized.castTo(this.codec, {
         prefix: ss.createFragment("", 0),
         content: Object.freeze([ss.createFragment(text, 0)]),
         suffix: ss.createFragment("", text.length),

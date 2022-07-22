@@ -73,6 +73,11 @@ const theModule = usModule((require, exports) => {
     }
     readonly #codec: AugmentedTokenCodec;
 
+    /** Bound version of {@link queryOps.checkRelated}. */
+    isRelatedTo(other: IFragmentAssembly): boolean {
+      return queryOps.checkRelated(this, other);
+    }
+
     /** Bound version of {@link cursorOps.isFoundIn}. */
     isFoundIn(cursor: Cursor.Fragment): boolean {
       return cursorOps.isFoundIn(this, cursor);
@@ -109,7 +114,7 @@ const theModule = usModule((require, exports) => {
       cursor: Cursor.Fragment,
       /** The shunt mode to use. */
       mode?: PosOps.IterDirection | "nearest"
-    ): PosOps.PositionResult {
+    ): PosOps.Position.InsertResult {
       return posOps.shuntOut(this, cursor, mode);
     }
 
