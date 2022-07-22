@@ -15,14 +15,8 @@ import type { IFragmentAssembly } from "../_interfaces";
 import type { IterDirection } from "./cursorForDir";
 
 export interface InsertionPosition {
-  /**
-   * A cursor or selection marking the position of the iteration.
-   * 
-   * If a {@link Cursor.Selection}:
-   * - When `direction` is `"toTop"`, the first cursor is used.
-   * - When `direction` is `"toBottom"`, the second cursor is used.
-   */
-  position: Cursor.Fragment | Cursor.Selection;
+  /** A cursor marking the position of the iteration. */
+  cursor: Cursor.Fragment;
   /** Which direction to look for an insertion position. */
   direction: IterDirection;
   /** How many elements to shift the position by; must be positive. */
@@ -86,14 +80,12 @@ export default usModule((require, exports) => {
     /** An object describing how to locate the insertion. */
     positionData: Readonly<InsertionPosition>
   ): PositionResult => {
-    const { position, direction, offset } = positionData;
+    const { cursor: initCursor, direction, offset } = positionData;
 
     assert("Expected `offset` to be a positive number.", offset >= 0);
 
     // Fast-path: If this assembly is empty, tell it to carry on.
     if (queryOps.isEmpty(assembly)) return { type: direction, remainder: offset };
-
-    const initCursor = cursorOps.findBest(assembly, cursorForDir(position, direction));
 
     // Fast-path: If we're given an offset of 0, we don't need to move
     // the cursor at all (though, `findBest` could have moved it).

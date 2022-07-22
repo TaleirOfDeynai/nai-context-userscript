@@ -23,10 +23,10 @@ describe("locateInsertion", () => {
   // behavior.
 
   const mockPosition = (
-    position: InsertionPosition["position"],
+    cursor: InsertionPosition["cursor"],
     direction: InsertionPosition["direction"],
     offset: InsertionPosition["offset"]
-  ): InsertionPosition => ({ position, direction, offset });
+  ): InsertionPosition => ({ cursor, direction, offset });
 
   const simulated = dew(() => {
     const rawFrags = toFragmentSeq([
@@ -364,27 +364,6 @@ describe("locateInsertion", () => {
       const result = locateInsertion(testData, "sentence", position);
 
       expect(result).toEqual({ type: "toTop", remainder: 0 });          
-    });
-  });
-
-  describe("when using a selection", () => {
-    const testData = simulated.data;
-
-    const selection = [
-      testData.inFrag(beforeFrag(simulated.fragFor("Fragment 2"))),
-      testData.inFrag(afterFrag(simulated.fragFor("Fragment 2")))
-    ] as const;
-
-    it("should use the second cursor when iterating to bottom", () => {
-      const position = mockPosition(selection, "toBottom", 0);
-      const result = locateInsertion(testData, "sentence", position);
-      expect(result).toEqual({ type: "inside", cursor: selection[1] });
-    });
-
-    it("should use the first cursor when iterating to top", () => {
-      const position = mockPosition(selection, "toTop", 0);
-      const result = locateInsertion(testData, "sentence", position);
-      expect(result).toEqual({ type: "inside", cursor: selection[0] });
     });
   });
 

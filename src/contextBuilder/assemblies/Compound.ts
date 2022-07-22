@@ -31,6 +31,8 @@ export interface AssemblyLike {
   entryPosition: TokenizedAssembly["entryPosition"];
   locateInsertion: TokenizedAssembly["locateInsertion"];
   shuntOut: TokenizedAssembly["shuntOut"];
+
+  findBest?: FragmentAssembly["findBest"];
   splitAt?: TokenizedAssembly["splitAt"];
 }
 
@@ -41,6 +43,7 @@ export interface ContentLike {
   readonly contextConfig: ContextContent["contextConfig"];
   readonly trimmed: Promise<UndefOr<AssemblyLike>>;
 
+  isCursorLoose?: ContextContent["isCursorLoose"];
   rebudget?: ContextContent["rebudget"];
   finalize?: ContextContent["finalize"];
 }
@@ -232,11 +235,19 @@ const theModule = usModule((require, exports) => {
           const selection = matches.get(source);
           if (!selection) continue;
 
-          const position = cursorForDir(selection, direction);
-          if (!location.isFoundIn(position)) continue;
+          const cursor = dew(() => {
+            const cursor = cursorForDir(selection, direction);
+            if (location.isFoundIn(cursor)) return cursor;
+            if (!source.entry.isCursorLoose?.(cursor)) return undefined;
+            // If the cursor references searchable text but the text was
+            // removed from the insertable assembly, we'll give it some
+            // additional leeway when used in a key-relative context.
+            return location.findBest?.(cursor);
+          });
+          if (!cursor) continue;
 
           return {
-            direction, index, position,
+            direction, index, cursor,
             offset: Math.abs(insertionPosition + remOffset)
           };
         }
@@ -247,10 +258,10 @@ const theModule = usModule((require, exports) => {
         const index = direction === "toTop" ? this.#assemblies.length - 1 : 0;
         // We specifically want the position without the insertion type.
         // This places the cursor at the start/end of all the text.
-        const position = this.#assemblies[index].entryPosition(direction);
+        const cursor = this.#assemblies[index].entryPosition(direction);
 
         return {
-          direction, index, position,
+          direction, index, cursor,
           offset: Math.abs(insertionPosition + remOffset)
         };
       }
@@ -487,7 +498,7 @@ const theModule = usModule((require, exports) => {
             }
 
             iterState.index = nextIndex;
-            iterState.position = nextAsm.entryPosition(result.type, insertionType);
+            iterState.cursor = nextAsm.entryPosition(result.type, insertionType);
             iterState.offset = result.remainder;
             continue;
           }

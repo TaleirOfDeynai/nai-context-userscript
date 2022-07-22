@@ -1,5 +1,4 @@
 import { describe, it, expect } from "@jest/globals";
-import { beforeEach } from "@jest/globals";
 import fakeRequire from "@spec/fakeRequire";
 import { getEmptyFrag } from "@spec/helpers-splitter";
 import { insideFrag, beforeFrag } from "@spec/helpers-assembly";
@@ -7,21 +6,7 @@ import { contiguousFrags, offsetFrags } from "@spec/helpers-assembly";
 
 import { assertExists } from "@utils/assert";
 import { first } from "@utils/iterables";
-import $ContentCursorOf from "../cursorOps/contentCursorOf";
 import $SplitAt from "./splitAt";
-
-import type { SpyInstance } from "jest-mock";
-import type { IFragmentAssembly } from "../_interfaces";
-
-let spyContentCursorOf: SpyInstance<ReturnType<typeof $ContentCursorOf>["contentCursorOf"]>;
-fakeRequire.inject($ContentCursorOf, (exports, jestFn) => {
-  spyContentCursorOf = jestFn(exports.contentCursorOf);
-  return Object.assign(exports, { contentCursorOf: spyContentCursorOf });
-});
-
-beforeEach(() => {
-  spyContentCursorOf.mockReset();
-});
 
 describe("splitSequenceAt", () => {
   const { splitAt } = $SplitAt(fakeRequire);
@@ -78,30 +63,6 @@ describe("splitSequenceAt", () => {
 
       // The cursor ultimately used...  Which should be unchanged.
       expect(result.cursor).toBe(cursor);
-    });
-  });
-
-  describe("concerning loose mode", () => {
-    const testData = offsetFrags;
-
-    it("should call `contentCursorOf` in loose mode when active", () => {
-      const offset = beforeFrag(offsetFrags.content[2]);
-      const cursor = testData.inFrag(offset);
-
-      spyContentCursorOf.mockReturnValue(undefined);
-      splitAt(testData, cursor, true);
-
-      expect(spyContentCursorOf).toBeCalledWith(testData, cursor, true);
-    });
-
-    it("should call `contentCursorOf` in strict mode when inactive", () => {
-      const offset = beforeFrag(offsetFrags.content[2]);
-      const cursor = testData.inFrag(offset);
-
-      spyContentCursorOf.mockReturnValue(undefined);
-      splitAt(testData, cursor);
-
-      expect(spyContentCursorOf).toBeCalledWith(testData, cursor, false);
     });
   });
 });

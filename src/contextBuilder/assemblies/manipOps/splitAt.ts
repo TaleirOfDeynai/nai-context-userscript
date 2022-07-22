@@ -43,15 +43,9 @@ export default usModule((require, exports) => {
      * 
      * Must be a cursor within the assembly's content.
      */
-    cursor: Cursor.Fragment,
-    /**
-     * If `true` and no fragment exists in the assembly's content for
-     * the cursor, the next best cursor will be used instead as a
-     * fallback.
-     */
-    loose: boolean = false
+    cursor: Cursor.Fragment
   ): UndefOr<FragmentSplitResult> => {
-    const usedCursor = cursorOps.contentCursorOf(assembly, cursor, loose);
+    const usedCursor = cursorOps.contentCursorOf(assembly, cursor);
     if (!usedCursor) return undefined;
 
     const content = isArray(assembly.content) ? assembly.content : [...assembly.content];

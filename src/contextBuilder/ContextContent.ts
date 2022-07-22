@@ -8,6 +8,7 @@ import UUID from "@nai/UUID";
 import $TrimmingProviders from "./TrimmingProviders";
 import $TrimmingService from "./TrimmingService";
 import $FragmentAssembly from "./assemblies/Fragment";
+import $CursorOps from "./assemblies/cursorOps";
 import $QueryOps from "./assemblies/queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
@@ -15,6 +16,7 @@ import type { IContextField } from "@nai/ContextModule";
 import type { ContextConfig, LoreEntryConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
+import type { Cursor } from "./cursors";
 import type { Assembly } from "./assemblies";
 
 /**
@@ -56,6 +58,7 @@ const theModule = usModule((require, exports) => {
   const eventModule = require(EventModule);
   const { ContextField } = require(ContextModule);
   const providers = $TrimmingProviders(require);
+  const cursorOps = $CursorOps(require);
   const queryOps = $QueryOps(require);
 
   const { createTrimmer, execTrimTokens, trimByLength } = $TrimmingService(require);
@@ -332,6 +335,15 @@ const theModule = usModule((require, exports) => {
     /** The context configuration provided to the constructor. */
     get contextConfig(): Readonly<ContextConfig> {
       return this.#contextConfig;
+    }
+
+    /**
+     * Indicates if the given cursor is in the search text but missing
+     * from the inserted text.
+     */
+    isCursorLoose(cursor: Cursor.Fragment): boolean {
+      if (cursorOps.isFoundIn(this.insertedText, cursor)) return false;
+      return cursorOps.isFoundIn(this.searchedText, cursor);
     }
 
     /** Gets stats related to this content's budget. */

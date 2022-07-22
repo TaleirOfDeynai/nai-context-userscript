@@ -69,17 +69,17 @@ const theModule = usModule((require, exports) => {
       return cursorOps.isFoundIn(this, cursor);
     }
 
+    /** Bound version of {@link cursorOps.findBest}. */
+    findBest(cursor: Cursor.Fragment): Cursor.Fragment {
+      return cursorOps.findBest(this, cursor);
+    }
+
     /** Bound version of {@link manipOps.splitAt}. */
     splitAt(
       /** The cursor demarking the position of the cut. */
-      cursor: Cursor.Fragment,
-      /**
-       * If `true` and no fragment exists in the assembly for the position,
-       * the next best position will be used instead as a fallback.
-       */
-      loose: boolean = false
+      cursor: Cursor.Fragment
     ): UndefOr<[FragmentAssembly, FragmentAssembly]> {
-      return manipOps.splitAt(this, cursor, loose)?.assemblies.map((a) => {
+      return manipOps.splitAt(this, cursor)?.assemblies.map((a) => {
         return new FragmentAssembly(a, this.isContiguous);
       }) as [FragmentAssembly, FragmentAssembly];
     }

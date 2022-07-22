@@ -78,6 +78,11 @@ const theModule = usModule((require, exports) => {
       return cursorOps.isFoundIn(this, cursor);
     }
 
+    /** Bound version of {@link cursorOps.findBest}. */
+    findBest(cursor: Cursor.Fragment): Cursor.Fragment {
+      return cursorOps.findBest(this, cursor);
+    }
+
     /** Bound version of {@link posOps.entryPosition}. */
     entryPosition(
       /** Which direction to iterate. */
@@ -111,14 +116,9 @@ const theModule = usModule((require, exports) => {
     /** Bound version of {@link tokenOps.splitAt}. */
     async splitAt(
       /** The cursor demarking the position of the cut. */
-      cursor: Cursor.Fragment,
-      /**
-       * If `true` and no fragment exists in the assembly for the position,
-       * the next best position will be used instead as a fallback.
-       */
-      loose: boolean = false
+      cursor: Cursor.Fragment
     ): Promise<UndefOr<[TokenizedAssembly, TokenizedAssembly]>> {
-      const result = await tokenOps.splitAt(this, this.#codec, cursor, loose);
+      const result = await tokenOps.splitAt(this, this.#codec, cursor);
 
       return result?.assemblies.map((a) => {
         return new TokenizedAssembly(a, this.#codec, this.isContiguous);

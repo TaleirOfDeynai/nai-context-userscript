@@ -47,15 +47,9 @@ export default usModule((require, exports) => {
      * 
      * Must be a cursor within the assembly's content.
      */
-    cursor: Cursor.Fragment,
-    /**
-     * If `true` and no fragment exists in the assembly's content for
-     * the cursor, the next best cursor will be used instead as a
-     * fallback.
-     */
-    loose: boolean = false
+    cursor: Cursor.Fragment
   ): Promise<UndefOr<TokenizedSplitResult>> => {
-    const result = manipOps.splitAt(assembly, cursor, loose);
+    const result = manipOps.splitAt(assembly, cursor);
     if (!result) return undefined;
 
     const [beforeTokens, afterTokens] = await getTokensForSplit(
