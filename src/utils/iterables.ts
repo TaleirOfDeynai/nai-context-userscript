@@ -76,8 +76,10 @@ export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   collect<TOut extends readonly Primitives[]>(collectFn: TupleCollectFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
   /** Collects each applicable element. */
   collect<TOut>(collectFn: CollectFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
+  /** Concatenates the given values and/or iterables before the current iterable. */
+  prepend<TEl>(...others: (TEl | Iterable<TEl>)[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
   /** Concatenates the given values and/or iterables after the current iterable. */
-  concat<TEl>(...others: (TEl | Iterable<TEl>)[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
+  append<TEl>(...others: (TEl | Iterable<TEl>)[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
   /** Transforms the iterable into a different iterable. */
   thru<TIterOut extends Iterable<unknown>>(xformFn: TransformFn<TIterIn, TIterOut>): ChainComposition<TIterOut>;
   /**
@@ -765,7 +767,8 @@ function chain(iterable?: any) {
     flatten: () => chain(flatten(iterable)),
     filter: (predicateFn) => chain(filterIter(iterable, predicateFn)),
     collect: (collectFn) => chain(collectIter(iterable, collectFn)),
-    concat: (...others) => chain(concat(iterable, ...others)),
+    prepend: (...others) => chain(concat(...others, iterable)),
+    append: (...others) => chain(concat(iterable, ...others)),
     thru: (transformFn) => chain(transformFn(iterable)),
     pipe: (fn, ...args) => chain(fn(iterable, ...args)),
     tap: (tapFn) => chain(tapEach(iterable, tapFn)),
