@@ -1,7 +1,7 @@
 import _hasIn from "lodash/hasIn";
 import { isIterable, isArray } from "./is";
 import { isString, isObject, isNumber } from "./is";
-import { assert } from "./assert";
+import { assert, assertAs } from "./assert";
 
 import type { PredicateFn } from "./functions";
 import type { AnyValueOf, Maybe, UndefOr } from "./utility-types";
@@ -12,6 +12,9 @@ export type KVP<K = string | number, V = any> = readonly [K, V];
 
 /** The primitive data-types. */
 export type Primitives = number | string | boolean | Function | {} | null | undefined;
+
+/** Any iterable except string. */
+export type SafeIterable<T extends Iterable<unknown>> = T extends string ? never : T;
 
 export type Flattenable<T = unknown>
   = T extends string ? string
@@ -76,10 +79,14 @@ export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   collect<TOut extends readonly Primitives[]>(collectFn: TupleCollectFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
   /** Collects each applicable element. */
   collect<TOut>(collectFn: CollectFn<ElementOf<TIterIn>, TOut>): ChainComposition<Iterable<TOut>>;
-  /** Concatenates the given values and/or iterables before the current iterable. */
-  prepend<TEl>(...others: (TEl | Iterable<TEl>)[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
-  /** Concatenates the given values and/or iterables after the current iterable. */
-  append<TEl>(...others: (TEl | Iterable<TEl>)[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
+  /** Concatenates the given iterable before the current iterable. */
+  prepend<TEl>(values: Iterable<TEl>): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
+  /** Concatenates the given values before the current iterable. */
+  prependVal<TEl>(...values: TEl[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
+  /** Concatenates the given iterable after the current iterable. */
+  append<TEl>(values: Iterable<TEl>): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
+  /** Concatenates the given iterable after the current iterable. */
+  appendVal<TEl>(...values: TEl[]): ChainComposition<Iterable<ElementOf<TIterIn> | TEl>>;
   /** Transforms the iterable into a different iterable. */
   thru<TIterOut extends Iterable<unknown>>(xformFn: TransformFn<TIterIn, TIterOut>): ChainComposition<TIterOut>;
   /**
@@ -550,17 +557,40 @@ export const partition = function*<T extends KVP<any>>(
 };
 
 /**
- * Concatenates multiple values and/or iterables together.  Does not iterate
- * on strings, however.
+ * Concatenates multiple iterables together.
+ * 
+ * Similar to {@link flatten}, providing `string` as `T` is treated as an
+ * error.  Use `as Iterable<string>` if you want to overrule it.
  */
-export const concat = function*<T>(
-  ...others: Array<T | Iterable<T>>
-): Iterable<T> {
+export const concat = function*<T extends Iterable<unknown>>(
+  ...others: Array<SafeIterable<T>>
+): Iterable<ElementOf<T>> {
   for (const value of others) {
-    if (isString(value)) yield value as T;
-    else if (isIterable(value)) yield* value;
-    else yield value;
+    assertAs("Expected an iterable.", isIterable, value);
+    yield* value as any;
   }
+};
+
+/**
+ * Inserts the given `values` before the elements of `iterable`.
+ */
+export const prepend = function*<T, U>(
+  iterable: Iterable<T>,
+  values: Iterable<U>
+): Iterable<T | U> {
+  yield* values;
+  yield* iterable;
+};
+
+/**
+ * Inserts the given `values` after the elements of `iterable`.
+ */
+export const append = function*<T, U>(
+  iterable: Iterable<T>,
+  values: Iterable<U>
+): Iterable<T | U> {
+  yield* iterable;
+  yield* values;
 };
 
 /**
@@ -767,8 +797,10 @@ function chain(iterable?: any) {
     flatten: () => chain(flatten(iterable)),
     filter: (predicateFn) => chain(filterIter(iterable, predicateFn)),
     collect: (collectFn) => chain(collectIter(iterable, collectFn)),
-    prepend: (...others) => chain(concat(...others, iterable)),
-    append: (...others) => chain(concat(iterable, ...others)),
+    prepend: (values) => chain(prepend(iterable, values)),
+    prependVal: (...values) => chain(prepend(iterable, values)),
+    append: (values) => chain(append(iterable, values)),
+    appendVal: (...values) => chain(append(iterable, values)),
     thru: (transformFn) => chain(transformFn(iterable)),
     pipe: (fn, ...args) => chain(fn(iterable, ...args)),
     tap: (tapFn) => chain(tapEach(iterable, tapFn)),

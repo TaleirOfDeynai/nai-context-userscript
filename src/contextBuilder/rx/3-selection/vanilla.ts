@@ -50,7 +50,7 @@ export default usModule((require, exports) => {
     const chosenSorters = chain(usConfig.selection.insertionOrdering)
       // Force the natural sorters to be the last ones.
       .filter((k) => k !== "naturalByPosition" && k !== "naturalByType")
-      .append<SorterKey>("naturalByType", "naturalByPosition")
+      .appendVal<SorterKey>("naturalByType", "naturalByPosition")
       // Check to make sure there's a sorter for each key.
       .tap((k) => assert(`Unknown sorter "${k}" for \`selection.ordering\` config!`, k in Sorters))
       .map((k) => Sorters[k](contextParams, require))

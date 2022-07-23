@@ -2,11 +2,10 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
 import { isNumber } from "@utils/is";
-import { chain, skipUntil, concat } from "@utils/iterables";
+import { chain, skipUntil } from "@utils/iterables";
 import $TextSplitterService from "../../TextSplitterService";
 import $QueryOps from "../queryOps";
 import $CursorOps from "../cursorOps";
-import cursorForDir from "./cursorForDir";
 import $PositionsFrom from "./positionsFrom";
 
 import type { TrimType } from "../../TrimmingProviders";
@@ -99,7 +98,7 @@ export default usModule((require, exports) => {
         // ...but if we find the initial cursor, skip it...
         .pipe(skipUntil, (c) => c.offset !== initCursor.offset)
         // ...because we're adding it into the first position here.
-        .thru((cursors) => concat(initCursor, cursors))
+        .prependVal(initCursor)
         .value();
 
       for (const cursor of cursors) {

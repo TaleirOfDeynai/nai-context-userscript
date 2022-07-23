@@ -475,8 +475,8 @@ describe("bySentence", () => {
     describe("considering multiple punctuation", () => {
       it("should split on multiple punctuation", () => {
         const sections = chain()
-          .append("What are you doing!?")
-          .append("The core samples will get too hot!")
+          .appendVal("What are you doing!?")
+          .appendVal("The core samples will get too hot!")
           .pipe(interweave, " ")
           .toArray();
         const fragment = mockFragment(sections.join(""), 10);
