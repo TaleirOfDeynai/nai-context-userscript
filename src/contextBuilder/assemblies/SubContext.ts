@@ -85,14 +85,6 @@ const theModule = usModule((require, exports) => {
       return this.assemblies.length === 0;
     }
 
-    protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
-      return await super.mendTokens([
-        this.#prefix.tokens,
-        ...tokensToMend,
-        this.#suffix.tokens
-      ]);
-    }
-
     /** Implementation of {@link AssemblyLike.isRelatedTo}. */
     isRelatedTo(other: IFragmentAssembly): boolean {
       if (other === this) return true;
@@ -180,6 +172,14 @@ const theModule = usModule((require, exports) => {
      */
     toAssembly(): Promise<TokenizedAssembly> {
       return tokenized.castTo(this.codec, this);
+    }
+
+    protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
+      return await super.mendTokens([
+        this.#prefix.tokens,
+        ...tokensToMend,
+        this.#suffix.tokens
+      ]);
     }
   }
 

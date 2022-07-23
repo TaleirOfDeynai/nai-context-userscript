@@ -191,6 +191,85 @@ const theModule = usModule((require, exports) => {
       return Math.max(0, this.tokenBudget - this.tokens.length);
     }
 
+    async insert(
+      source: SourceLike,
+      budget: number = this.#determineBudget(source)
+    ): Promise<Insertion.Result> {
+      // Fast-path: no budget, instant rejection.
+      if (!budget) return REJECTED_INSERT;
+
+      // Fast-path: no fancy stuff for the first thing inserted.
+      if (!this.#assemblies.length) {
+        const inserted = await this.#getAssembly(source.entry, budget);
+        if (!inserted) return REJECTED_INSERT;
+
+        return await this.#doInsertInitial(source, inserted);
+      }
+
+      // Can we locate a place to start our search for its insertion location?
+      const startState = this.#findStart(source);
+      if (!startState) return REJECTED_INSERT;
+
+      // Can we fit it into the budget?
+      const inserted = await this.#getAssembly(source.entry, budget);
+      if (!inserted) return REJECTED_INSERT;
+
+      for (const iterResult of this.#iterateInsertion(startState)) {
+        const { result } = iterResult;
+        switch (iterResult.result.type) {
+          case "insertBefore":
+          case "insertAfter":
+            return await this.#doShuntOut(iterResult, source, inserted, result);
+          case "inside":
+            return await this.#doInsertInside(iterResult, source, inserted);
+          default:
+            throw new Error(`Unexpected insertion type: ${(result as any).type}`);
+        }
+      }
+
+      // Should not happen, but let me know if it does.
+      throw new Error("Unexpected end of iteration.");
+    }
+
+    /**
+     * Maps an assembly back to its {@link SourceLike}.
+     */
+    findSource(assembly: AssemblyLike): UndefOr<SourceLike> {
+      return this.#textToSource.get(assembly.source ?? assembly);
+    }
+
+    /**
+     * Lorebook entries can configure when they can split other entries
+     * apart and if they themselves may be split apart.  This function
+     * runs those checks.
+     */
+    canSplitInto(
+      toInsert: ContentLike,
+      toSplit: ContentLike
+    ): boolean {
+      const canInsert = Boolean(toInsert.fieldConfig.allowInnerInsertion ?? true);
+      const canSplit = Boolean(toSplit.fieldConfig.allowInsertionInside ?? false);
+      return canInsert && canSplit;
+    }
+
+    /**
+     * Converts this compound assembly into a static {@link TokenizedAssembly}.
+     * 
+     * The conversion is a destructive process.  All information about assemblies
+     * that were inserted will be lost and cursors targeting those assemblies will
+     * not be able to be used with this assembly.
+     */
+    toAssembly(): Promise<TokenizedAssembly> {
+      const { text } = this;
+
+      return tokenized.castTo(this.codec, {
+        prefix: ss.createFragment("", 0),
+        content: Object.freeze([ss.createFragment(text, 0)]),
+        suffix: ss.createFragment("", text.length),
+        tokens: this.tokens
+      });
+    }
+
     /** A protected method to handle the mending of the tokens. */
     protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
       return await this.codec.mendTokens(tokensToMend);
@@ -493,85 +572,6 @@ const theModule = usModule((require, exports) => {
           insertionType
         );
       }
-    }
-
-    async insert(
-      source: SourceLike,
-      budget: number = this.#determineBudget(source)
-    ): Promise<Insertion.Result> {
-      // Fast-path: no budget, instant rejection.
-      if (!budget) return REJECTED_INSERT;
-
-      // Fast-path: no fancy stuff for the first thing inserted.
-      if (!this.#assemblies.length) {
-        const inserted = await this.#getAssembly(source.entry, budget);
-        if (!inserted) return REJECTED_INSERT;
-
-        return await this.#doInsertInitial(source, inserted);
-      }
-
-      // Can we locate a place to start our search for its insertion location?
-      const startState = this.#findStart(source);
-      if (!startState) return REJECTED_INSERT;
-
-      // Can we fit it into the budget?
-      const inserted = await this.#getAssembly(source.entry, budget);
-      if (!inserted) return REJECTED_INSERT;
-
-      for (const iterResult of this.#iterateInsertion(startState)) {
-        const { result } = iterResult;
-        switch (iterResult.result.type) {
-          case "insertBefore":
-          case "insertAfter":
-            return await this.#doShuntOut(iterResult, source, inserted, result);
-          case "inside":
-            return await this.#doInsertInside(iterResult, source, inserted);
-          default:
-            throw new Error(`Unexpected insertion type: ${(result as any).type}`);
-        }
-      }
-
-      // Should not happen, but let me know if it does.
-      throw new Error("Unexpected end of iteration.");
-    }
-
-    /**
-     * Maps an assembly back to its {@link SourceLike}.
-     */
-    findSource(assembly: AssemblyLike): UndefOr<SourceLike> {
-      return this.#textToSource.get(assembly.source ?? assembly);
-    }
-
-    /**
-     * Lorebook entries can configure when they can split other entries
-     * apart and if they themselves may be split apart.  This function
-     * runs those checks.
-     */
-    canSplitInto(
-      toInsert: ContentLike,
-      toSplit: ContentLike
-    ): boolean {
-      const canInsert = Boolean(toInsert.fieldConfig.allowInnerInsertion ?? true);
-      const canSplit = Boolean(toSplit.fieldConfig.allowInsertionInside ?? false);
-      return canInsert && canSplit;
-    }
-
-    /**
-     * Converts this compound assembly into a static {@link TokenizedAssembly}.
-     * 
-     * The conversion is a destructive process.  All information about assemblies
-     * that were inserted will be lost and cursors targeting those assemblies will
-     * not be able to be used with this assembly.
-     */
-    toAssembly(): Promise<TokenizedAssembly> {
-      const { text } = this;
-
-      return tokenized.castTo(this.codec, {
-        prefix: ss.createFragment("", 0),
-        content: Object.freeze([ss.createFragment(text, 0)]),
-        suffix: ss.createFragment("", text.length),
-        tokens: this.tokens
-      });
     }
   }
 
