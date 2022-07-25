@@ -9,7 +9,8 @@
     "manip",
     "prepending",
     "rebudget",
-    "rxop"
+    "rxop",
+    "subcontext"
   ],
   "typescript.tsdk": "node_modules/typescript/lib"
 }

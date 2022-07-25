@@ -1,25 +1,33 @@
 import usConfig from "@config";
 import { usModule } from "@utils/usModule";
+import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
+import makeCursor from "../cursors/Fragment";
 import $TextSplitterService from "../TextSplitterService";
 import $CursorOps from "./cursorOps";
 import $PositionOps from "./positionOps";
 import $TokenizedAssembly from "./Tokenized";
 import $CompoundAssembly from "./Compound";
 
+import type { UndefOr } from "@utils/utility-types";
+import type { ContextConfig, Categories } from "@nai/Lorebook";
 import type { TextFragment } from "../TextSplitterService";
 import type { TrimType } from "../TrimmingProviders";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
 import type { Cursor } from "../cursors";
 import type { IFragmentAssembly } from "./_interfaces";
 import type { TokenizedAssembly } from "./Tokenized";
-import type { AssemblyLike } from "./Compound";
+import type { AssemblyLike, ContentLike } from "./Compound";
 import type { Position, IterDirection, InsertionPosition } from "./positionOps";
+
+type CategoryWithSubContext = Categories.BaseCategory & Categories.WithSubcontext;
 
 interface TokenizedFragment {
   text: string;
   tokens: Tokens;
 }
+
+const EMPTY_TOKENS: Tokens = Object.freeze([]);
 
 const theModule = usModule((require, exports) => {
   const ss = $TextSplitterService(require);
@@ -35,25 +43,49 @@ const theModule = usModule((require, exports) => {
    * better.  Accessing most properties of {@link IFragmentAssembly} will
    * instantiate objects and perform iterations on the sub-assemblies.
    */
-  class SubContext extends CompoundAssembly implements AssemblyLike {
+  class SubContext extends CompoundAssembly implements AssemblyLike, ContentLike {
     constructor(
       codec: AugmentedTokenCodec,
-      tokenBudget: number,
+      contextConfig: Readonly<ContextConfig>,
       prefix: TokenizedFragment,
       suffix: TokenizedFragment
     ) {
-      super(codec, tokenBudget);
+      super(codec, contextConfig.tokenBudget);
 
+      this.#contextConfig = contextConfig;
       this.#prefix = prefix;
       this.#suffix = suffix;
     }
 
+    get contextConfig() {
+      return this.#contextConfig;
+    }
+    readonly #contextConfig: Readonly<ContextConfig>;
+
+    get trimmed() {
+      return Promise.resolve(this);
+    }
+
+    /**
+     * The full, concatenated text of the assembly.  If this assembly is
+     * empty, its text will also be empty.
+     */
     get text() {
+      if (this.isEmpty) return "";
+
       return [
         this.#prefix.text,
         super.text,
         this.#suffix.text
       ].join("");
+    }
+
+    /**
+     * The current tokens of the assembly.  If this assembly is empty,
+     * its tokens will also be empty.
+     */
+    get tokens(): Tokens {
+      return this.isEmpty ? EMPTY_TOKENS : super.tokens;
     }
 
     get prefix(): TextFragment {
@@ -78,11 +110,40 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * A sub-context is passed over until it has an assembly inside it,
-     * regardless of if its `prefix` or `suffix` have content.
+     * A sub-context is treated as empty until it has a non-empty assembly
+     * inside it, regardless of if its `prefix` or `suffix` have content.
      */
     get isEmpty(): boolean {
-      return this.assemblies.length === 0;
+      if (this.assemblies.length === 0) return true;
+      return this.assemblies.every((asm) => asm.isEmpty);
+    }
+
+    /**
+     * Implementation of {@link AssemblyLike.adaptCursor}.
+     * 
+     * This will adapt the cursor to this sub-context's current `text` if
+     * the cursor is targeting one of its sub-assemblies.
+     * 
+     * This cursor is only valid for the current state of the sub-context;
+     * if the sub-context is modified, the cursor may point to a different
+     * position than intended.
+     */
+    adaptCursor(cursor: Cursor.Fragment): UndefOr<Cursor.Fragment> {
+      if (cursor.origin === this) return cursor;
+
+      let offset = this.#prefix.text.length;
+      for (const asm of this.assemblies) {
+        checks: {
+          if (!asm.isRelatedTo(cursor.origin)) break checks;
+          // It may still be in a split sub-assembly.
+          if (!asm.isFoundIn(cursor)) break checks;
+          return makeCursor(this, offset);
+        }
+
+        offset += asm.text.length;
+      }
+
+      return undefined;
     }
 
     /** Implementation of {@link AssemblyLike.isRelatedTo}. */
@@ -95,19 +156,10 @@ const theModule = usModule((require, exports) => {
       return false;
     }
 
-    /**
-     * Implementation of {@link AssemblyLike.isFoundIn}.
-     * 
-     * Accepts both cursors for this assembly and its sub-assemblies.
-     */
+    /** Implementation of {@link AssemblyLike.isFoundIn}. */
     isFoundIn(cursor: Cursor.Fragment): boolean {
-      if (cursor.origin === this)
-        return cursorOps.isFoundIn(this, cursor);
-
-      for (const asm of this.assemblies)
-        if (asm.isRelatedTo(cursor.origin))
-          return asm.isFoundIn(cursor);
-      return false;
+      if (cursor.origin !== this) return false;
+      return cursorOps.isFoundIn(this, cursor);
     }
 
     /** Implementation of {@link AssemblyLike.entryPosition}. */
@@ -182,11 +234,41 @@ const theModule = usModule((require, exports) => {
       ]);
     }
   }
+  /** Creates an empty sub-context for a category. */
+  async function forCategory(
+    codec: AugmentedTokenCodec,
+    category: CategoryWithSubContext
+  ): Promise<CategoryContext> {
+    const { name, subcontextSettings } = category;
+    const { contextConfig } = subcontextSettings;
+
+    const [prefix, suffix] = await Promise.all([
+      dew(async () => {
+        const { prefix } = contextConfig;
+        if (!prefix) return { text: "", tokens: EMPTY_TOKENS };
+        const tokens = await codec.encode(prefix);
+        return { text: prefix, tokens };
+      }),
+      dew(async () => {
+        const { suffix } = contextConfig;
+        if (!suffix) return { text: "", tokens: EMPTY_TOKENS };
+        const tokens = await codec.encode(suffix);
+        return { text: suffix, tokens };
+      })
+    ]) as [TokenizedFragment, TokenizedFragment];
+
+    return Object.assign(
+      new SubContext(codec, contextConfig, prefix, suffix),
+      { category: name }
+    );
+  };
 
   return Object.assign(exports, {
-    SubContext
+    SubContext,
+    forCategory
   });
 });
 
 export default theModule;
 export type SubContext = InstanceType<ReturnType<typeof theModule>["SubContext"]>;
+export type CategoryContext = SubContext & { category: string };

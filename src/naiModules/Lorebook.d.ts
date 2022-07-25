@@ -76,7 +76,7 @@ export interface LorebookConfig {
 }
 
 export namespace Categories {
-  interface BaseCategory {
+  export interface BaseCategory {
     name: string;
     enabled: boolean;
 
@@ -84,29 +84,29 @@ export namespace Categories {
     categoryBiasGroups?: PhraseBiasConfig[];
   }
 
-  interface WithSubcontext {
+  export interface WithSubcontext {
     createSubcontext: true;
     subcontextSettings: LoreEntry;
   }
 
-  interface WithoutSubcontext {
+  export interface WithoutSubContext {
     createSubcontext: false;
     subcontextSettings?: LoreEntry;
   }
 
-  interface WithCategoryDefaults {
+  export interface WithCategoryDefaults {
     useCategoryDefaults: true;
     categoryDefaults: LoreEntry;
   }
 
-  interface WithoutCategoryDefaults {
+  export interface WithoutCategoryDefaults {
     useCategoryDefaults: false;
     categoryDefaults?: LoreEntry;
   }
 
-  type Category
+  export type Category
     = BaseCategory
-    & (WithSubcontext | WithoutSubcontext)
+    & (WithSubcontext | WithoutSubContext)
     & (WithCategoryDefaults | WithoutCategoryDefaults);
 }
 

@@ -35,15 +35,22 @@ export interface AssemblyLike extends ITokenizedAssembly {
 
   findBest?: FragmentAssembly["findBest"];
   splitAt?: TokenizedAssembly["splitAt"];
+
+  /**
+   * Special method for sub-contexts.  Returns a new cursor that is
+   * relative to this assembly, but only for the current state of the
+   * sub-context (which changes if a sub-assembly is inserted into it).
+   */
+  adaptCursor?: (cursor: Cursor.Fragment) => UndefOr<Cursor.Fragment>;
 }
 
 /** The bare minimum needed for content. */
 export interface ContentLike {
-  readonly field: IContextField;
-  readonly fieldConfig: Record<string, unknown>;
   readonly contextConfig: ContextContent["contextConfig"];
   readonly trimmed: Promise<UndefOr<AssemblyLike>>;
 
+  readonly field?: IContextField;
+  readonly fieldConfig?: Record<string, unknown>;
   isCursorLoose?: ContextContent["isCursorLoose"];
   rebudget?: ContextContent["rebudget"];
   finalize?: ContextContent["finalize"];
@@ -147,10 +154,12 @@ const theModule = usModule((require, exports) => {
 
       this.#assemblies = [];
       this.#tokens = [];
+      this.#subContexts = new Set();
       this.#knownSources = new Set();
       this.#textToSource = new Map();
     }
 
+    #subContexts: Set<CompoundAssembly>;
     #knownSources: Set<SourceLike>;
     #textToSource: Map<unknown, SourceLike>;
 
@@ -191,9 +200,12 @@ const theModule = usModule((require, exports) => {
       return Math.max(0, this.tokenBudget - this.tokens.length);
     }
 
+    /**
+     * Inserts an assembly into this compound assembly as a sub-assembly.
+     */
     async insert(
       source: SourceLike,
-      budget: number = this.#determineBudget(source)
+      budget: number
     ): Promise<Insertion.Result> {
       // Fast-path: no budget, instant rejection.
       if (!budget) return REJECTED_INSERT;
@@ -232,13 +244,6 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Maps an assembly back to its {@link SourceLike}.
-     */
-    findSource(assembly: AssemblyLike): UndefOr<SourceLike> {
-      return this.#textToSource.get(assembly.source ?? assembly);
-    }
-
-    /**
      * Lorebook entries can configure when they can split other entries
      * apart and if they themselves may be split apart.  This function
      * runs those checks.
@@ -247,8 +252,8 @@ const theModule = usModule((require, exports) => {
       toInsert: ContentLike,
       toSplit: ContentLike
     ): boolean {
-      const canInsert = Boolean(toInsert.fieldConfig.allowInnerInsertion ?? true);
-      const canSplit = Boolean(toSplit.fieldConfig.allowInsertionInside ?? false);
+      const canInsert = Boolean(toInsert.fieldConfig?.allowInnerInsertion ?? true);
+      const canSplit = Boolean(toSplit.fieldConfig?.allowInsertionInside ?? false);
       return canInsert && canSplit;
     }
 
@@ -270,12 +275,40 @@ const theModule = usModule((require, exports) => {
       });
     }
 
-    /** A protected method to handle the mending of the tokens. */
+    /** Gets all sources that are within this compound assembly. */
+    protected enumerateSources(): Set<SourceLike> {
+      if (!this.#subContexts.size) return this.#knownSources;
+
+      return chain(this.#subContexts)
+        .flatMap((c) => c.enumerateSources())
+        .prepend(this.#knownSources)
+        .value((sources) => new Set(sources));
+    }
+
+    /**
+     * Maps an assembly back to its {@link SourceLike}.
+     */
+    protected findSource(assembly: AssemblyLike): UndefOr<SourceLike> {
+      // First, try the sources we are holding.
+      const direct = this.#textToSource.get(assembly.source ?? assembly);
+      if (direct) return direct;
+
+      // It's possible that it could be in a sub-context.
+      for (const asm of this.#subContexts) {
+        const source = asm.findSource(assembly);
+        if (source) return source;
+      }
+
+      return undefined;
+    }
+
+    /** Handle the mending of the tokens. */
     protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
       return await this.codec.mendTokens(tokensToMend);
     }
 
-    async #updateState(
+    /** Updates the internal state for a successful insertion. */
+    protected async updateState(
       newAssemblies: AssemblyLike[],
       tokens: Tokens,
       source: SourceLike,
@@ -288,6 +321,9 @@ const theModule = usModule((require, exports) => {
       this.#knownSources.add(source);
       this.#textToSource.set(inserted.source ?? inserted, source);
 
+      if (inserted instanceof CompoundAssembly)
+        this.#subContexts.add(inserted);
+
       // Make sure we clean up the entry.
       await source.entry.finalize?.();
 
@@ -297,7 +333,35 @@ const theModule = usModule((require, exports) => {
     #getActivator(source: SourceLike, target: SourceLike): UndefOr<AssemblyResultMap> {
       const { activations } = source;
       if (target.type === "story") return activations.get("keyed");
-      return activations.get("cascade")?.matches.get(target.entry.field);
+
+      const { field } = target.entry;
+      if (!field) return undefined;
+
+      return activations.get("cascade")?.matches.get(field);
+    }
+
+    #handleSelection(
+      selection: Cursor.Selection,
+      direction: IterDirection,
+      assembly: AssemblyLike,
+      content: ContentLike
+    ): UndefOr<Cursor.Fragment> {
+      const cursor = cursorForDir(selection, direction);
+      if (assembly.isFoundIn(cursor)) return cursor;
+
+      // The assembly can adapt the cursor itself.  This is used by sub-contexts
+      // to convert a cursor for a sub-assembly into one for itself.
+      const adapted = assembly.adaptCursor?.(cursor);
+      if (adapted) return adapted;
+
+      // A loose cursor is one that referenced searchable text, but that text
+      // was absent from the insertable text.  If that's not the case, we can't
+      // use this cursor.
+      if (!content.isCursorLoose?.(cursor)) return undefined;
+
+      // Otherwise, we'll give it some additional leeway when used in a
+      // key-relative context.
+      return assembly.findBest?.(cursor);
     }
 
     #findStart(source: SourceLike): UndefOr<Insertion.Iteration.State> {
@@ -309,12 +373,12 @@ const theModule = usModule((require, exports) => {
       const { fieldConfig, contextConfig: { insertionPosition } } = source.entry;
       const direction = insertionPosition < 0 ? "toTop" : "toBottom";
       const remOffset = direction === "toTop" ? 1 : 0;
-      const isKeyRelative = Boolean(fieldConfig.keyRelative ?? false);
+      const isKeyRelative = Boolean(fieldConfig?.keyRelative ?? false);
 
       if (isKeyRelative === true) {
         // We want to find the match closest to the bottom of all content
         // currently in the assembly.
-        const matches = chain(this.#knownSources)
+        const matches = chain(this.enumerateSources())
           .collect((origin: SourceLike) => {
             const activator = this.#getActivator(source, origin);
             if (!activator) return undefined;
@@ -335,23 +399,14 @@ const theModule = usModule((require, exports) => {
           .thru(IterOps.iterReverse)
           .value();
 
-        for (const [index, location] of assemblies) {
-          // TODO: If `location` is composite, we should search inside it.
-          const source = this.findSource(location);
+        for (const [index, asm] of assemblies) {
+          const source = this.findSource(asm);
           if (!source) continue;
 
           const selection = matches.get(source);
           if (!selection) continue;
 
-          const cursor = dew(() => {
-            const cursor = cursorForDir(selection, direction);
-            if (location.isFoundIn(cursor)) return cursor;
-            if (!source.entry.isCursorLoose?.(cursor)) return undefined;
-            // If the cursor references searchable text but the text was
-            // removed from the insertable assembly, we'll give it some
-            // additional leeway when used in a key-relative context.
-            return location.findBest?.(cursor);
-          });
+          const cursor = this.#handleSelection(selection, direction, asm, source.entry);
           if (!cursor) continue;
 
           const target = assertExists(
@@ -385,18 +440,6 @@ const theModule = usModule((require, exports) => {
       }
     }
 
-    /** Assumes that token reservations should be adhered to. */
-    #determineBudget(source: SourceLike): number {
-      const { actualReservedTokens, reservedTokens, tokenBudget } = source.budgetStats;
-      if (actualReservedTokens > 0) {
-        // Use at least our reserved tokens, more if we have the room.
-        const maxBudget = Math.max(reservedTokens, this.availableTokens);
-        return Math.min(tokenBudget, maxBudget);
-      }
-
-      return Math.min(tokenBudget, this.availableTokens);
-    }
-
     async #getAssembly(content: ContentLike, budget: number) {
       if (isFunction(content.rebudget)) return await content.rebudget(budget);
 
@@ -421,7 +464,7 @@ const theModule = usModule((require, exports) => {
       inserted: AssemblyLike
     ): Promise<Insertion.InitResult> {
       assert("Expected to be empty.", this.#assemblies.length === 0);
-      const tokensUsed = await this.#updateState(
+      const tokensUsed = await this.updateState(
         [inserted], inserted.tokens, source, inserted
       );
 
@@ -450,7 +493,7 @@ const theModule = usModule((require, exports) => {
       const newAsm = [...asmBefore, inserted, ...asmAfter];
       const tokens = await this.mendTokens(newAsm.map(toTokens));
 
-      const tokensUsed = await this.#updateState(newAsm, tokens, source, inserted);
+      const tokensUsed = await this.updateState(newAsm, tokens, source, inserted);
       return { type, target, tokensUsed, shunted: 0 };
     }
 
@@ -513,7 +556,7 @@ const theModule = usModule((require, exports) => {
         const newAsm = [...asmBefore, splitBefore, inserted, splitAfter, ...asmAfter];
         const tokens = await this.mendTokens(newAsm.map(toTokens));
 
-        const tokensUsed = await this.#updateState(newAsm, tokens, source, inserted);
+        const tokensUsed = await this.updateState(newAsm, tokens, source, inserted);
         return { type: "inside", target, tokensUsed, shunted: 0 };
       }
 
