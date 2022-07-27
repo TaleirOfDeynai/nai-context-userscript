@@ -14,7 +14,7 @@ import $TokenizedAssembly from "./Tokenized";
 import type { UndefOr, AnyValueOf } from "@utils/utility-types";
 import type { StructuredOutput, ReportReasons } from "@nai/ContextBuilder";
 import type { IContextField } from "@nai/ContextModule";
-import type { BudgetedSource } from "../rx/3-selection/_shared";
+import type { BudgetedSource } from "../rx/4-selection/_shared";
 import type { ContextContent } from "../ContextContent";
 import type { AssemblyResultMap } from "../SearchService";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";

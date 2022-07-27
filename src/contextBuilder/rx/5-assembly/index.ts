@@ -15,7 +15,7 @@ import { createLogger } from "@utils/logging";
 import $ContextAssembler from "./ContextAssembler";
 
 import type { ContextParams } from "../../ParamsService";
-import type { SelectionPhaseResult } from "../3-selection";
+import type { SelectionPhaseResult } from "../4-selection";
 
 const logger = createLogger("Assembly Phase");
 

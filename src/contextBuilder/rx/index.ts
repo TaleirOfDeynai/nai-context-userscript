@@ -2,8 +2,8 @@ import { usModule } from "@utils/usModule";
 import $Source from "./1-source";
 import $Activation from "./2-activation";
 import $BiasGroups from "./3-biasGroups";
-import $Selection from "./3-selection";
-import $Assembly from "./4-assembly";
+import $Selection from "./4-selection";
+import $Assembly from "./5-assembly";
 
 export default usModule((require, exports) => {
   return Object.assign(exports, {

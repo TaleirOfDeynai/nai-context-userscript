@@ -14,7 +14,8 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
-import Vanilla from "./vanilla";
+import $Vanilla from "./vanilla";
+import $Configured from "./configured";
 
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../1-source";
@@ -34,7 +35,8 @@ const logger = createLogger("Selection Phase");
 
 export default usModule((require, exports) => {
   const selectors = {
-    vanilla: Vanilla(require).createStream
+    vanilla: $Vanilla(require).createStream,
+    configured: $Configured(require).createStream
   } as const;
 
   /**
@@ -55,7 +57,7 @@ export default usModule((require, exports) => {
       .pipe(rxop.mergeAll());
 
     const inFlightSelected = activatedSources.pipe(
-      selectors.vanilla(contextParams, storySource),
+      selectors.configured(contextParams, storySource),
       logger.measureStream("In-flight Selected"),
       rxop.shareReplay()
     );

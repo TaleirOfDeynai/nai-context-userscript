@@ -42,7 +42,7 @@ export default usModule((require, exports) => {
    * Sorts all inputs and emits them in order of their formalized insertion
    * priority.  This will also calculate each emitted element's budget stats.
    */
-  const makeSelectorStream = (
+  const createStream = (
     contextParams: ContextParams,
     storySource: rx.Observable<StorySource>
   ) => {
@@ -119,5 +119,5 @@ export default usModule((require, exports) => {
     );
   };
 
-  return Object.assign(exports, { createStream: makeSelectorStream });
+  return Object.assign(exports, { createStream });
 });
