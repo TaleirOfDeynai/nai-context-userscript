@@ -27,12 +27,16 @@ export default usModule((require, exports) => {
    * user in the report, but it isn't really used for insertion or trimming.
    */
   function assemblyPhase(
+    /** The context builder parameters. */
     contextParams: ContextParams,
-    selectionResults: SelectionPhaseResult
+    /** The total reserved tokens, from the selection phase. */
+    totalReservedTokens: rx.DeferredOf<SelectionPhaseResult["totalReservedTokens"]>,
+    /** The currently in-flight selections. */
+    inFlightSelections: SelectionPhaseResult["inFlight"]
   ) {
-    const assembler = rx.defer(() => selectionResults.totalReservedTokens).pipe(
+    const assembler = totalReservedTokens.pipe(
       rxop.map((reservedTokens) => contextAssembler(contextParams, reservedTokens)),
-      rxop.mergeMap((processFn) => processFn(selectionResults.inFlight)),
+      rxop.mergeMap((processFn) => processFn(inFlightSelections)),
       logger.measureStream("In-flight Assembly"),
       rxop.shareReplay()
     );

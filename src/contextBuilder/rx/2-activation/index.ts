@@ -20,7 +20,7 @@ import $ActEphemeral, { EphemeralActivation } from "./ephemeral";
 import $ActCascade, { CascadeActivation } from "./cascade";
 
 import type { ConstrainedMap } from "@utils/utility-types";
-import type { StoryContent } from "@nai/EventModule";
+import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult, EnabledSource, DisabledSource } from "../1-source";
 
 /** Just provides a source of types for {@link ActivationMap}. */
@@ -88,11 +88,15 @@ export default usModule((require, exports) => {
   } as const;
 
   function activationPhase(
-    storyContent: StoryContent,
-    sourceResults: SourcePhaseResult
+    /** The context builder parameters. */
+    contextParams: ContextParams,
+    /** The story's source. */
+    storySource: SourcePhaseResult["storySource"],
+    /** The in-flight enabled sources. */
+    enabledSources: SourcePhaseResult["enabledSources"],
+    /** The in-flight disabled sources. */
+    disabledSources: SourcePhaseResult["disabledSources"]
   ): ActivationPhaseResult {
-    const { storySource, enabledSources, disabledSources } = sourceResults;
-
     const activationStates = enabledSources.pipe(
       rxop.map((source): ActivationState => ({ source, activations: new Map() })),
       rxop.shareReplay()
@@ -101,7 +105,7 @@ export default usModule((require, exports) => {
     // Stream through the direct activations.
     const directActivations = rx.merge(
       activationStates.pipe(activation.forced),
-      activationStates.pipe(activation.ephemeral(storyContent)),
+      activationStates.pipe(activation.ephemeral(contextParams.storyContent)),
       // Still cheating to get as much done while waiting on the story.
       storySource.pipe(
         rxop.map(activation.keyed),

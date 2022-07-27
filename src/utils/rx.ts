@@ -1,9 +1,13 @@
-import { Subject } from "rxjs";
+import { Subject, Observable } from "rxjs";
 
 /** Re-export everything so I only need to import once. */
 export * from "rxjs";
 /** And this too! */
 export { eachValueFrom } from "rxjs-for-await";
+
+export type DeferredOf<T>
+  = T extends Promise<infer U> ? Observable<U>
+  : never;
 
 /**
  * A sort of stack buffer.  It emit elements only when something has called

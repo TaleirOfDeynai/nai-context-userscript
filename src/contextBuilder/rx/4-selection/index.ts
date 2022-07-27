@@ -19,7 +19,7 @@ import $Configured from "./configured";
 
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../1-source";
-import type { ActivationPhaseResult } from "../2-activation";
+import type { ActivatedSource, ActivationPhaseResult } from "../2-activation";
 import type { BudgetedSource } from "./_shared";
 
 export type SelectionObservable = rx.Observable<BudgetedSource>;
@@ -44,17 +44,15 @@ export default usModule((require, exports) => {
    * user in the report, but it isn't really used for insertion or trimming.
    */
   function selectionPhase(
+    /** The context builder parameters. */
     contextParams: ContextParams,
-    sourceResults: SourcePhaseResult,
-    activationResults: ActivationPhaseResult
+    /** The story's source. */
+    storySource: SourcePhaseResult["storySource"],
+    /** The fully activated set of sources. */
+    activatedSet: rx.DeferredOf<ActivationPhaseResult["activated"]>
   ): SelectionPhaseResult {
-    const { storySource } = sourceResults;
-
-    // We need the full activation results now.  Convert this promise
-    // of a set of activated entries into a new stream.  Use `defer`
-    // so the promise doesn't make the activation phase hot.
-    const activatedSources = rx.defer(() => activationResults.activated)
-      .pipe(rxop.mergeAll());
+    // Flatten the set back out.
+    const activatedSources = activatedSet.pipe(rxop.mergeAll());
 
     const inFlightSelected = activatedSources.pipe(
       selectors.configured(contextParams, storySource),

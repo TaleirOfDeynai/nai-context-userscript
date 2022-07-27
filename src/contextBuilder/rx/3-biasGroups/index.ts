@@ -11,7 +11,7 @@ import { createLogger } from "@utils/logging";
 import $BiasLore from "./lore";
 import $BiasCategory from "./category";
 
-import type { StoryContent } from "@nai/EventModule";
+import type { ContextParams } from "../../ParamsService";
 import type { ActivationPhaseResult } from "../2-activation";
 import type { TriggeredBiasGroup } from "../_shared";
 
@@ -31,12 +31,14 @@ export default usModule((require, exports) => {
   } as const;
 
   function biasGroupPhase(
-    storyContent: StoryContent,
-    activationResults: ActivationPhaseResult
+    /** The context builder parameters. */
+    contextParams: ContextParams,
+    /** The currently in-flight activations. */
+    inFlightActivations: ActivationPhaseResult["inFlight"]
   ): BiasGroupPhaseResult {
     const inFlight = rx.merge(
-      biasGroups.lore(activationResults.inFlight),
-      biasGroups.category(storyContent, activationResults.inFlight)
+      biasGroups.lore(inFlightActivations),
+      biasGroups.category(contextParams.storyContent, inFlightActivations)
     ).pipe(logger.measureStream("In-flight Bias Groups"), rxop.shareReplay());
 
     return {

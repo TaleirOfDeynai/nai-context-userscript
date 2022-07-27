@@ -22,7 +22,7 @@ export interface CategorizedField extends IContextField {
   category: LoreEntry["category"];
 }
 
-type CategorizedSource = ContextSource<CategorizedField>;
+export type CategorizedSource = ContextSource<CategorizedField>;
 
 export const categories = {
   /** Checks to see if the entry of `source` has a `category` field. */

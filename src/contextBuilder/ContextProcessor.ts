@@ -37,21 +37,29 @@ export default usModule((require, exports) => {
 
     // Figure out what content is actually to be used.
     const activationResults = processing.activation.phaseRunner(
-      storyContent, sourceResults
+      contextParams,
+      sourceResults.storySource,
+      sourceResults.enabledSources,
+      sourceResults.disabledSources
     );
 
     // Grab the triggered bias groups as content activates.
     const biasGroupResults = processing.biasGroups.phaseRunner(
-      storyContent, activationResults
+      contextParams,
+      activationResults.inFlight
     );
 
     // Order the content based on importance.
     const selectionResults = processing.selection.phaseRunner(
-      contextParams, sourceResults, activationResults
+      contextParams,
+      sourceResults.storySource,
+      rx.defer(() => activationResults.activated)
     );
 
     const assemblyResults = processing.assembly.phaseRunner(
-      contextParams, selectionResults
+      contextParams,
+      rx.defer(() => selectionResults.totalReservedTokens),
+      selectionResults.inFlight
     );
 
     // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {

@@ -44,7 +44,10 @@ export default usModule((require, exports) => {
 
   const filterStory = (s: ContextSource): s is StorySource => s.type === "story";
 
-  function sourcePhase(contextParams: ContextParams): SourcePhaseResult {
+  function sourcePhase(
+    /** The context builder parameters. */
+    contextParams: ContextParams
+  ): SourcePhaseResult {
     // We'll want to pull the story out of NAI's default content.
     const defaultContent = source.content(contextParams).pipe(rxop.shareReplay());
 
