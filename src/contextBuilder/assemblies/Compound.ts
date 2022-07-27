@@ -5,12 +5,14 @@ import { isFunction } from "@utils/is";
 import { assert, assertAs, assertExists } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
 import { chain } from "@utils/iterables";
+import ContextBuilder from "@nai/ContextBuilder";
 import cursorForDir from "./positionOps/cursorForDir";
 import $SearchService from "../SearchService";
 import $TextSplitterService from "../TextSplitterService";
 import $TokenizedAssembly from "./Tokenized";
 
-import type { UndefOr } from "@utils/utility-types";
+import type { UndefOr, AnyValueOf } from "@utils/utility-types";
+import type { StructuredOutput, ReportReasons } from "@nai/ContextBuilder";
 import type { IContextField } from "@nai/ContextModule";
 import type { BudgetedSource } from "../rx/3-selection/_shared";
 import type { ContextContent } from "../ContextContent";
@@ -46,6 +48,7 @@ export interface AssemblyLike extends ITokenizedAssembly {
 
 /** The bare minimum needed for content. */
 export interface ContentLike {
+  readonly text: string;
   readonly contextConfig: ContextContent["contextConfig"];
   readonly trimmed: Promise<UndefOr<AssemblyLike>>;
 
@@ -59,10 +62,11 @@ export interface ContentLike {
 /** The bare minimum needed for the source. */
 export interface SourceLike {
   readonly identifier: BudgetedSource["identifier"];
+  readonly uniqueId: BudgetedSource["uniqueId"];
   readonly type: BudgetedSource["type"];
-  readonly activations: BudgetedSource["activations"];
-  readonly budgetStats: BudgetedSource["budgetStats"];
   readonly entry: ContentLike;
+
+  readonly activations?: BudgetedSource["activations"];
 }
 
 export type ShuntingMode = "nearest" | "inDirection";
@@ -79,6 +83,8 @@ export namespace Insertion {
 
   export interface RejectedResult {
     readonly type: "rejected";
+    /** May be any string, but NAI uses {@link ReportReasons}. */
+    readonly reason: string;
     readonly tokensUsed: 0;
     readonly shunted: 0;
   }
@@ -109,7 +115,8 @@ export namespace Insertion {
   }
 
   type MainResult = InsertResult | BeforeResult | AfterResult;
-  export type Result = RejectedResult | InitResult | MainResult;
+  export type SuccessResult = InitResult | MainResult;
+  export type Result = RejectedResult | SuccessResult;
 
   export namespace Iteration {
     export interface State extends InsertionPosition {
@@ -123,17 +130,25 @@ export namespace Insertion {
   }
 }
 
-const REJECTED_INSERT: Insertion.RejectedResult = Object.freeze({
-  type: "rejected", tokensUsed: 0, shunted: 0
-});
-
 const isInsertResult = (result: ActionableResult): result is Position.InsertResult =>
   result.type !== "inside";
 
 const theModule = usModule((require, exports) => {
+  const { REASONS } = require(ContextBuilder);
   const { findHighestIndex } = $SearchService(require);
   const ss = $TextSplitterService(require);
   const tokenized = $TokenizedAssembly(require);
+
+  const baseReject = { type: "rejected", tokensUsed: 0, shunted: 0 } as const;
+
+  const NO_TEXT: Insertion.RejectedResult
+    = Object.freeze({ ...baseReject, reason: REASONS.NoText });
+
+  const NO_SPACE: Insertion.RejectedResult
+    = Object.freeze({ ...baseReject, reason: REASONS.NoSpace });
+
+  const NO_KEY: Insertion.RejectedResult
+    = Object.freeze({ ...baseReject, reason: REASONS.NoContextKey });
 
   const toTokens = (f: AssemblyLike) => f.tokens;
 
@@ -207,24 +222,29 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       budget: number
     ): Promise<Insertion.Result> {
-      // Fast-path: no budget, instant rejection.
-      if (!budget) return REJECTED_INSERT;
+      // Fast-path: No text, instant rejection (unless it's a sub-context).
+      if (source.entry.text === "")
+        if (!(source instanceof CompoundAssembly))
+          return NO_TEXT;
+
+      // Fast-path: No budget, instant rejection.
+      if (!budget) return NO_SPACE;
 
       // Fast-path: no fancy stuff for the first thing inserted.
       if (!this.#assemblies.length) {
         const inserted = await this.#getAssembly(source.entry, budget);
-        if (!inserted) return REJECTED_INSERT;
+        if (!inserted) return NO_SPACE;
 
         return await this.#doInsertInitial(source, inserted);
       }
 
       // Can we locate a place to start our search for its insertion location?
       const startState = this.#findStart(source);
-      if (!startState) return REJECTED_INSERT;
+      if (!startState) return NO_KEY;
 
       // Can we fit it into the budget?
       const inserted = await this.#getAssembly(source.entry, budget);
-      if (!inserted) return REJECTED_INSERT;
+      if (!inserted) return NO_SPACE;
 
       for (const iterResult of this.#iterateInsertion(startState)) {
         const { result } = iterResult;
@@ -273,6 +293,23 @@ const theModule = usModule((require, exports) => {
         suffix: ss.createFragment("", text.length),
         tokens: this.tokens
       });
+    }
+
+    /** Yields the structured output of the assembly. */
+    *structuredOutput(): Iterable<StructuredOutput> {
+      for (const assembly of this.#assemblies) {
+        if (assembly instanceof CompoundAssembly) {
+          yield* assembly.structuredOutput();
+        }
+        else {
+          const { text } = assembly;
+          const { uniqueId: identifier, type } = assertExists(
+            "Expected to find source for an assembly.",
+            this.findSource(assembly)
+          );
+          yield { identifier, type, text };
+        }
+      }
     }
 
     /** Gets all sources that are within this compound assembly. */
@@ -332,6 +369,8 @@ const theModule = usModule((require, exports) => {
 
     #getActivator(source: SourceLike, target: SourceLike): UndefOr<AssemblyResultMap> {
       const { activations } = source;
+      if (!activations) return undefined;
+
       if (target.type === "story") return activations.get("keyed");
 
       const { field } = target.entry;

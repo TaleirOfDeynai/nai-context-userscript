@@ -8,7 +8,6 @@ import type { IContextField } from "./ContextModule";
 import type { TokenizerTypes } from "./TokenizerHelpers";
 import type { TokenCodec } from "./TokenizerCodec";
 
-
 export interface TrimStates {
   Included: "included";
   NotIncluded: "not included";
@@ -34,6 +33,12 @@ export interface ReportReasons {
   NoKeyTriggered: "no key";
   NoSpace: "no space";
   NoText: "no text";
+}
+
+export interface StructuredOutput {
+  identifier: Virtual.ContextStatus["unqiueId"];
+  type: Virtual.ContextStatus["type"];
+  text: string;
 }
 
 export namespace Virtual {
@@ -89,7 +94,7 @@ export namespace Virtual {
   export declare class StageReport {
     constructor(
       /** Defaults to `[]`. */
-      structuredOutput?: unknown[],
+      structuredOutput?: StructuredOutput[],
       /** Defaults to `0`. */
       reservedTokens?: number,
       /** Defaults to `0`. */
@@ -100,7 +105,7 @@ export namespace Virtual {
       description?: string
     );
 
-    structuredOutput: unknown[];
+    structuredOutput: StructuredOutput[];
     reservedTokens: number;
     remainingTokens: number;
     usedTokens: number;
@@ -111,10 +116,10 @@ export namespace Virtual {
     maxTokens: number;
     preContextText: string;
     output: string;
-    tokens: unknown[];
+    tokens: number[];
     contextStatuses: ContextStatus<IContextField>[];
-    spacesTrimed: number;
-    structuredOutput: unknown[];
+    spacesTrimmed: number;
+    structuredOutput: StructuredOutput[];
     stageReports: StageReport[];
     keyRejections: ContextStatus<IContextField>[];
     disabled: ContextStatus<IContextField>[];

@@ -14,8 +14,8 @@ import type { ActivationObservable } from "../2-activation";
 import type { TriggeredBiasGroup } from "../_shared";
 
 type BiasedCategory = Categories.Category & {
-  categoryBiasGroups: PhraseBiasConfig[];
-}
+  categoryBiasGroups: PhraseBiasConfig[]
+};
 
 /**
  * Checks each {@link ContextSource} for lore bias group inclusions.

@@ -2,6 +2,7 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
+import UUID from "@nai/UUID";
 import makeCursor from "../cursors/Fragment";
 import $TextSplitterService from "../TextSplitterService";
 import $CursorOps from "./cursorOps";
@@ -10,14 +11,16 @@ import $TokenizedAssembly from "./Tokenized";
 import $CompoundAssembly from "./Compound";
 
 import type { UndefOr } from "@utils/utility-types";
+import type { StructuredOutput } from "@nai/ContextBuilder";
 import type { ContextConfig, Categories } from "@nai/Lorebook";
+import type { SourceType } from "../ContextSource";
 import type { TextFragment } from "../TextSplitterService";
 import type { TrimType } from "../TrimmingProviders";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
 import type { Cursor } from "../cursors";
 import type { IFragmentAssembly } from "./_interfaces";
 import type { TokenizedAssembly } from "./Tokenized";
-import type { AssemblyLike, ContentLike } from "./Compound";
+import type { AssemblyLike, ContentLike, SourceLike } from "./Compound";
 import type { Position, IterDirection, InsertionPosition } from "./positionOps";
 
 type CategoryWithSubContext = Categories.BaseCategory & Categories.WithSubcontext;
@@ -30,6 +33,7 @@ interface TokenizedFragment {
 const EMPTY_TOKENS: Tokens = Object.freeze([]);
 
 const theModule = usModule((require, exports) => {
+  const uuid = require(UUID);
   const ss = $TextSplitterService(require);
   const tokenized = $TokenizedAssembly(require);
   const cursorOps = $CursorOps(require);
@@ -43,19 +47,51 @@ const theModule = usModule((require, exports) => {
    * better.  Accessing most properties of {@link IFragmentAssembly} will
    * instantiate objects and perform iterations on the sub-assemblies.
    */
-  class SubContext extends CompoundAssembly implements AssemblyLike, ContentLike {
+  class SubContext
+    extends CompoundAssembly
+    implements AssemblyLike, ContentLike, SourceLike
+  {
     constructor(
       codec: AugmentedTokenCodec,
+      identifier: string,
+      type: SourceType,
       contextConfig: Readonly<ContextConfig>,
       prefix: TokenizedFragment,
       suffix: TokenizedFragment
     ) {
       super(codec, contextConfig.tokenBudget);
 
+      this.#identifier = identifier;
+      this.#type = type;
       this.#contextConfig = contextConfig;
       this.#prefix = prefix;
       this.#suffix = suffix;
+
+      this.#uniqueId = uuid.v4();
     }
+
+    // Implementations for `SourceLike`.
+
+    get identifier() {
+      return this.#identifier;
+    }
+    readonly #identifier: string;
+
+    get uniqueId() {
+      return this.#uniqueId;
+    }
+    readonly #uniqueId: string;
+
+    get type() {
+      return this.#type;
+    }
+    readonly #type: SourceType;
+  
+    get entry() {
+      return this;
+    }
+
+    // Implementations for `ContentLike`.
 
     get contextConfig() {
       return this.#contextConfig;
@@ -65,6 +101,8 @@ const theModule = usModule((require, exports) => {
     get trimmed() {
       return Promise.resolve(this);
     }
+
+    // Implementations for `AssemblyLike`.
 
     /**
      * The full, concatenated text of the assembly.  If this assembly is
@@ -226,6 +264,14 @@ const theModule = usModule((require, exports) => {
       return tokenized.castTo(this.codec, this);
     }
 
+    /** Yields the structured output of the assembly. */
+    *structuredOutput(): Iterable<StructuredOutput> {
+      const { uniqueId: identifier, type } = this;
+      if (this.#prefix.text) yield { identifier, type, text: this.#prefix.text };
+      yield* super.structuredOutput();
+      if (this.#suffix.text) yield { identifier, type, text: this.#suffix.text };
+    }
+
     protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
       return await super.mendTokens([
         this.#prefix.tokens,
@@ -258,7 +304,7 @@ const theModule = usModule((require, exports) => {
     ]) as [TokenizedFragment, TokenizedFragment];
 
     return Object.assign(
-      new SubContext(codec, contextConfig, prefix, suffix),
+      new SubContext(codec, `S:${name}`, "lore", contextConfig, prefix, suffix),
       { category: name }
     );
   };
