@@ -1,5 +1,6 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
+import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import ContextBuilder from "@nai/ContextBuilder";
@@ -48,7 +49,7 @@ export default usModule((require, exports) => {
     if (result.type === "initial") return undefined;
 
     const { insertionType, offset } = result.location;
-    const pluralize = offset > 1 ? "s" : "";
+    const pluralize = offset !== 1 ? "s" : "";
 
     switch (insertionType) {
       case "newline": return `${offset} newline${pluralize}`;
@@ -82,14 +83,14 @@ export default usModule((require, exports) => {
     if (!ident) return undefined;
 
     switch (result.type) {
-      case "insertBefore": return `before "${ident}"`;
-      case "insertAfter": return `after "${ident}"`;
+      case "insertBefore": return `and before "${ident}"`;
+      case "insertAfter": return `and after "${ident}"`;
       case "inside": return `into "${ident}"`;
     }
   };
 
   const getShuntingText = (result: Insertion.SuccessResult) =>
-    result.shunted ? `(shunted ${result.shunted} characters)` : undefined;
+    result.shunted ? `(shunted ${result.shunted} characters out of target)` : undefined;
   
   const isInserted = (report: Assembler.Report): report is Assembler.Inserted =>
     report.result.type !== "rejected";
@@ -113,8 +114,8 @@ export default usModule((require, exports) => {
 
       this.#reportObs = this.#reportSubject.pipe(
         this.#logger.measureStream("In-Flight Reports").markItems((item) => {
-          if (isInserted(item)) return `Inserted: ${item.source.identifier}`;
-          return `Rejected: ${item.source.identifier}`;
+          const status = isInserted(item) ? "inserted" : "rejected";
+          return `${item.source.identifier} (${status})`;
         }),
         rxop.shareReplay()
       );
@@ -169,12 +170,19 @@ export default usModule((require, exports) => {
 
     /** Subscribes to `selected` and makes this instance's observables hot. */
     connect(selected: SelectionObservable) {
-      const subject = this.#reportSubject;
-      selected.subscribe({
-        next: this.#doInsert.bind(this),
-        error: subject.error.bind(subject),
-        complete: subject.complete.bind(subject)
+      // We will need to process each source in order.
+      dew(async () => {
+        const subject = this.#reportSubject;
+        try {
+          for await (const source of rx.eachValueFrom(selected))
+            await this.#doInsert(source);
+          subject.complete();
+        }
+        catch (err) {
+          subject.error(err);
+        }
       });
+
       return this;
     }
 
