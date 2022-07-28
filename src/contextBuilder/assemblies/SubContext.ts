@@ -272,6 +272,27 @@ const theModule = usModule((require, exports) => {
       if (this.#suffix.text) yield { identifier, type, text: this.#suffix.text };
     }
 
+    protected validateBudget(budget: number) {
+      // When the assembly is empty, we are pretending that the prefix and suffix
+      // do not exist; their tokens have not been being accounted for.  That
+      // means the budget calculated earlier may not actually fit this assembly.
+      // Let's make sure we rectify this.
+
+      // Firstly, if we aren't empty, use the default behavior.
+      if (!this.isEmpty) return super.validateBudget(budget);
+
+      // Now, let's adjust the budget to account for the prefix and suffix.
+      // This isn't going to be 100% accurate, since the token mending process
+      // can shave off a token or two, but it'll be close enough.
+      const pLen = this.#prefix.tokens.length;
+      const sLen = this.#suffix.tokens.length;
+      const overhead = pLen + sLen;
+      budget = super.validateBudget(budget - overhead);
+
+      // We must have room to fit the prefix and suffix into the budget.
+      return budget > overhead ? budget : 0;
+    }
+
     protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
       return await super.mendTokens([
         this.#prefix.tokens,

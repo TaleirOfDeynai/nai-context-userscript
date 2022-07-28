@@ -239,6 +239,9 @@ const theModule = usModule((require, exports) => {
       if (source.entry.text === "")
         if (!(source instanceof CompoundAssembly))
           return NO_TEXT;
+      
+      // Ensure the budget works for the current state of the assembly.
+      budget = this.validateBudget(budget);
 
       // Fast-path: No budget, instant rejection.
       if (!budget) return NO_SPACE;
@@ -350,6 +353,11 @@ const theModule = usModule((require, exports) => {
       }
 
       return undefined;
+    }
+
+    /** Ensures that the provided budget works for the assembly. */
+    protected validateBudget(budget: number): number {
+      return Math.min(this.availableTokens, budget);
     }
 
     /** Handle the mending of the tokens. */
