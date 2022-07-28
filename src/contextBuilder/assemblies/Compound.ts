@@ -601,6 +601,15 @@ const theModule = usModule((require, exports) => {
       const { target, cursor, initLocation: location } = iterResult;
       const oldAsm = this.#assemblies;
 
+      // It's possible that the cursor is positioned before the prefix
+      // or after the suffix.  In these cases, we don't need to do any
+      // splitting and we can just convert them into the appropriate
+      // adjacent insertion.
+      if (cursor.offset <= ss.beforeFragment(target.assembly.prefix))
+        return this.#doInsertAdjacent(iterResult, source, inserted, "insertBefore");
+      if (cursor.offset >= ss.afterFragment(target.assembly.suffix))
+        return this.#doInsertAdjacent(iterResult, source, inserted, "insertAfter");
+
       checks: {
         // If there is no source, we can't check if we can even split.
         if (!target.source) break checks;
