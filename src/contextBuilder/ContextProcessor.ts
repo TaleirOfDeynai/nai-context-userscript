@@ -67,13 +67,13 @@ export default usModule((require, exports) => {
     //   preContextText: await inFlightStoryText
     // });
 
-    const [selected, unselected, rejected, disabled, biasGroups] = await Promise.all([
+    const [selected, unselected, rejected, disabled, biasGroups, assembly] = await Promise.all([
       selectionResults.selected,
       selectionResults.unselected,
       activationResults.rejected,
       activationResults.disabled,
       biasGroupResults.biasGroups,
-      assemblyResults.whenComplete
+      assemblyResults.assembly
     ]);
 
     for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
@@ -84,6 +84,7 @@ export default usModule((require, exports) => {
 
     const reserved = await selectionResults.totalReservedTokens;
     logger.info(`Total reserved tokens: ${reserved} out of ${contextParams.contextSize}`);
+    logger.info("Final Result:\n", await assembly.toAssembly());
   }
 
   return Object.assign(exports, {

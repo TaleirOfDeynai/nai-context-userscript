@@ -11,13 +11,18 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { createLogger } from "@utils/logging";
 import $ContextAssembler from "./ContextAssembler";
 
+import type { Assembly } from "../../assemblies";
 import type { ContextParams } from "../../ParamsService";
 import type { SelectionPhaseResult } from "../4-selection";
+import type { Assembler } from "./ContextAssembler";
 
-const logger = createLogger("Assembly Phase");
+export interface AssemblyPhaseResult {
+  readonly insertions: rx.Observable<Assembler.Inserted>;
+  readonly rejections: rx.Observable<Assembler.Rejected>;
+  readonly assembly: Promise<Assembly.Compound>;
+}
 
 export default usModule((require, exports) => {
   const { contextAssembler } = $ContextAssembler(require);
@@ -33,15 +38,26 @@ export default usModule((require, exports) => {
     totalReservedTokens: rx.DeferredOf<SelectionPhaseResult["totalReservedTokens"]>,
     /** The currently in-flight selections. */
     inFlightSelections: SelectionPhaseResult["inFlight"]
-  ) {
+  ): AssemblyPhaseResult {
     const assembler = totalReservedTokens.pipe(
       rxop.map((reservedTokens) => contextAssembler(contextParams, reservedTokens)),
-      rxop.mergeMap((processFn) => processFn(inFlightSelections).insertions)
+      rxop.map((processFn) => processFn(inFlightSelections)),
+      rxop.single(),
+      rxop.shareReplay(1)
     );
 
+    // A little weird pulling these out.
     return {
-      get whenComplete() {
-        return rx.firstValueFrom(assembler.pipe(rxop.whenCompleted()));
+      get insertions() {
+        return assembler.pipe(rxop.mergeMap((assembler) => assembler.insertions));
+      },
+      get rejections() {
+        return assembler.pipe(rxop.mergeMap((assembler) => assembler.rejections));
+      },
+      get assembly() {
+        return rx.firstValueFrom(assembler.pipe(
+          rxop.mergeMap((assembler) => assembler.finalAssembly)
+        ));
       }
     };
   };
