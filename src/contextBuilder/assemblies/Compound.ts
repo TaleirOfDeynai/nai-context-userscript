@@ -11,10 +11,11 @@ import $SearchService from "../SearchService";
 import $TextSplitterService from "../TextSplitterService";
 import $TokenizedAssembly from "./Tokenized";
 
-import type { UndefOr, AnyValueOf } from "@utils/utility-types";
-import type { StructuredOutput, ReportReasons } from "@nai/ContextBuilder";
+import type { UndefOr } from "@utils/utility-types";
+import type { StructuredOutput } from "@nai/ContextBuilder";
 import type { IContextField } from "@nai/ContextModule";
 import type { BudgetedSource } from "../rx/4-selection/_shared";
+import type { TrimType } from "../TrimmingProviders";
 import type { ContextContent } from "../ContextContent";
 import type { AssemblyResultMap } from "../SearchService";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
@@ -23,6 +24,9 @@ import type { ITokenizedAssembly } from "./_interfaces";
 import type { FragmentAssembly } from "./Fragment";
 import type { TokenizedAssembly } from "./Tokenized";
 import type { Position, IterDirection, InsertionPosition } from "./positionOps";
+
+// For JSDoc links...
+import type { ReportReasons } from "@nai/ContextBuilder";
 
 /** The bare minimum needed for an assembly. */
 export interface AssemblyLike extends ITokenizedAssembly {
@@ -81,6 +85,13 @@ export namespace Insertion {
     readonly source: UndefOr<SourceLike>;
   }
 
+  export interface Location {
+    readonly isKeyRelative: boolean;
+    readonly insertionType: TrimType;
+    readonly direction: IterDirection;
+    readonly offset: number;
+  }
+
   export interface RejectedResult {
     readonly type: "rejected";
     /** May be any string, but NAI uses {@link ReportReasons}. */
@@ -98,6 +109,7 @@ export namespace Insertion {
   interface MainBase {
     readonly type: Exclude<Position.Result["type"], IterDirection>;
     readonly target: Target;
+    readonly location: Location;
     readonly tokensUsed: number;
     readonly shunted: number;
   }
@@ -122,6 +134,7 @@ export namespace Insertion {
     export interface State extends InsertionPosition {
       source: SourceLike;
       target: Target;
+      initLocation: Location;
     }
 
     export interface Result extends Readonly<State> {
@@ -409,12 +422,18 @@ const theModule = usModule((require, exports) => {
         this.#assemblies.length > 0
       );
 
-      const { fieldConfig, contextConfig: { insertionPosition } } = source.entry;
+      const { fieldConfig, contextConfig } = source.entry;
+      const { insertionType, insertionPosition } = contextConfig;
       const direction = insertionPosition < 0 ? "toTop" : "toBottom";
       const remOffset = direction === "toTop" ? 1 : 0;
-      const isKeyRelative = Boolean(fieldConfig?.keyRelative ?? false);
 
-      if (isKeyRelative === true) {
+      const initLocation: Insertion.Location = Object.freeze({
+        insertionType, direction,
+        isKeyRelative: Boolean(fieldConfig?.keyRelative ?? false),
+        offset: Math.abs(insertionPosition + remOffset)
+      });
+
+      if (initLocation.isKeyRelative) {
         // We want to find the match closest to the bottom of all content
         // currently in the assembly.
         const matches = chain(this.enumerateSources())
@@ -454,8 +473,9 @@ const theModule = usModule((require, exports) => {
           );
 
           return {
+            initLocation,
             direction, cursor, source, target,
-            offset: Math.abs(insertionPosition + remOffset)
+            offset: initLocation.offset
           };
         }
 
@@ -473,6 +493,7 @@ const theModule = usModule((require, exports) => {
         );
 
         return {
+          initLocation,
           direction, cursor, source, target,
           offset: Math.abs(insertionPosition + remOffset)
         };
@@ -517,7 +538,7 @@ const theModule = usModule((require, exports) => {
       inserted: AssemblyLike,
       type?: Position.InsertResult["type"]
     ): Promise<Insertion.AfterResult | Insertion.BeforeResult> {
-      const { target } = iterState;
+      const { target, initLocation: location } = iterState;
       const oldAsm = this.#assemblies;
 
       type ??= assertAs(
@@ -533,7 +554,7 @@ const theModule = usModule((require, exports) => {
       const tokens = await this.mendTokens(newAsm.map(toTokens));
 
       const tokensUsed = await this.updateState(newAsm, tokens, source, inserted);
-      return { type, target, tokensUsed, shunted: 0 };
+      return { type, target, location, tokensUsed, shunted: 0 };
     }
 
     async #doShuntOut(
@@ -569,7 +590,7 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       inserted: AssemblyLike
     ): Promise<Insertion.Result> {
-      const { target, cursor } = iterResult;
+      const { target, cursor, initLocation: location } = iterResult;
       const oldAsm = this.#assemblies;
 
       checks: {
@@ -596,7 +617,7 @@ const theModule = usModule((require, exports) => {
         const tokens = await this.mendTokens(newAsm.map(toTokens));
 
         const tokensUsed = await this.updateState(newAsm, tokens, source, inserted);
-        return { type: "inside", target, tokensUsed, shunted: 0 };
+        return { type: "inside", target, location, tokensUsed, shunted: 0 };
       }
 
       // If we got kicked out of the `checks` block, we must do a shunt.

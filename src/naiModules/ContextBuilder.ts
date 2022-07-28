@@ -130,9 +130,14 @@ export namespace Virtual {
     }>;
     allStoryIncluded: boolean;
     tokenizerType: TokenizerTypes;
+    preamble: {
+      str: string,
+      tokens: number[]
+    }
   }
 }
 
+export type StageReport = Virtual.StageReport;
 export type ContextRecorder = Virtual.ContextRecorder;
 
 export interface IContextBuilder {

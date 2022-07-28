@@ -36,9 +36,7 @@ export default usModule((require, exports) => {
   ) {
     const assembler = totalReservedTokens.pipe(
       rxop.map((reservedTokens) => contextAssembler(contextParams, reservedTokens)),
-      rxop.mergeMap((processFn) => processFn(inFlightSelections)),
-      logger.measureStream("In-flight Assembly"),
-      rxop.shareReplay()
+      rxop.mergeMap((processFn) => processFn(inFlightSelections).insertions)
     );
 
     return {
