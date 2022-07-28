@@ -14,10 +14,10 @@ import $TokenizedAssembly from "./Tokenized";
 import type { UndefOr } from "@utils/utility-types";
 import type { StructuredOutput } from "@nai/ContextBuilder";
 import type { IContextField } from "@nai/ContextModule";
-import type { BudgetedSource } from "../rx/4-selection/_shared";
+import type { BudgetedSource } from "../rx/_shared";
 import type { TrimType } from "../TrimmingProviders";
 import type { ContextContent } from "../ContextContent";
-import type { AssemblyResultMap } from "../SearchService";
+import type { AssemblyResultMap, AssemblyResult } from "../SearchService";
 import type { AugmentedTokenCodec, Tokens } from "../TokenizerService";
 import type { Cursor } from "../cursors";
 import type { ITokenizedAssembly } from "./_interfaces";
@@ -93,18 +93,37 @@ export namespace Insertion {
     readonly source: UndefOr<SourceLike>;
   }
 
-  /**
-   * Stores information about the requested insertion position for reporting
-   * to the user later.
-   */
-  export interface Location {
-    readonly isKeyRelative: boolean;
+  export interface BaseLocation {
     readonly insertionType: TrimType;
     readonly direction: IterDirection;
     readonly offset: number;
   }
 
-  export interface RejectedResult {
+  export interface EdgeLocation extends BaseLocation {
+    readonly isKeyRelative: false;
+  }
+
+  export interface KeyedLocation extends BaseLocation {
+    readonly isKeyRelative: true;
+    readonly matchedKey: AssemblyResult;
+  }
+
+  /**
+   * Stores information about the requested insertion position for reporting
+   * to the user later.
+   */
+  export type Location = EdgeLocation | KeyedLocation;
+
+  interface BaseResult {
+    /** The type of the result. */
+    readonly type: string;
+    /** The difference in tokens after insertion. */
+    readonly tokensUsed: number;
+    /** The number of characters the entry was moved from its ideal position. */
+    readonly shunted: number;
+  }
+
+  export interface RejectedResult extends BaseResult {
     readonly type: "rejected";
     /** May be any string, but NAI uses {@link ReportReasons}. */
     readonly reason: string;
@@ -114,24 +133,22 @@ export namespace Insertion {
     readonly shunted: 0;
   }
 
-  export interface InitResult {
+  interface BaseSuccessResult extends BaseResult {
+    /** The initially requested location. */
+    readonly location: Location;
+    /** The assembly at the state of insertion. */
+    readonly assembly: TokenizedAssembly;
+  }
+
+  export interface InitResult extends BaseSuccessResult {
     readonly type: "initial";
-    /** The difference in tokens after insertion. */
-    readonly tokensUsed: number;
-    /** Never shunted. */
+    /** Can never be shunted. */
     readonly shunted: 0;
   }
 
-  interface MainBase {
-    readonly type: Exclude<Position.Result["type"], IterDirection>;
+  interface MainBase extends BaseSuccessResult {
     /** The target of insertion. */
     readonly target: Target;
-    /** The initially requested location. */
-    readonly location: Location;
-    /** The difference in tokens after insertion. */
-    readonly tokensUsed: number;
-    /** The number of characters the entry was moved from its ideal position. */
-    readonly shunted: number;
   }
 
   export interface InsertResult extends MainBase {
@@ -146,8 +163,7 @@ export namespace Insertion {
     readonly type: "insertAfter"
   }
 
-  type MainResult = InsertResult | BeforeResult | AfterResult;
-  export type SuccessResult = InitResult | MainResult;
+  export type SuccessResult = InitResult | InsertResult | BeforeResult | AfterResult;
   export type Result = RejectedResult | SuccessResult;
 
   export namespace Iteration {
@@ -172,6 +188,27 @@ const isAdjacentResult = (result: ActionableResult): result is Position.InsertRe
 const isSuccessResult = (result: ActionableResult): result is Position.SuccessResult =>
   result.type === "inside";
 
+const getInsertionData = (source: SourceLike) => {
+  const { fieldConfig, contextConfig } = source.entry;
+  const { insertionType, insertionPosition } = contextConfig;
+  const direction = insertionPosition < 0 ? "toTop" : "toBottom";
+  const remOffset = direction === "toTop" ? 1 : 0;
+  const isKeyRelative = Boolean(fieldConfig?.keyRelative ?? false);
+  const offset = Math.abs(insertionPosition + remOffset);
+
+  return { insertionType, direction, offset, isKeyRelative } as const;
+};
+
+function toLocation(data: ReturnType<typeof getInsertionData>): Insertion.EdgeLocation;
+function toLocation(data: ReturnType<typeof getInsertionData>, key: AssemblyResult): Insertion.KeyedLocation;
+function toLocation(
+  data: ReturnType<typeof getInsertionData>,
+  matchedKey?: AssemblyResult
+): Insertion.Location {
+  if (!matchedKey) return Object.freeze({ ...data, isKeyRelative: false });
+  return Object.freeze({ ...data, isKeyRelative: true, matchedKey });
+}
+
 const theModule = usModule((require, exports) => {
   const { REASONS } = require(ContextBuilder);
   const { findHighestIndex } = $SearchService(require);
@@ -190,6 +227,15 @@ const theModule = usModule((require, exports) => {
     = Object.freeze({ ...baseReject, reason: REASONS.NoContextKey });
 
   const toTokens = (f: AssemblyLike) => f.tokens;
+
+  const toAssembly = async (
+    codec: AugmentedTokenCodec,
+    inserted: AssemblyLike
+  ): Promise<TokenizedAssembly> => {
+    if (inserted instanceof CompoundAssembly) return await inserted.toAssembly();
+    if (tokenized.isInstance(inserted)) return inserted;
+    return await tokenized.castTo(codec, inserted);
+  };
 
   /**
    * This class tracks and assists the context assembly process, tracking
@@ -277,7 +323,11 @@ const theModule = usModule((require, exports) => {
         const inserted = await this.#getAssembly(source.entry, budget);
         if (!inserted) return NO_SPACE;
 
-        return await this.#doInsertInitial(source, inserted);
+        // We'll need at least one assembly to do anything key-relative.
+        const data = getInsertionData(source);
+        if (data.isKeyRelative) return NO_KEY;
+
+        return await this.#doInsertInitial(source, inserted, toLocation(data));
       }
 
       // Can we locate a place to start our search for its insertion location?
@@ -456,18 +506,16 @@ const theModule = usModule((require, exports) => {
         this.#assemblies.length > 0
       );
 
-      const { fieldConfig, contextConfig } = source.entry;
-      const { insertionType, insertionPosition } = contextConfig;
-      const direction = insertionPosition < 0 ? "toTop" : "toBottom";
-      const remOffset = direction === "toTop" ? 1 : 0;
+      // const { fieldConfig, contextConfig } = source.entry;
+      // const { insertionType, insertionPosition } = contextConfig;
+      // const direction = insertionPosition < 0 ? "toTop" : "toBottom";
+      // const remOffset = direction === "toTop" ? 1 : 0;
+      // const isKeyRelative = Boolean(fieldConfig?.keyRelative ?? false);
+      // const offset = Math.abs(insertionPosition + remOffset);
 
-      const location: Insertion.Location = Object.freeze({
-        insertionType, direction,
-        isKeyRelative: Boolean(fieldConfig?.keyRelative ?? false),
-        offset: Math.abs(insertionPosition + remOffset)
-      });
+      const data = getInsertionData(source);
 
-      if (location.isKeyRelative) {
+      if (data.isKeyRelative) {
         // We want to find the match closest to the bottom of all content
         // currently in the assembly.
         const matches = chain(this.enumerateSources())
@@ -478,8 +526,7 @@ const theModule = usModule((require, exports) => {
             const latestMatch = findHighestIndex(activator);
             if (!latestMatch) return undefined;
 
-            const { selection } = latestMatch[1];
-            return [origin, selection];
+            return [origin, latestMatch[1]];
           })
           .value((iter) => new Map(iter));
 
@@ -495,10 +542,15 @@ const theModule = usModule((require, exports) => {
           const asmSource = this.findSource(asm);
           if (!asmSource) continue;
 
-          const selection = matches.get(asmSource);
-          if (!selection) continue;
+          const matchedKey = matches.get(asmSource);
+          if (!matchedKey) continue;
 
-          const cursor = this.#handleSelection(selection, direction, asm, asmSource.entry);
+          const cursor = this.#handleSelection(
+            matchedKey.selection,
+            data.direction,
+            asm,
+            asmSource.entry
+          );
           if (!cursor) continue;
 
           const target = assertExists(
@@ -507,16 +559,17 @@ const theModule = usModule((require, exports) => {
           );
 
           return {
-            location,
-            direction, cursor, source, target,
-            offset: location.offset
+            cursor, source, target,
+            direction: data.direction,
+            offset: data.offset,
+            location: toLocation(data, matchedKey)
           };
         }
 
         return undefined;
       }
       else {
-        const index = direction === "toTop" ? this.#assemblies.length - 1 : 0;
+        const index = data.direction === "toTop" ? this.#assemblies.length - 1 : 0;
 
         const target = assertExists(
           `Expected assembly at ${index} to exist.`,
@@ -525,12 +578,13 @@ const theModule = usModule((require, exports) => {
 
         // We specifically want the position without the insertion type.
         // This places the cursor at the start/end of all the text.
-        const cursor = target.assembly.entryPosition(direction);
+        const cursor = target.assembly.entryPosition(data.direction);
 
         return {
-          location,
-          direction, cursor, source, target,
-          offset: location.offset
+          cursor, source, target,
+          direction: data.direction,
+          offset: data.offset,
+          location: toLocation(data)
         };
       }
     }
@@ -556,14 +610,22 @@ const theModule = usModule((require, exports) => {
 
     async #doInsertInitial(
       source: SourceLike,
-      inserted: AssemblyLike
+      inserted: AssemblyLike,
+      location: Insertion.Location
     ): Promise<Insertion.InitResult> {
       assert("Expected to be empty.", this.#assemblies.length === 0);
+
       const tokensUsed = await this.updateState(
         [inserted], inserted.tokens, source, inserted
       );
 
-      return { type: "initial", tokensUsed, shunted: 0 };
+      return {
+        type: "initial",
+        tokensUsed,
+        shunted: 0,
+        location,
+        assembly: await toAssembly(this.#codec, inserted)
+      };
     }
 
     /** Inserts adjacent to `index`, based on `iterState.result.type`. */
@@ -589,7 +651,11 @@ const theModule = usModule((require, exports) => {
       const tokens = await this.mendTokens(newAsm.map(toTokens));
 
       const tokensUsed = await this.updateState(newAsm, tokens, source, inserted);
-      return { type, target, location, tokensUsed, shunted: 0 };
+      return {
+        type, target, location, tokensUsed,
+        shunted: 0,
+        assembly: await toAssembly(this.#codec, inserted)
+      };
     }
 
     async #doShuntOut(
@@ -597,7 +663,7 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       inserted: AssemblyLike,
       shuntRef: Cursor.Fragment | ActionableResult
-    ): Promise<Insertion.Result> {
+    ): Promise<Insertion.SuccessResult> {
       const { target } = iterResult;
 
       const result = dew(() => {
@@ -624,7 +690,7 @@ const theModule = usModule((require, exports) => {
       iterResult: Insertion.Iteration.Result,
       source: SourceLike,
       inserted: AssemblyLike
-    ): Promise<Insertion.Result> {
+    ): Promise<Insertion.SuccessResult> {
       const { target, location, result } = iterResult;
       const oldAsm = this.#assemblies;
 
@@ -666,7 +732,12 @@ const theModule = usModule((require, exports) => {
         const tokens = await this.mendTokens(newAsm.map(toTokens));
 
         const tokensUsed = await this.updateState(newAsm, tokens, source, inserted);
-        return { type: "inside", target, location, tokensUsed, shunted: 0 };
+        return {
+          type: "inside",
+          target, location, tokensUsed,
+          shunted: 0,
+          assembly: await toAssembly(this.#codec, inserted)
+        };
       }
 
       // If we got kicked out of the `checks` block, we must do a shunt.

@@ -18,6 +18,10 @@ import type { ContextParams } from "../../ParamsService";
 import type { SelectionPhaseResult } from "../4-selection";
 import type { Assembler } from "./ContextAssembler";
 
+// Re-export these for convenience.
+export { Assembler };
+export { InsertableSource, InsertableObservable } from "../_shared";
+
 export interface AssemblyPhaseResult {
   readonly insertions: rx.Observable<Assembler.Inserted>;
   readonly rejections: rx.Observable<Assembler.Rejected>;

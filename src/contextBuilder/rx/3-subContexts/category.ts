@@ -32,7 +32,10 @@ export default usModule((require, exports) => {
     subcontextSettings: (v) => !isUndefined(v)
   }) as TypePredicate<SubContextCategory>;
 
-  const isCategorized = categories.isCategorized as TypePredicate<ACSource, ActivatedSource>;
+  const isCategorized = categories.isCategorized as TypePredicate<
+    ActivatedSource & CategorizedSource,
+    ActivatedSource
+  >;
 
   const createStream = (
     /** The context params. */

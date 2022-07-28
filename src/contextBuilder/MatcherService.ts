@@ -34,6 +34,8 @@ export interface MatcherFn {
 }
 
 export interface MatchResult {
+  /** The source used to build the matcher. */
+  readonly source: string;
   /** The full match. */
   readonly match: string;
   /** If there were capture groups, the matches for those. */
@@ -105,11 +107,11 @@ export default usModule((require, exports) => {
     return [new RegExp(`(?:^|\\W)(?:${escapedKey})(?:$|\\W)`, "iug"), "simple"];
   }
 
-  function toMatchResult(regexExec: RegExpExecArray): MatchResult {
+  const toMatchResult = (source: string) => (regexExec: RegExpExecArray): MatchResult => {
     const [match, ...groups] = regexExec;
 
     return Object.freeze({
-      match,
+      source, match,
       groups: Object.freeze(groups),
       index: assertExists("Expected an index.", regexExec.index),
       length: match.length,
@@ -135,6 +137,8 @@ export default usModule((require, exports) => {
       const [regex, type] = toRegex(key);
       // Regular expressions are unsafe to use in single-line mode.
       const multiline = type === "regex";
+      // Build the result transformer.
+      const toResult = toMatchResult(key);
 
       const impl = (
         haystack: string,
@@ -145,16 +149,16 @@ export default usModule((require, exports) => {
 
         switch (mode) {
           case "all": {
-            return Array.from(haystack.matchAll(regex)).map(toMatchResult);
+            return Array.from(haystack.matchAll(regex)).map(toResult);
           }
           case "first": {
             const match = regex.exec(haystack);
-            return match ? [toMatchResult(match)] : [];
+            return match ? [toResult(match)] : [];
           }
           case "last": {
             let lastMatch: RegExpMatchArray | null = null;
             for (const match of haystack.matchAll(regex)) lastMatch = match;
-            return lastMatch ? [toMatchResult(lastMatch as any)] : [];
+            return lastMatch ? [toResult(lastMatch as any)] : [];
           }
           default:
             return [];

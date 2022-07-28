@@ -4,7 +4,7 @@ import type { IContextField } from "@nai/ContextModule";
 import type { WrappedRequireFn } from "../../../require";
 import type { ContextParams } from "../../ParamsService";
 import type { SourceType } from "../../ContextSource";
-import type { BudgetedSource } from "./_shared";
+import type { BudgetedSource } from "../_shared";
 
 export type EntrySorter =
   (contextParams: ContextParams, require: WrappedRequireFn) =>

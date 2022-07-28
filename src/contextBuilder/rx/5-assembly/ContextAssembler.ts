@@ -5,17 +5,17 @@ import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import ContextBuilder from "@nai/ContextBuilder";
 import $CompoundAssembly from "../../assemblies/Compound";
+import { isBudgetedSource } from "../_shared";
 
 import type { ILogger } from "@utils/logging";
 import type { StructuredOutput } from "@nai/ContextBuilder";
 import type { CompoundAssembly, Insertion } from "../../assemblies/Compound";
 import type { ContextParams } from "../../ParamsService";
-import type { BudgetedSource } from "../4-selection/_shared";
-import type { SelectionObservable } from "../4-selection";
+import type { BudgetedSource, InsertableSource, InsertableObservable } from "../_shared";
 
 export namespace Assembler {
   interface Base {
-    source: BudgetedSource;
+    source: InsertableSource;
     reservedTokens: number;
     availableTokens: number;
     consumedTokens: number;
@@ -169,7 +169,7 @@ export default usModule((require, exports) => {
     }
 
     /** Subscribes to `selected` and makes this instance's observables hot. */
-    connect(selected: SelectionObservable) {
+    connect(selected: InsertableObservable) {
       // We will need to process each source in order.
       dew(async () => {
         const subject = this.#reportSubject;
@@ -206,7 +206,7 @@ export default usModule((require, exports) => {
     }
 
     #doReport(
-      source: BudgetedSource,
+      source: InsertableSource,
       result: Insertion.Result,
       prevTokens: number
     ): void {
@@ -246,15 +246,20 @@ export default usModule((require, exports) => {
       }
     }
 
-    async #doInsert(source: BudgetedSource) {
+    async #doInsert(source: InsertableSource) {
       const currentTokens = this.#availableTokens;
       // If we actually hit 0 tokens remaining, we're just straight done.
       if (!currentTokens) return this.#doReport(source, NO_SPACE, currentTokens);
 
-      this.#updateReservations(source);
-      const budget = this.#determineBudget(source);
-      const result = await this.#assembly.insert(source, budget);
-      return this.#doReport(source, result, currentTokens);
+      if (isBudgetedSource(source)) {
+        this.#updateReservations(source);
+        const budget = this.#determineBudget(source);
+        const result = await this.#assembly.insert(source, budget);
+        return this.#doReport(source, result, currentTokens);
+      }
+      else {
+        // TODO: sub-context stuff.
+      }
     }
   }
 
@@ -262,7 +267,7 @@ export default usModule((require, exports) => {
     contextParams: ContextParams,
     reservedTokens: number
   ) => {
-    return (selected: SelectionObservable) =>
+    return (selected: InsertableObservable) =>
       new ContextAssembler(contextParams, reservedTokens).connect(selected);
   };
 

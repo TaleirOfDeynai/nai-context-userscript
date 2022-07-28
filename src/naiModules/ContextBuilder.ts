@@ -70,6 +70,8 @@ export namespace Virtual {
   ): string[];
 
   export declare class ContextStatus<T extends IContextField = IContextField> {
+    constructor(entry: T);
+
     included: boolean;
     identifier: string;
     /** Misspelled in NAI source. */
@@ -137,6 +139,7 @@ export namespace Virtual {
   }
 }
 
+export type ContextStatus = Virtual.ContextStatus;
 export type StageReport = Virtual.StageReport;
 export type ContextRecorder = Virtual.ContextRecorder;
 

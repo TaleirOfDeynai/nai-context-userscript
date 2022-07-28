@@ -20,7 +20,7 @@ import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { chain } from "@utils/iterables";
 import $QueryOps from "../../assemblies/queryOps";
-import { asBudgeted } from "./_shared";
+import { asBudgeted } from "../_shared";
 import Sorters from "./_sorters";
 
 import type { LoreEntryConfig } from "@nai/Lorebook";
@@ -28,7 +28,7 @@ import type { ContextParams } from "../../ParamsService";
 import type { ContextSource, ExtendField } from "../../ContextSource";
 import type { StorySource } from "../1-source";
 import type { ActivatedSource } from "../2-activation";
-import type { BudgetedSource } from "./_shared";
+import type { BudgetedSource } from "../_shared";
 import type { SorterKey } from "./_sorters";
 
 type RangedSource = ExtendField<ActivatedSource, {
