@@ -87,7 +87,7 @@ export default usModule((require, exports) => {
     if (queryOps.isEmpty(assembly)) return { type: direction, remainder: offset };
 
     // Fast-path: If we're given an offset of 0, we don't need to move
-    // the cursor at all (though, `findBest` could have moved it).
+    // the cursor at all.
     if (offset === 0) return { type: "inside", cursor: initCursor };
 
     const result = dew(() => {

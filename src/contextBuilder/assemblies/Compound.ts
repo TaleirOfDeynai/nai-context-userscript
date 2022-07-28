@@ -79,12 +79,24 @@ export type ShuntingMode = "nearest" | "inDirection";
 type ActionableResult = Position.SuccessResult | Position.InsertResult;
 
 export namespace Insertion {
+  /**
+   * Stores information on the assembly that is the target of insertion.
+   * This information will quickly become outdated as the compound assembly
+   * is mutated.
+   */
   export interface Target {
+    /** The original index of the assembly. */
     readonly index: number;
+    /** The assembly instance. */
     readonly assembly: AssemblyLike;
+    /** The source of the target. */
     readonly source: UndefOr<SourceLike>;
   }
 
+  /**
+   * Stores information about the requested insertion position for reporting
+   * to the user later.
+   */
   export interface Location {
     readonly isKeyRelative: boolean;
     readonly insertionType: TrimType;
@@ -96,21 +108,29 @@ export namespace Insertion {
     readonly type: "rejected";
     /** May be any string, but NAI uses {@link ReportReasons}. */
     readonly reason: string;
+    /** Can never use tokens. */
     readonly tokensUsed: 0;
+    /** Can never be shunted. */
     readonly shunted: 0;
   }
 
   export interface InitResult {
     readonly type: "initial";
+    /** The difference in tokens after insertion. */
     readonly tokensUsed: number;
+    /** Never shunted. */
     readonly shunted: 0;
   }
 
   interface MainBase {
     readonly type: Exclude<Position.Result["type"], IterDirection>;
+    /** The target of insertion. */
     readonly target: Target;
+    /** The initially requested location. */
     readonly location: Location;
+    /** The difference in tokens after insertion. */
     readonly tokensUsed: number;
+    /** The number of characters the entry was moved from its ideal position. */
     readonly shunted: number;
   }
 
@@ -132,9 +152,12 @@ export namespace Insertion {
 
   export namespace Iteration {
     export interface State extends InsertionPosition {
+      /** The source of the entry being inserted. */
       source: SourceLike;
+      /** The target of insertion. */
       target: Target;
-      initLocation: Location;
+      /** The initially requested location. */
+      location: Location;
     }
 
     export interface Result extends Readonly<State> {
@@ -143,8 +166,11 @@ export namespace Insertion {
   }
 }
 
-const isInsertResult = (result: ActionableResult): result is Position.InsertResult =>
+const isAdjacentResult = (result: ActionableResult): result is Position.InsertResult =>
   result.type !== "inside";
+
+const isSuccessResult = (result: ActionableResult): result is Position.SuccessResult =>
+  result.type === "inside";
 
 const theModule = usModule((require, exports) => {
   const { REASONS } = require(ContextBuilder);
@@ -264,7 +290,7 @@ const theModule = usModule((require, exports) => {
 
       for (const iterResult of this.#iterateInsertion(startState)) {
         const { result } = iterResult;
-        switch (iterResult.result.type) {
+        switch (result.type) {
           case "insertBefore":
           case "insertAfter":
             return await this.#doShuntOut(iterResult, source, inserted, result);
@@ -435,13 +461,13 @@ const theModule = usModule((require, exports) => {
       const direction = insertionPosition < 0 ? "toTop" : "toBottom";
       const remOffset = direction === "toTop" ? 1 : 0;
 
-      const initLocation: Insertion.Location = Object.freeze({
+      const location: Insertion.Location = Object.freeze({
         insertionType, direction,
         isKeyRelative: Boolean(fieldConfig?.keyRelative ?? false),
         offset: Math.abs(insertionPosition + remOffset)
       });
 
-      if (initLocation.isKeyRelative) {
+      if (location.isKeyRelative) {
         // We want to find the match closest to the bottom of all content
         // currently in the assembly.
         const matches = chain(this.enumerateSources())
@@ -466,13 +492,13 @@ const theModule = usModule((require, exports) => {
           .value();
 
         for (const [index, asm] of assemblies) {
-          const source = this.findSource(asm);
-          if (!source) continue;
+          const asmSource = this.findSource(asm);
+          if (!asmSource) continue;
 
-          const selection = matches.get(source);
+          const selection = matches.get(asmSource);
           if (!selection) continue;
 
-          const cursor = this.#handleSelection(selection, direction, asm, source.entry);
+          const cursor = this.#handleSelection(selection, direction, asm, asmSource.entry);
           if (!cursor) continue;
 
           const target = assertExists(
@@ -481,9 +507,9 @@ const theModule = usModule((require, exports) => {
           );
 
           return {
-            initLocation,
+            location,
             direction, cursor, source, target,
-            offset: initLocation.offset
+            offset: location.offset
           };
         }
 
@@ -491,19 +517,20 @@ const theModule = usModule((require, exports) => {
       }
       else {
         const index = direction === "toTop" ? this.#assemblies.length - 1 : 0;
-        // We specifically want the position without the insertion type.
-        // This places the cursor at the start/end of all the text.
-        const cursor = this.#assemblies[index].entryPosition(direction);
 
         const target = assertExists(
           `Expected assembly at ${index} to exist.`,
           this.#makeTarget(index)
         );
 
+        // We specifically want the position without the insertion type.
+        // This places the cursor at the start/end of all the text.
+        const cursor = target.assembly.entryPosition(direction);
+
         return {
-          initLocation,
+          location,
           direction, cursor, source, target,
-          offset: Math.abs(insertionPosition + remOffset)
+          offset: location.offset
         };
       }
     }
@@ -544,14 +571,14 @@ const theModule = usModule((require, exports) => {
       iterState: Insertion.Iteration.Result,
       source: SourceLike,
       inserted: AssemblyLike,
-      type?: Position.InsertResult["type"]
+      overrideType?: Position.InsertResult["type"]
     ): Promise<Insertion.AfterResult | Insertion.BeforeResult> {
-      const { target, initLocation: location } = iterState;
+      const { target, location } = iterState;
       const oldAsm = this.#assemblies;
 
-      type ??= assertAs(
+      const type = overrideType ?? assertAs(
         "Expected `iterState.result` to be an `InsertResult`.",
-        isInsertResult, iterState.result
+        isAdjacentResult, iterState.result
       ).type;
 
       const index = target.index + (type === "insertAfter" ? 1 : 0);
@@ -583,7 +610,7 @@ const theModule = usModule((require, exports) => {
       // This should not be possible unless the implementation of `shuntOut`
       // changes to allow it...  In which case, this error will hopefully
       // let us know something needs to change here.
-      if (!isInsertResult(result))
+      if (!isAdjacentResult(result))
         throw new Error(`Unexpected shunt direction: ${result.type}`);
 
       return {
@@ -598,8 +625,13 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       inserted: AssemblyLike
     ): Promise<Insertion.Result> {
-      const { target, cursor, initLocation: location } = iterResult;
+      const { target, location, result } = iterResult;
       const oldAsm = this.#assemblies;
+
+      const { cursor } = assertAs(
+        "Expected `result.type` to be `\"inside\"`",
+        isSuccessResult, result
+      );
 
       // It's possible that the cursor is positioned before the prefix
       // or after the suffix.  In these cases, we don't need to do any
@@ -652,8 +684,7 @@ const theModule = usModule((require, exports) => {
       let didReversal = false;
 
       while (true) {
-        const { index } = state.target;
-        const curAsm = this.#assemblies[index];
+        const curAsm = state.target.assembly;
 
         // Check for emptiness; `SubContext` will report empty when it
         // has no assemblies inside it, in which case we should skip it.
@@ -676,7 +707,7 @@ const theModule = usModule((require, exports) => {
         }
 
         const offset = state.direction === "toTop" ? -1 : 1;
-        const nextIndex = index + offset;
+        const nextIndex = state.target.index + offset;
         const nextTarget = this.#makeTarget(nextIndex);
 
         if (!nextTarget) {
