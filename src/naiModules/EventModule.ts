@@ -56,7 +56,10 @@ export interface StoryContent {
   contextDefaults: {
     ephemeralDefaults: unknown[];
     loreDefaults: unknown[];
-  }
+  };
+  didGenerate: boolean;
+  document: unknown;
+  eosSequences: unknown[];
   ephemeralContext: EphemeralHelpers.EphemeralEntry[];
   lorebook: Lorebook.Lorebook;
   phraseBiasGroups: unknown | undefined;

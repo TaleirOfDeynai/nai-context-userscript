@@ -23,7 +23,7 @@ export default usModule((require, exports) => {
     removeComments?: boolean,
     tokenCodec?: TokenCodec
   ) {
-    const contextParams = makeParams(
+    const contextParams = await makeParams(
       storyContent,
       storyState,
       givenTokenLimit,

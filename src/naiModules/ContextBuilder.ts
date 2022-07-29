@@ -60,7 +60,7 @@ export namespace Virtual {
     storyContent: EventModule.StoryContent,
     storyState: EventModule.StoryState,
     tokenLimit: number,
-    removeComments?: boolean,
+    prependPreamble?: boolean,
     storyLength?: number,
     tokenCodec?: TokenCodec
   ): Promise<ContextRecorder>;

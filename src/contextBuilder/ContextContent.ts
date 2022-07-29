@@ -89,16 +89,11 @@ const theModule = usModule((require, exports) => {
    */
   const getProvider = (
     forSearch: boolean,
-    trimDirection: ContextConfig["trimDirection"],
-    contextParams: ContextParams
+    trimDirection: ContextConfig["trimDirection"]
   ) => {
-    switch (true as boolean) {
-      case !contextParams.removeComments:
-      case forSearch && usConfig.comments.searchComments:
-        return providers.basic[trimDirection];
-      default:
-        return providers.removeComments[trimDirection];
-    }
+    if (forSearch && usConfig.comments.searchComments)
+      return providers.basic[trimDirection];
+    return providers.removeComments[trimDirection];
   };
 
   /**
@@ -116,7 +111,7 @@ const theModule = usModule((require, exports) => {
       // whether to remove comments or not.
       if (contextParams.storyLength > 0) {
         const { trimDirection, maximumTrimType } = contextConfig;
-        const provider = getProvider(true, trimDirection, contextParams);
+        const provider = getProvider(true, trimDirection);
         const trimConfig = { provider, maximumTrimType, preserveEnds: true };
         const result = trimByLength(trimmer.origin, contextParams.storyLength, trimConfig);
         if (result) return result;
@@ -126,7 +121,7 @@ const theModule = usModule((require, exports) => {
 
       const innerTrimmer = dew(() => {
         const { trimDirection, maximumTrimType } = contextConfig;
-        const provider = getProvider(true, trimDirection, contextParams);
+        const provider = getProvider(true, trimDirection);
         // We can re-use the current trimmer.
         if (trimmer.provider === provider) return trimmer;
         // We need a different trimmer.
@@ -151,9 +146,8 @@ const theModule = usModule((require, exports) => {
       const origin = trimmer.origin;
       // The trimmer has the unmodified origin assembly.  We only need to
       // change things up if we need to remove comments for search.
-      if (!contextParams.removeComments) return origin;
       if (!reComment.test(queryOps.getText(origin))) return origin;
-      const provider = getProvider(true, "doNotTrim", contextParams);
+      const provider = getProvider(true, "doNotTrim");
       // The do-not-trim provider does all its work in `preProcess`.
       const fragments = provider.preProcess(origin);
       // If we get the `content` reference back, we removed nothing.
@@ -210,7 +204,7 @@ const theModule = usModule((require, exports) => {
     static async forField<T extends IContextField>(field: T, contextParams: ContextParams) {
       const { text, contextConfig } = field;
       const { maximumTrimType, trimDirection } = contextConfig;
-      const provider = getProvider(false, trimDirection, contextParams);
+      const provider = getProvider(false, trimDirection);
       const trimmer = createTrimmer(
         assembly.fromSource(text, contextConfig),
         contextParams,
@@ -234,7 +228,7 @@ const theModule = usModule((require, exports) => {
         const handled = storyState.handleEvent(ev);
         return assembly.fromSource(handled.event.contextText, contextConfig);
       });
-      const provider = getProvider(false, trimDirection, contextParams);
+      const provider = getProvider(false, trimDirection);
       const trimmer = createTrimmer(
         sourceText,
         contextParams,
