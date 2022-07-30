@@ -7,23 +7,27 @@ import { getBudgetStats } from "../../_shared";
 import { checkThis } from "./_shared";
 
 import type { AnyValueOf } from "@utils/utility-types";
-import type { ContextStatus, TrimStates, TrimMethods } from "@nai/ContextBuilder";
+import type { ContextStatus } from "@nai/ContextBuilder";
+import type { TrimStates, TrimMethods, ReportReasons } from "@nai/ContextBuilder";
 import type { Assembler } from "../../5-assembly";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);
   const queryOps = $QueryOps(require);
 
-  const toReason = (inserted: Assembler.Inserted) => {
-    const { source } = inserted;
+  const toReason = (inserted: Assembler.Inserted): AnyValueOf<ReportReasons> => {
+    const { activations } = inserted.source;
 
     // Sub-contexts use the default reason.
-    if (!source.activations) return CB.REASONS.Default;
+    if (!activations) return CB.REASONS.Default;
 
-    if (source.activations.has("ephemeral")) return CB.REASONS.EphemeralActive;
-    if (source.activations.has("forced")) return CB.REASONS.ActivationForced;
-    if (source.activations.has("keyed")) return CB.REASONS.KeyTriggered;
-    if (source.activations.has("cascade")) return CB.REASONS.KeyTriggeredNonStory;
+    // Forced activations provide their own reason.
+    const forced = activations.get("forced");
+    if (forced) return forced;
+
+    if (activations.has("ephemeral")) return CB.REASONS.EphemeralActive;
+    if (activations.has("keyed")) return CB.REASONS.KeyTriggered;
+    if (activations.has("cascade")) return CB.REASONS.KeyTriggeredNonStory;
 
     return CB.REASONS.Default;
   };

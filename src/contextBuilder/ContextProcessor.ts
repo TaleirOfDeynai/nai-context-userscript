@@ -49,11 +49,20 @@ export default usModule((require, exports) => {
       activationResults.inFlight
     );
 
+    // Remove sources that belong to a category with a sub-context and then
+    // assemble and create the sources for each sub-context.  This may be
+    // a noop depending on configuration.
+    const subContexts = processing.subContexts.phaseRunner(
+      contextParams,
+      sourceResults.storySource,
+      activationResults.activated
+    );
+
     // Order the content based on importance.
     const selectionResults = processing.selection.phaseRunner(
       contextParams,
       sourceResults.storySource,
-      rx.defer(() => activationResults.activated)
+      subContexts.activated
     );
 
     const assemblyResults = processing.assembly.phaseRunner(
@@ -62,29 +71,21 @@ export default usModule((require, exports) => {
       selectionResults.inFlight
     );
 
-    // const recorder = Object.assign(new contextBuilder.ContextRecorder(), {
-    //   tokenizerType, maxTokens,
-    //   preContextText: await inFlightStoryText
-    // });
-
-    const [selected, unselected, rejected, disabled, biasGroups, assembly] = await Promise.all([
-      selectionResults.selected,
-      selectionResults.unselected,
-      activationResults.rejected,
-      activationResults.disabled,
+    const exportResults = processing.export.phaseRunner(
+      contextParams,
+      sourceResults.storySource,
       biasGroupResults.biasGroups,
-      assemblyResults.assembly
-    ]);
+      activationResults.disabled,
+      activationResults.rejected,
+      selectionResults.unselected,
+      assemblyResults.rejections,
+      assemblyResults.insertions,
+      rx.defer(() => assemblyResults.assembly)
+    );
 
-    for (const s of disabled) logger.info(`Disabled: ${s.identifier}`, s);
-    for (const s of rejected) logger.info(`Rejected: ${s.identifier}`, s);
-    for (const s of unselected) logger.info(`Unselected: ${s.identifier}`, s);
-    for (const s of selected) logger.info(`Selected: ${s.identifier}`, s);
-    for (const bg of biasGroups) logger.info(`Bias Group: ${bg.identifier}`, bg);
+    const recorder = await rx.firstValueFrom(exportResults.contextRecorder);
 
-    const reserved = await selectionResults.totalReservedTokens;
-    logger.info(`Total reserved tokens: ${reserved} out of ${contextParams.contextSize}`);
-    logger.info("Final Result:\n", await assembly.toAssembly());
+    logger.dir(recorder);
   }
 
   return Object.assign(exports, {

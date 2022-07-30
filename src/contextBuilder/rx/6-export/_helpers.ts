@@ -26,14 +26,15 @@ export default usModule((require, exports) => {
   ): rx.Observable<boolean> {
     return rx.concat(
       included.pipe(
-        rxop.first((status) => status.type === "story"),
+        rxop.filter((status) => status.type === "story"),
         rxop.map((inserted) => inserted.state === "included")
       ),
       excluded.pipe(
-        rxop.first((status) => status.type === "story"),
-        rxop.map((inserted) => inserted.reason === "no text"),
-        rxop.defaultIfEmpty(false)
-      )
+        rxop.filter((status) => status.type === "story"),
+        rxop.map((inserted) => inserted.reason === "no text")
+      ),
+      // The default if both of these ended up empty.
+      rx.of(false)
     ).pipe(rxop.first());
   }
 
@@ -42,14 +43,14 @@ export default usModule((require, exports) => {
   ): rx.Observable<number> {
     const firstBelowZero = insertedResults.pipe(
       rxop.first((inserted) => inserted.source.entry.contextConfig.budgetPriority <= 0),
-      rxop.map((inserted) => inserted.source.uniqueId),
-      rxop.defaultIfEmpty(undefined)
+      rxop.catchError(() => rx.of(undefined)),
+      rxop.map((inserted) => inserted?.source.uniqueId)
     );
 
     const lastOutput = insertedResults.pipe(
       rxop.last(),
-      rxop.map((inserted) => inserted.structuredOutput),
-      rxop.defaultIfEmpty([] as StructuredOutput[])
+      rxop.catchError(() => rx.of(undefined)),
+      rxop.map((inserted) => inserted?.structuredOutput ?? [])
     );
 
     return rx.forkJoin([firstBelowZero, lastOutput]).pipe(

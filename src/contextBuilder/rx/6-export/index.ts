@@ -15,16 +15,16 @@ import $Statuses from "./statuses";
 import $StageReports from "./stageReports";
 import $Preamble from "./preamble";
 
-import type { ResolvedBiasGroup, StructuredOutput, ContextRecorder } from "@nai/ContextBuilder";
-import type { CompoundAssembly } from "../../assemblies/Compound";
+import type { ContextRecorder } from "@nai/ContextBuilder";
 import type { ContextParams } from "../../ParamsService";
-import type { DisabledSource, SourcePhaseResult } from "../1-source";
-import type { RejectedSource } from "../2-activation";
-import type { BudgetedSource } from "../4-selection";
-import type { Assembler } from "../5-assembly";
+import type { SourcePhaseResult } from "../1-source";
+import type { ActivationPhaseResult } from "../2-activation";
+import type { BiasGroupPhaseResult } from "../3-biasGroups";
+import type { SelectionPhaseResult } from "../4-selection";
+import type { AssemblyPhaseResult } from "../5-assembly";
 
 export interface ExportPhaseResult {
-  readonly contextRecorder: Promise<ContextRecorder>;
+  readonly contextRecorder: rx.Observable<ContextRecorder>;
 }
 
 export default usModule((require, exports) => {
@@ -42,24 +42,24 @@ export default usModule((require, exports) => {
     /** The story's source. */
     storySource: SourcePhaseResult["storySource"],
     /** The activated bias-groups. */
-    biasGroups: rx.Observable<ResolvedBiasGroup>,
+    biasGroups: BiasGroupPhaseResult["biasGroups"],
     /** The disabled sources. */
-    disabledSources: rx.Observable<DisabledSource>,
+    disabledSources: ActivationPhaseResult["disabled"],
     /** The sources that failed activation. */
-    inactiveSources: rx.Observable<RejectedSource>,
+    inactiveSources: ActivationPhaseResult["rejected"],
     /** The sources that were discarded during selection. */
-    unselectedSources: rx.Observable<BudgetedSource>,
+    unselectedSources: SelectionPhaseResult["unselected"],
     /** The rejected insertions. */
-    unbudgetedResults: rx.Observable<Assembler.Rejected>,
+    unbudgetedResults: AssemblyPhaseResult["rejections"],
     /** The successful insertions. */
-    insertedResults: rx.Observable<Assembler.Inserted>,
+    insertedResults: AssemblyPhaseResult["insertions"],
     /** The final assembly. */
-    finalAssembly: rx.Observable<CompoundAssembly>
+    finalAssembly: AssemblyPhaseResult["assembly"]
   ): ExportPhaseResult {
-    const allDisabled = disabledSources.pipe(statuses.forDisabled);
+    const allDisabled = disabledSources.pipe(rxop.mergeAll(), statuses.forDisabled);
     const allRejected = rx.merge(
-      inactiveSources.pipe(statuses.forInactive),
-      unselectedSources.pipe(statuses.forUnselected),
+      inactiveSources.pipe(rxop.mergeAll(), statuses.forInactive),
+      unselectedSources.pipe(rxop.mergeAll(), statuses.forUnselected),
       unbudgetedResults.pipe(statuses.forUnbudgeted)
     );
     const allExcluded = rx.merge(allDisabled, allRejected);
@@ -85,16 +85,18 @@ export default usModule((require, exports) => {
       ),
       structuredOutput: insertedResults.pipe(
         rxop.last(),
-        rxop.map((r) => r.structuredOutput),
-        rxop.defaultIfEmpty([] as StructuredOutput[])
+        rxop.catchError(() => rx.of(undefined)),
+        rxop.map((r) => r?.structuredOutput ?? [])
       ),
       stageReports: stageReports.createStream(insertedResults).pipe(rxop.toArray()),
       contextStatuses: allIncluded.pipe(rxop.toArray()),
       keyRejections: allRejected.pipe(rxop.toArray()),
       disabled: allDisabled.pipe(rxop.toArray()),
-      biases: biasGroups.pipe(rxop.toArray()),
+      biases: biasGroups.pipe(rxop.defaultIfEmpty([])),
       orderZeroPoint: helpers.orderZeroPoint(insertedResults),
-      allStoryIncluded: helpers.allStoryIncluded(allExcluded, allIncluded),
+      storyTrimmed: helpers.allStoryIncluded(allExcluded, allIncluded).pipe(
+        rxop.map((b) => !b)
+      ),
       preamble: preamble.createStream(contextParams, allExcluded, allIncluded)
     });
 
@@ -106,7 +108,7 @@ export default usModule((require, exports) => {
 
     return {
       get contextRecorder() {
-        return rx.firstValueFrom(theRecorder);
+        return theRecorder;
       }
     };
   }

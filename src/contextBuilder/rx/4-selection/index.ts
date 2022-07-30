@@ -28,13 +28,11 @@ export { BudgetedSource };
 export type SelectionObservable = rx.Observable<BudgetedSource>;
 
 export interface SelectionPhaseResult {
-  readonly selected: Promise<Set<BudgetedSource>>;
-  readonly unselected: Promise<Set<BudgetedSource>>;
-  readonly totalReservedTokens: Promise<number>;
+  readonly selected: rx.Observable<Set<BudgetedSource>>;
+  readonly unselected: rx.Observable<Set<BudgetedSource>>;
+  readonly totalReservedTokens: rx.Observable<number>;
   readonly inFlight: SelectionObservable;
 }
-
-const logger = createLogger("Selection Phase");
 
 export default usModule((require, exports) => {
   const selectors = {
@@ -52,8 +50,10 @@ export default usModule((require, exports) => {
     /** The story's source. */
     storySource: SourcePhaseResult["storySource"],
     /** The fully activated set of sources. */
-    activatedSet: rx.DeferredOf<ActivationPhaseResult["activated"]>
+    activatedSet: ActivationPhaseResult["activated"]
   ): SelectionPhaseResult {
+    const logger = createLogger(`Selection Phase: ${contextParams.contextName}`);
+
     // Flatten the set back out.
     const activatedSources = activatedSet.pipe(rxop.mergeAll());
 
@@ -71,24 +71,24 @@ export default usModule((require, exports) => {
 
     return {
       get totalReservedTokens() {
-        return rx.firstValueFrom(inFlightSelected.pipe(
+        return inFlightSelected.pipe(
           rxop.reduce<BudgetedSource, number>(
             (tokens, { budgetStats }) => tokens + budgetStats.actualReservedTokens,
             0
           )
-        ));
+        );
       },
       get selected() {
-        return rx.firstValueFrom(inFlightSelected.pipe(
+        return inFlightSelected.pipe(
           rxop.toArray(),
           rxop.map((sources) => new Set(sources))
-        ));
+        );
       },
       get unselected() {
-        return rx.firstValueFrom(inFlightUnselected.pipe(
+        return inFlightUnselected.pipe(
           rxop.toArray(),
           rxop.map((sources) => new Set(sources))
-        ));
+        );
       },
       get inFlight() {
         return inFlightSelected;

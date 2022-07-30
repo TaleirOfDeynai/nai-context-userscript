@@ -25,7 +25,7 @@ export { InsertableSource, InsertableObservable } from "../_shared";
 export interface AssemblyPhaseResult {
   readonly insertions: rx.Observable<Assembler.Inserted>;
   readonly rejections: rx.Observable<Assembler.Rejected>;
-  readonly assembly: Promise<Assembly.Compound>;
+  readonly assembly: rx.Observable<Assembly.Compound>;
 }
 
 export default usModule((require, exports) => {
@@ -39,7 +39,7 @@ export default usModule((require, exports) => {
     /** The context builder parameters. */
     contextParams: ContextParams,
     /** The total reserved tokens, from the selection phase. */
-    totalReservedTokens: rx.DeferredOf<SelectionPhaseResult["totalReservedTokens"]>,
+    totalReservedTokens: SelectionPhaseResult["totalReservedTokens"],
     /** The currently in-flight selections. */
     inFlightSelections: SelectionPhaseResult["inFlight"]
   ): AssemblyPhaseResult {
@@ -59,9 +59,7 @@ export default usModule((require, exports) => {
         return assembler.pipe(rxop.mergeMap((assembler) => assembler.rejections));
       },
       get assembly() {
-        return rx.firstValueFrom(assembler.pipe(
-          rxop.mergeMap((assembler) => assembler.finalAssembly)
-        ));
+        return assembler.pipe(rxop.mergeMap((assembler) => assembler.finalAssembly));
       }
     };
   };

@@ -260,7 +260,10 @@ class Logger implements ILogger {
 
           shared.subscribe({
             complete: onFinished,
-            error: onFinished
+            error: (err) => {
+              onFinished();
+              this.error(err);
+            }
           });
           return shared;
         })

@@ -7,7 +7,6 @@ import { assert, assertInBounds } from "@utils/assert";
 import { isArray, isFunction, isObject } from "@utils/is";
 import { noop, defer, future } from "@utils/functions";
 import { chain, buffer, last, skipRight, toImmutable } from "@utils/iterables";
-import { createLogger } from "@utils/logging";
 import $TokenizerCodec from "@nai/TokenizerCodec";
 import $TextSplitterService from "./TextSplitterService";
 
@@ -161,8 +160,6 @@ const $$MarkOfAugmentation = Symbol("TokenizerService.tokenCodec");
 export default usModule((require, exports) => {
   const tokenizerCodec = require($TokenizerCodec);
   const textSplitter = $TextSplitterService(require);
-
-  const logger = createLogger("TokenizerService");
 
   // NovelAI's token codecs have a bit of a problem that makes handling
   // them efficiently challenging: they only work discretely.  You give

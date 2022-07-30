@@ -107,7 +107,7 @@ export default usModule((require, exports) => {
 
       this.#reservedTokens = reservedTokens;
 
-      this.#logger = createLogger(`ContextAssembler ${contextName}`);
+      this.#logger = createLogger(`ContextAssembler: ${contextName}`);
       this.#assembly = new CompoundAssembly(tokenCodec, contextSize);
 
       this.#reportSubject = new rx.Subject<Assembler.Report>();

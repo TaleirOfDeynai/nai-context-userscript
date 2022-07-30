@@ -68,7 +68,7 @@ export default usModule((require, exports) => {
       "searchRange" in source.entry.fieldConfig;
 
     return (sources: rx.Observable<ActivatedSource>) => storySource.pipe(
-      rxop.exhaustMap((s) => {
+      rxop.mergeMap((s) => {
         const { maxOffset } = queryOps.getStats(s.entry.searchedText);
 
         return sources.pipe(

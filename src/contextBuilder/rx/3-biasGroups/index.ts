@@ -16,8 +16,8 @@ import type { ContextParams } from "../../ParamsService";
 import type { ActivationPhaseResult } from "../2-activation";
 
 export interface BiasGroupPhaseResult {
-  /** Resolves to a complete array of {@link ResolvedBiasGroup} instances. */
-  readonly biasGroups: Promise<ResolvedBiasGroup[]>;
+  /** Produces the complete array of {@link ResolvedBiasGroup} instances. */
+  readonly biasGroups: rx.Observable<ResolvedBiasGroup[]>;
   /** An {@link rx.Observable Observable} of {@link ResolvedBiasGroup} instances. */
   readonly inFlight: rx.Observable<ResolvedBiasGroup>;
 }
@@ -39,11 +39,14 @@ export default usModule((require, exports) => {
     const inFlight = rx.merge(
       biasGroups.lore(inFlightActivations),
       biasGroups.category(contextParams.storyContent, inFlightActivations)
-    ).pipe(logger.measureStream("In-flight Bias Groups"), rxop.shareReplay());
+    ).pipe(
+      logger.measureStream("In-flight Bias Groups"),
+      rxop.shareReplay()
+    );
 
     return {
-      get biasGroups(): Promise<ResolvedBiasGroup[]> {
-        return rx.firstValueFrom(inFlight.pipe(rxop.toArray()));
+      get biasGroups() {
+        return inFlight.pipe(rxop.toArray());
       },
       get inFlight() {
         return inFlight;

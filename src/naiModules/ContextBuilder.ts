@@ -144,7 +144,7 @@ export namespace Virtual {
      */
     orderZeroPoint: number;
     biases: ResolvedBiasGroup[];
-    allStoryIncluded: boolean;
+    storyTrimmed: boolean;
     tokenizerType: TokenizerTypes;
     preamble: ResolvedPreamble;
   }

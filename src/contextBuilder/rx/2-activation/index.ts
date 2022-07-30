@@ -55,16 +55,16 @@ export type ActivationSource = ActivatedSource | RejectedSource;
 export type ActivationObservable = rx.Observable<ActivationSource>;
 
 export interface ActivationPhaseResult {
-  /** Resolves to a complete {@link Set} of {@link DisabledSource disabled sources}. */
-  readonly disabled: Promise<Set<DisabledSource>>;
-  /** Resolves to a complete {@link Set} of {@link RejectedSource rejected sources}. */
-  readonly rejected: Promise<Set<RejectedSource>>;
+  /** Produces the complete set of {@link DisabledSource disabled sources}. */
+  readonly disabled: rx.Observable<Set<DisabledSource>>;
+  /** Produces the complete set of {@link RejectedSource rejected sources}. */
+  readonly rejected: rx.Observable<Set<RejectedSource>>;
   /**
-   * Resolves to a complete {@link Set} of {@link ActivatedSource activated sources}.
+   * Produces the complete set of {@link ActivatedSource activated sources}.
    * All data in their {@link ActivatedSource.activations `activations`} property
    * will be available when the promise is fulfilled.
    */
-  readonly activated: Promise<Set<ActivatedSource>>;
+  readonly activated: rx.Observable<Set<ActivatedSource>>;
   /**
    * An {@link rx.Observable Observable} of entries with their activation
    * state.  Entries are piped through here as soon as their final state
@@ -161,25 +161,25 @@ export default usModule((require, exports) => {
 
     return {
       get disabled() {
-        return rx.firstValueFrom(disabledSources.pipe(
+        return disabledSources.pipe(
           rxop.toArray(),
-          // This prevents observables from going hot in an order dependent
-          // on the when these promises were obtained.
           rxop.delayWhen(() => inFlightActivations.pipe(rxop.whenCompleted())),
           rxop.map((sources) => new Set(sources))
-        ));
+        );
       },
       get rejected() {
-        return rx.firstValueFrom(inFlightRejections.pipe(
+        return inFlightRejections.pipe(
           rxop.toArray(),
+          rxop.delayWhen(() => inFlightActivations.pipe(rxop.whenCompleted())),
           rxop.map((sources) => new Set(sources))
-        ));
+        );
       },
       get activated() {
-        return rx.firstValueFrom(inFlightActivations.pipe(
+        return inFlightActivations.pipe(
           rxop.toArray(),
+          rxop.delayWhen(() => inFlightActivations.pipe(rxop.whenCompleted())),
           rxop.map((sources) => new Set(sources))
-        ));
+        );
       },
       get inFlight() {
         return inFlight;
