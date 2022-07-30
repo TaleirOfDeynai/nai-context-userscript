@@ -6,12 +6,13 @@ import { isArray } from "@utils/is";
 import { chain } from "@utils/iterables";
 import { biasGroups } from "../_shared";
 
+import type { UndefOr } from "@utils/utility-types";
 import type { TypePredicate } from "@utils/is";
 import type { IContextField } from "@nai/ContextModule";
+import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";
 import type { ActivationObservable } from "../2-activation";
-import type { TriggeredBiasGroup } from "../_shared";
 
 interface BiasedField extends IContextField {
   loreBiasGroups: LoreEntry["loreBiasGroups"];
@@ -35,11 +36,11 @@ export default usModule((_require, exports) => {
   const createStream = (
     /** The stream of activation results. */
     activating: ActivationObservable
-  ): rx.Observable<TriggeredBiasGroup> => activating.pipe(
+  ): rx.Observable<ResolvedBiasGroup> => activating.pipe(
     rxop.connect((shared) => rx.merge(
       // Look for "when not inactive" bias groups by searching the activated entries.
       shared.pipe(
-        rxop.collect((source) => {
+        rxop.collect((source): UndefOr<ResolvedBiasGroup> => {
           if (!source.activated) return undefined;
           if (!isBiased(source)) return undefined;
 
@@ -55,7 +56,7 @@ export default usModule((_require, exports) => {
       // Look for "when inactive" bias groups by searching the rejections.
       // This intentionally does not include disabled sources; those are disabled!
       shared.pipe(
-        rxop.collect((source) => {
+        rxop.collect((source): UndefOr<ResolvedBiasGroup> => {
           if (source.activated) return undefined;
           if (!isBiased(source)) return undefined;
 

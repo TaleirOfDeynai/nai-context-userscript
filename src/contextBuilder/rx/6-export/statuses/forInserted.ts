@@ -54,7 +54,7 @@ export default usModule((require, exports) => {
   };
 
   /** Converts sources that were inserted during assembly into {@link ContextStatus}. */
-  function forUnbudgeted(results: rx.Observable<Assembler.Inserted>) {
+  function forInserted(results: rx.Observable<Assembler.Inserted>) {
     return results.pipe(
       rxop.mergeMap(async (inserted): Promise<ContextStatus> => {
         const { source, result } = inserted;
@@ -88,5 +88,5 @@ export default usModule((require, exports) => {
     );
   }
 
-  return Object.assign(exports, { forUnbudgeted });
+  return Object.assign(exports, { forInserted });
 });

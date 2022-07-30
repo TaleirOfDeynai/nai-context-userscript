@@ -2,18 +2,23 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import TokenizerHelpers from "@nai/TokenizerHelpers";
-import ModelModule from "@nai/ModelModule";
 import $TokenizerService from "./TokenizerService";
+import $NaiInternals from "./NaiInternals";
 
 import type { StoryContent, StoryState } from "@nai/EventModule";
+import type { TokenizerTypes } from "@nai/TokenizerHelpers";
 import type { TokenCodec } from "@nai/TokenizerCodec";
-import type { PreambleData } from "@nai/ModelModule";
 import type { LorebookConfig } from "@nai/Lorebook";
 import type { AugmentedTokenCodec } from "./TokenizerService";
 
 export interface ContextParams {
   /** Used by loggers to indicate what context is being built. */
   readonly contextName: string;
+  /**
+   * Indicates if these params are for building a sub-context.
+   * Some processes alter their behavior when this is set.
+   */
+  readonly forSubContext: boolean;
 
   /** The provided story content. */
   readonly storyContent: StoryContent;
@@ -24,30 +29,20 @@ export interface ContextParams {
   readonly storyLength: number;
   /** The maximum size of the context. */
   readonly contextSize: number;
+  /** The probable type of the token codec. */
+  readonly tokenizerType: TokenizerTypes;
   /** The {@link AugmentedTokenCodec} to use for token counting. */
   readonly tokenCodec: AugmentedTokenCodec;
   /** Whether it was requested to prepend the preamble. */
   readonly prependPreamble: boolean;
   /** Corresponds to the same value of the lorebook config. */
   readonly orderByKeyLocations: LorebookConfig["orderByKeyLocations"];
-  /**
-   * Corresponds to {@link usConfig.subContext.groupedInsertion}.
-   * 
-   * Is explicitly disabled during sub-context assembly.
-   */
-  readonly allowGrouping: boolean;
 }
 
 export default usModule((require, exports) => {
-  const modelModule = require(ModelModule);
   const tokenizerHelpers = require(TokenizerHelpers);
   const tokenizer = $TokenizerService(require);
-
-  const getPreambleTokens = async (data: PreambleData, codec: TokenCodec) => {
-    if (data.exactTokens?.length) return data.exactTokens.length;
-    if (!data.str) return 0;
-    return (await codec.encode(data.str)).length;
-  };
+  const naiInternals = $NaiInternals(require);
 
   async function makeParams(
     storyContent: StoryContent,
@@ -58,11 +53,11 @@ export default usModule((require, exports) => {
     givenCodec?: TokenCodec
   ): Promise<ContextParams> {
     const contextName = "<Root>";
+    const forSubContext = false;
     const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
     const tokenCodec = tokenizer.codecFor(tokenizerType, givenCodec);
     const storyLength = givenStoryLength ?? 0;
     const orderByKeyLocations = storyContent.lorebook?.settings?.orderByKeyLocations === true;
-    const allowGrouping = usConfig.subContext.groupedInsertion;
 
     const contextSize = await dew(async () => {
       let contextSize = givenTokenLimit;
@@ -73,28 +68,30 @@ export default usModule((require, exports) => {
 
       // The preamble's tokens are reserved ahead of time, even if it doesn't
       // end up being used in the end.
-      const preambleData = modelModule.GetPreamble(
+      const preamble = await naiInternals.getPreamble(
+        tokenCodec,
         storyContent.settings.model,
+        storyContent.settings.prefix,
         prependPreamble,
         false,
-        false,
-        storyContent.settings.prefix
+        false
       );
-      contextSize -= await getPreambleTokens(preambleData, tokenCodec);
+      contextSize -= preamble.tokens.length;
 
       return contextSize;
     })
 
     return Object.freeze({
       contextName,
+      forSubContext,
       storyContent,
       storyState,
       storyLength,
       contextSize,
+      tokenizerType,
       tokenCodec,
       prependPreamble,
-      orderByKeyLocations,
-      allowGrouping
+      orderByKeyLocations
     });
   }
 

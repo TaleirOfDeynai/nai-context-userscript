@@ -12,21 +12,33 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { isUndefined } from "@utils/is";
+import ContextBuilder from "@nai/ContextBuilder";
+import $ContextContent from "../../ContextContent";
+import $ContextSource from "../../ContextSource";
 import { categories } from "../_shared";
 import $SelectionPhase from "../4-selection";
 import $AssemblyPhase from "../5-assembly";
+import $ExportPhase from "../6-export";
 
 import type { Categories } from "@nai/Lorebook";
+import type { ContextRecorder } from "@nai/ContextBuilder";
 import type { TypePredicate } from "@utils/is";
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../1-source";
-import type { ActivatedSource } from "../2-activation";
+import type { ActivatedSource, ActivationMap } from "../2-activation";
 import type { CategorizedSource } from "../_shared";
 
 type SubContextCategory = Categories.Category & Categories.WithSubcontext;
-type ACSource = ActivatedSource & CategorizedSource;
+
+export interface SubContextSource extends ActivatedSource {
+  subContext: ContextRecorder
+};
 
 export default usModule((require, exports) => {
+  const { REASONS } = require(ContextBuilder);
+  const { ContextContent } = $ContextContent(require);
+  const contextSource = $ContextSource(require);
+
   const isSubContextCategory = _conforms({
     createSubcontext: (v) => v === true,
     subcontextSettings: (v) => !isUndefined(v)
@@ -50,6 +62,7 @@ export default usModule((require, exports) => {
     // but for each category with a sub-context configuration.
     const { phaseRunner: selectionRunner } = $SelectionPhase(require);
     const { phaseRunner: assemblyRunner } = $AssemblyPhase(require);
+    const { phaseRunner: exportRunner } = $ExportPhase(require);
 
     return (sources: rx.Observable<ActivatedSource>) => {
       // First, we'll need to partition the categorized entries from
@@ -80,8 +93,8 @@ export default usModule((require, exports) => {
                 contextName: group.key,
                 // Constrain the context size to the context's token budget.
                 contextSize: Math.min(contextConfig.tokenBudget, contextParams.contextSize),
-                // Explicitly disable category grouping, just in case.
-                allowGrouping: false
+                // Let everything know we're doing a sub-context.
+                forSubContext: true
               });
 
               return group.pipe(
@@ -104,19 +117,45 @@ export default usModule((require, exports) => {
                     selected.inFlight
                   );
 
-                  // TODO: actually produce the sub-context assembly.
-                  return rx.EMPTY;
-                }
+                  const exported = exportRunner(
+                    subContextParams,
+                    // These would be rejections from the pre-selection phases.
+                    // We don't have any of those for a sub-context.
+                    rx.EMPTY,
+                    rx.EMPTY,
+                    rx.EMPTY,
+                    rx.EMPTY,
+                    // Now we're back to it.
+                    rx.defer(() => selected.unselected).pipe(rxop.mergeAll()),
+                    assembled.rejections,
+                    assembled.insertions,
+                    rx.defer(() => assembled.assembly)
+                  );
+
+                  return rx.from(exported.contextRecorder);
+                },
+                rxop.mergeMap(async (recorder): Promise<SubContextSource> => {
+                  const theField = { text: recorder.output, contextConfig };
+                  const theContent = await ContextContent.forField(theField, contextParams);
+                  return Object.assign(
+                    contextSource.create(theContent, "lore", `S:${group.key}`),
+                    {
+                      enabled: true as const,
+                      activated: true as const,
+                      activations: new Map([["forced", REASONS.Default]]) as ActivationMap,
+                      subContext: recorder
+                    }
+                  );
+                })
               );
             })
           );
 
           return rx.merge(theRest, theSources);
-        }),
+        })
       );
     };
   }
-  
 
   return Object.assign(exports, { createStream });
 });

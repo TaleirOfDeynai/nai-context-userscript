@@ -11,15 +11,15 @@ import { createLogger } from "@utils/logging";
 import $BiasLore from "./lore";
 import $BiasCategory from "./category";
 
+import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
 import type { ContextParams } from "../../ParamsService";
 import type { ActivationPhaseResult } from "../2-activation";
-import type { TriggeredBiasGroup } from "../_shared";
 
 export interface BiasGroupPhaseResult {
-  /** Resolves to a complete array of {@link TriggeredBiasGroup} instances. */
-  readonly biasGroups: Promise<TriggeredBiasGroup[]>;
-  /** An {@link rx.Observable Observable} of {@link TriggeredBiasGroup} instances. */
-  readonly inFlight: rx.Observable<TriggeredBiasGroup>;
+  /** Resolves to a complete array of {@link ResolvedBiasGroup} instances. */
+  readonly biasGroups: Promise<ResolvedBiasGroup[]>;
+  /** An {@link rx.Observable Observable} of {@link ResolvedBiasGroup} instances. */
+  readonly inFlight: rx.Observable<ResolvedBiasGroup>;
 }
 
 const logger = createLogger("Bias Groups Phase");
@@ -42,7 +42,7 @@ export default usModule((require, exports) => {
     ).pipe(logger.measureStream("In-flight Bias Groups"), rxop.shareReplay());
 
     return {
-      get biasGroups(): Promise<TriggeredBiasGroup[]> {
+      get biasGroups(): Promise<ResolvedBiasGroup[]> {
         return rx.firstValueFrom(inFlight.pipe(rxop.toArray()));
       },
       get inFlight() {

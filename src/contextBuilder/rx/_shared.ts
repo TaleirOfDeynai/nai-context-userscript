@@ -41,11 +41,6 @@ export const categories = {
 
 // Phrase bias stuff.
 
-export interface TriggeredBiasGroup {
-  groups: PhraseBiasConfig[];
-  identifier: string;
-}
-
 export const biasGroups = {
   whenActive: (biasGroup: PhraseBiasConfig) =>
     !biasGroup.whenInactive,

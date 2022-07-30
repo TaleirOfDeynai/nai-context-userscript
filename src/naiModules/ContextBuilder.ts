@@ -41,6 +41,16 @@ export interface StructuredOutput {
   text: string;
 }
 
+export interface ResolvedBiasGroup {
+  groups: Lorebook.PhraseBiasConfig[];
+  identifier: Virtual.ContextStatus<any>["identifier"];
+}
+
+export interface ResolvedPreamble {
+  str: string;
+  tokens: number[];
+}
+
 export namespace Virtual {
   export declare function checkLorebook(
     /** The text available to search for keyword matches. */
@@ -125,17 +135,18 @@ export namespace Virtual {
     stageReports: StageReport[];
     keyRejections: ContextStatus<IContextField>[];
     disabled: ContextStatus<IContextField>[];
+    /**
+     * Seems to indicate the offset in the assembled text where the
+     * the first entry with `budgetPriority <= 0` was inserted.
+     * 
+     * This is PROBABLY vestigial for an older version of their own
+     * context assembler, but I can't know that for sure.
+     */
     orderZeroPoint: number;
-    biases: Array<{
-      groups: Lorebook.PhraseBiasConfig[],
-      identifier: ContextStatus<any>["identifier"]
-    }>;
+    biases: ResolvedBiasGroup[];
     allStoryIncluded: boolean;
     tokenizerType: TokenizerTypes;
-    preamble: {
-      str: string,
-      tokens: number[]
-    }
+    preamble: ResolvedPreamble;
   }
 }
 

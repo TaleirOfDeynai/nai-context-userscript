@@ -9,9 +9,9 @@ import { categories, biasGroups } from "../_shared";
 import type { TypePredicate } from "@utils/is";
 import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
+import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
 import type { PhraseBiasConfig, Categories } from "@nai/Lorebook";
 import type { ActivationObservable } from "../2-activation";
-import type { TriggeredBiasGroup } from "../_shared";
 
 type BiasedCategory = Categories.Category & {
   categoryBiasGroups: PhraseBiasConfig[]
@@ -30,7 +30,7 @@ export default usModule((_require, exports) => {
     storyContent: StoryContent,
     /** The stream of activation results. */
     activating: ActivationObservable
-  ): Obs<TriggeredBiasGroup> => {
+  ): Obs<ResolvedBiasGroup> => {
     return activating.pipe(
       // We only want activated entries with categories.
       rxop.collect((source) => {
@@ -51,7 +51,7 @@ export default usModule((_require, exports) => {
           // map to known/existing category instance.
           shared.pipe(
             rxop.collect((source) => categoryMap.get(source.entry.fieldConfig.category)),
-            rxop.map(({ name, categoryBiasGroups }) => ({
+            rxop.map(({ name, categoryBiasGroups }): ResolvedBiasGroup => ({
               identifier: `C:${name}`,
               groups: chain(categoryBiasGroups)
                 .filter(biasGroups.whenActive)
@@ -68,7 +68,7 @@ export default usModule((_require, exports) => {
               new Map(categoryMap)
             ),
             rxop.mergeMap((catMap) => catMap.values()),
-            rxop.map(({ name, categoryBiasGroups }) => ({
+            rxop.map(({ name, categoryBiasGroups }): ResolvedBiasGroup => ({
               identifier: `C:${name}`,
               groups: chain(categoryBiasGroups)
                 .filter(biasGroups.whenInactive)
