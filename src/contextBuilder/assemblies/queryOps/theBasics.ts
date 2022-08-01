@@ -1,5 +1,5 @@
 import { isString } from "@utils/is";
-import { iterReverse, isEmpty as isIterEmpty } from "@utils/iterables";
+import * as IterOps from "@utils/iterables";
 
 import type { IFragmentAssembly } from "../_interfaces";
 
@@ -12,7 +12,7 @@ export function* iterateOn(
 
   if (reversed) {
     if (suffix.content) yield suffix;
-    for (const value of iterReverse(content)) yield value;
+    for (const value of IterOps.iterReverse(content)) yield value;
     if (prefix.content) yield prefix;
   }
   else {
@@ -21,6 +21,20 @@ export function* iterateOn(
     if (suffix.content) yield suffix;
   }
 }
+
+/**
+ * Gets the first valid fragment of an assembly or the prefix fragment
+ * if the assembly is empty.
+ */
+export const getFirstFragment = (assembly: IFragmentAssembly) =>
+  IterOps.first(iterateOn(assembly)) ?? assembly.prefix;
+
+/**
+ * Gets the last valid fragment of an assembly or the suffix fragment
+ * if the assembly is empty.
+ */
+export const getLastFragment = (assembly: IFragmentAssembly) =>
+  IterOps.first(iterateOn(assembly)) ?? assembly.prefix;
 
 /**
  * Gets the source assembly of an assembly.
@@ -53,7 +67,7 @@ export const isAffixed = (assembly: IFragmentAssembly) => {
 
 /** Checks if the given assembly is entirely empty. */
 export const isEmpty = (assembly: IFragmentAssembly) =>
-  !isAffixed(assembly) && isIterEmpty(assembly.content);
+  !isAffixed(assembly) && IterOps.isEmpty(assembly.content);
 
 /** Determines if the given assembly is a source assembly. */
 export const isSource = (assembly: IFragmentAssembly) =>

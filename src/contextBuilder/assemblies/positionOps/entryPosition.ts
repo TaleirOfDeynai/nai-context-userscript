@@ -2,6 +2,7 @@ import { usModule } from "@utils/usModule";
 import { chain, first, last } from "@utils/iterables";
 import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
+import $QueryOps from "../queryOps";
 import $PositionsFrom from "./positionsFrom";
 
 import type { TrimType } from "../../TrimmingProviders";
@@ -11,6 +12,7 @@ import type { IterDirection } from "./cursorForDir";
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
+  const queryOps = $QueryOps(require);
   const { positionsFrom } = $PositionsFrom(require);
 
   /**
@@ -46,13 +48,11 @@ export default usModule((require, exports) => {
         .value((c) => first(c) ?? initCursor);
     }
     else if (direction === "toTop") {
-      const suffix = assembly.suffix.content ? assembly.suffix : undefined;
-      const frag = suffix ?? last(assembly.content) ?? assembly.prefix;
+      const frag = queryOps.getLastFragment(assembly);
       return makeCursor(assembly, ss.afterFragment(frag));
     }
     else {
-      const prefix = assembly.prefix.content ? assembly.prefix : undefined;
-      const frag = prefix ?? first(assembly.content) ?? assembly.suffix;
+      const frag = queryOps.getFirstFragment(assembly);
       return makeCursor(assembly, ss.beforeFragment(frag));
     }
   }

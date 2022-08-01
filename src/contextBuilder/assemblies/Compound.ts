@@ -9,6 +9,7 @@ import ContextBuilder from "@nai/ContextBuilder";
 import cursorForDir from "./positionOps/cursorForDir";
 import $SearchService from "../SearchService";
 import $TextSplitterService from "../TextSplitterService";
+import { getFirstFragment, getLastFragment } from "./queryOps/theBasics";
 import $TokenizedAssembly from "./Tokenized";
 
 import type { UndefOr } from "@utils/utility-types";
@@ -703,9 +704,9 @@ const theModule = usModule((require, exports) => {
       // or after the suffix.  In these cases, we don't need to do any
       // splitting and we can just convert them into the appropriate
       // adjacent insertion.
-      if (cursor.offset <= ss.beforeFragment(target.assembly.prefix))
+      if (cursor.offset <= ss.beforeFragment(getFirstFragment(target.assembly)))
         return this.#doInsertAdjacent(iterResult, source, inserted, "insertBefore");
-      if (cursor.offset >= ss.afterFragment(target.assembly.suffix))
+      if (cursor.offset >= ss.afterFragment(getLastFragment(target.assembly)))
         return this.#doInsertAdjacent(iterResult, source, inserted, "insertAfter");
 
       checks: {
