@@ -20,7 +20,7 @@ export default usModule((require, exports) => {
     storyState: StoryState,
     givenTokenLimit: number,
     givenStoryLength?: number,
-    removeComments?: boolean,
+    prependPreamble?: boolean,
     tokenCodec?: TokenCodec
   ) {
     const contextParams = await makeParams(
@@ -28,7 +28,7 @@ export default usModule((require, exports) => {
       storyState,
       givenTokenLimit,
       givenStoryLength,
-      removeComments,
+      prependPreamble,
       tokenCodec
     );
 
@@ -82,9 +82,7 @@ export default usModule((require, exports) => {
       assemblyResults.assembly
     );
 
-    const recorder = await rx.firstValueFrom(exportResults.contextRecorder);
-
-    logger.dir(recorder);
+    return await rx.firstValueFrom(exportResults.contextRecorder);
   }
 
   return Object.assign(exports, {

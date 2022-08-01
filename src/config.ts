@@ -349,6 +349,16 @@ const config = {
   /** Enables debug logging for the user-script. */
   debugLogging: true,
   /**
+   * When `true`, both the new and vanilla context builder will run,
+   * measuring the performance of both for comparison.  This will
+   * happen and the results will be reported to console even when
+   * `debugLogging` is `false`.
+   * 
+   * When `false`, the vanilla context builder will only be invoked if
+   * the new one fails.
+   */
+  debugTimeTrial: true,
+  /**
    * Whether we're in a test environment.
    * 
    * See `spec-resources/_setup.cts` to see where this gets overridden.
