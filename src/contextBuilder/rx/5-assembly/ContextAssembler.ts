@@ -5,7 +5,7 @@ import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import ContextBuilder from "@nai/ContextBuilder";
 import $CompoundAssembly from "../../assemblies/Compound";
-import { isBudgetedSource } from "../_shared";
+import { selection } from "../_shared";
 
 import type { ILogger } from "@utils/logging";
 import type { StructuredOutput } from "@nai/ContextBuilder";
@@ -251,7 +251,7 @@ export default usModule((require, exports) => {
       // If we actually hit 0 tokens remaining, we're just straight done.
       if (!currentTokens) return this.#doReport(source, NO_SPACE, currentTokens);
 
-      if (isBudgetedSource(source)) {
+      if (selection.isBudgetedSource(source)) {
         this.#updateReservations(source);
         const budget = this.#determineBudget(source);
         const result = await this.#assembly.insert(source, budget);

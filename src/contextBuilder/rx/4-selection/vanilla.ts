@@ -20,7 +20,7 @@ import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { chain } from "@utils/iterables";
 import $QueryOps from "../../assemblies/queryOps";
-import { asBudgeted } from "../_shared";
+import { selection } from "../_shared";
 import Sorters from "./_sorters";
 
 import type { LoreEntryConfig } from "@nai/Lorebook";
@@ -113,7 +113,7 @@ export default usModule((require, exports) => {
           })
         )
       }),
-      rxop.mergeMap(asBudgeted),
+      rxop.mergeMap(selection.asBudgeted),
       rxop.toArray(),
       rxop.mergeMap((arr) => arr.sort(sortingFn))
     );

@@ -4,6 +4,7 @@ import { isString } from "@utils/is";
 import type { Observable } from "@utils/rx";
 import type { TypePredicate } from "@utils/is";
 import type { IContextField } from "@nai/ContextModule";
+import type { ContextRecorder } from "@nai/ContextBuilder";
 import type { LoreEntry, PhraseBiasConfig } from "@nai/Lorebook";
 import type { SourceLike } from "../assemblies/Compound";
 import type { ContextSource } from "../ContextSource";
@@ -50,6 +51,18 @@ export const biasGroups = {
     biasGroup.enabled && Boolean(biasGroup.phrases.length)
 };
 
+// Sub-context stuff.
+
+export interface SubContextSource extends ActivatedSource {
+  subContext: ContextRecorder
+}
+
+export const subContext = {
+  /** Checks to see if `source` has a `subContext` field. */
+  isSubContextSource: <T>(source: T): source is T & SubContextSource =>
+    "subContext" in source && "activated" in source
+};
+
 // Selection and assembly stuff.
 
 export interface BudgetedSource extends ActivatedSource {
@@ -59,19 +72,19 @@ export interface BudgetedSource extends ActivatedSource {
 export type InsertableSource = BudgetedSource | SourceLike;
 export type InsertableObservable = Observable<InsertableSource>;
 
-/** Gets the budget stats we'll need for reporting later. */
-export const asBudgeted = async (source: ActivatedSource): Promise<BudgetedSource> =>
-  Object.assign(source, { budgetStats: await source.entry.getStats() });
-
-/** Checks to see if `source` has a `budgetStats` field. */
-export const isBudgetedSource = (source: InsertableSource): source is BudgetedSource =>
-  "budgetStats" in source;
-
-/** Gets some budget stats from an insertable source. */
-export const getBudgetStats = async (source: InsertableSource) => {
-  if (isBudgetedSource(source)) return source.budgetStats;
-  return {
-    tokenBudget: (await source.entry.trimmed)?.tokens.length ?? 0,
-    actualReservedTokens: 0
-  };
+export const selection = {
+  /** Gets the budget stats we'll need for reporting later. */
+  asBudgeted: async (source: ActivatedSource): Promise<BudgetedSource> =>
+    Object.assign(source, { budgetStats: await source.entry.getStats() }),
+  /** Checks to see if `source` has a `budgetStats` field. */
+  isBudgetedSource: <T extends InsertableSource>(source: T): source is T & BudgetedSource =>
+    "budgetStats" in source,
+  /** Gets some budget stats from an insertable source. */
+  getBudgetStats: async (source: InsertableSource) => {
+    if (selection.isBudgetedSource(source)) return source.budgetStats;
+    return {
+      tokenBudget: (await source.entry.trimmed)?.tokens.length ?? 0,
+      actualReservedTokens: 0
+    };
+  }
 };

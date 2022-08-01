@@ -2,8 +2,8 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
-import { getBudgetStats } from "../../_shared";
-import { checkThis } from "./_shared";
+import { selection } from "../../_shared";
+import { checkThis, getSubContextPart } from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { Assembler } from "../../5-assembly";
@@ -14,13 +14,14 @@ export default usModule((require, exports) => {
   /** Converts sources that were discarded during assembly into {@link ContextStatus}. */
   function forUnbudgeted(results: rx.Observable<Assembler.Rejected>) {
     return results.pipe(
-      rxop.mergeMap(async ({ source, result }): Promise<ContextStatus> => {
+      rxop.mergeMap(async (rejected): Promise<ContextStatus> => {
+        const { source, result } = rejected;
         const field = source.entry.field ?? {
           text: source.entry.text,
           contextConfig: source.entry.contextConfig
         };
 
-        const stats = await getBudgetStats(source);
+        const stats = await selection.getBudgetStats(source);
 
         return Object.assign(
           new CB.ContextStatus(field),
@@ -33,7 +34,8 @@ export default usModule((require, exports) => {
             reason: result.reason as any,
             calculatedTokens: stats.tokenBudget,
             actualReservedTokens: stats.actualReservedTokens
-          })
+          }),
+          getSubContextPart(rejected)
         );
       })
     );

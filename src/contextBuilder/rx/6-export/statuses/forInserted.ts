@@ -3,8 +3,8 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
 import $QueryOps from "../../../assemblies/queryOps";
-import { getBudgetStats } from "../../_shared";
-import { checkThis } from "./_shared";
+import { selection } from "../../_shared";
+import { checkThis, getSubContextPart } from "./_shared";
 
 import type { AnyValueOf } from "@utils/utility-types";
 import type { ContextStatus } from "@nai/ContextBuilder";
@@ -68,9 +68,7 @@ export default usModule((require, exports) => {
           contextConfig: source.entry.contextConfig
         };
 
-        const stats = await getBudgetStats(source);
-
-        // TODO: handle the `subContext` property.
+        const stats = await selection.getBudgetStats(source);
 
         return Object.assign(
           new CB.ContextStatus(field),
@@ -86,7 +84,8 @@ export default usModule((require, exports) => {
             actualReservedTokens: stats.actualReservedTokens,
             trimMethod: toTrimMethod(inserted)
           }),
-          getKeyPart(inserted)
+          getKeyPart(inserted),
+          getSubContextPart(inserted)
         );
       })
     );

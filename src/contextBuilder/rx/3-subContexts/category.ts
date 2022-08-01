@@ -25,8 +25,7 @@ import type { TypePredicate } from "@utils/is";
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../1-source";
 import type { ActivatedSource, ActivationMap } from "../2-activation";
-import type { CategorizedSource } from "../_shared";
-import type { SubContextSource } from "./index";
+import type { CategorizedSource, SubContextSource } from "../_shared";
 
 type SubContextCategory = Categories.Category & Categories.WithSubcontext;
 type ACSource = ActivatedSource & CategorizedSource;

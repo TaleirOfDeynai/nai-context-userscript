@@ -10,14 +10,10 @@ import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import $Category from "./category";
 
-import type { ContextRecorder } from "@nai/ContextBuilder";
 import type { ContextParams } from "../../ParamsService";
 import type { ActivationPhaseResult, ActivatedSource } from "../2-activation";
 import type { SourcePhaseResult } from "../1-source";
-
-export interface SubContextSource extends ActivatedSource {
-  subContext: ContextRecorder
-};
+import type { SubContextSource } from "../_shared";
 
 export interface SubContextPhaseResult {
   /** Produces the complete set of {@link SubContextSource} instances. */
