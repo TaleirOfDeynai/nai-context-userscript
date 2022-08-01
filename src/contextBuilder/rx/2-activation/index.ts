@@ -55,8 +55,6 @@ export type ActivationSource = ActivatedSource | RejectedSource;
 export type ActivationObservable = rx.Observable<ActivationSource>;
 
 export interface ActivationPhaseResult {
-  /** Produces the complete set of {@link DisabledSource disabled sources}. */
-  readonly disabled: rx.Observable<Set<DisabledSource>>;
   /** Produces the complete set of {@link RejectedSource rejected sources}. */
   readonly rejected: rx.Observable<Set<RejectedSource>>;
   /**
@@ -93,9 +91,7 @@ export default usModule((require, exports) => {
     /** The story's source. */
     storySource: SourcePhaseResult["storySource"],
     /** The in-flight enabled sources. */
-    enabledSources: SourcePhaseResult["enabledSources"],
-    /** The in-flight disabled sources. */
-    disabledSources: SourcePhaseResult["disabledSources"]
+    enabledSources: SourcePhaseResult["enabledSources"]
   ): ActivationPhaseResult {
     const activationStates = enabledSources.pipe(
       rxop.map((source): ActivationState => ({ source, activations: new Map() })),
@@ -160,13 +156,6 @@ export default usModule((require, exports) => {
     );
 
     return {
-      get disabled() {
-        return disabledSources.pipe(
-          rxop.toArray(),
-          rxop.delayWhen(() => inFlightActivations.pipe(rxop.whenCompleted())),
-          rxop.map((sources) => new Set(sources))
-        );
-      },
       get rejected() {
         return inFlightRejections.pipe(
           rxop.toArray(),

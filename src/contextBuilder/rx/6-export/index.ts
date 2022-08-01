@@ -41,10 +41,10 @@ export default usModule((require, exports) => {
     contextParams: ContextParams,
     /** The story's source. */
     storySource: SourcePhaseResult["storySource"],
+    /** The disabled sources. */
+    disabledSources: SourcePhaseResult["disabledSources"],
     /** The activated bias-groups. */
     biasGroups: BiasGroupPhaseResult["biasGroups"],
-    /** The disabled sources. */
-    disabledSources: ActivationPhaseResult["disabled"],
     /** The sources that failed activation. */
     inactiveSources: ActivationPhaseResult["rejected"],
     /** The sources that were discarded during selection. */
@@ -56,7 +56,7 @@ export default usModule((require, exports) => {
     /** The final assembly. */
     finalAssembly: AssemblyPhaseResult["assembly"]
   ): ExportPhaseResult {
-    const allDisabled = disabledSources.pipe(rxop.mergeAll(), statuses.forDisabled);
+    const allDisabled = disabledSources.pipe(statuses.forDisabled);
     const allRejected = rx.merge(
       inactiveSources.pipe(rxop.mergeAll(), statuses.forInactive),
       unselectedSources.pipe(rxop.mergeAll(), statuses.forUnselected),

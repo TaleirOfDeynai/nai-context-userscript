@@ -39,8 +39,7 @@ export default usModule((require, exports) => {
     const activationResults = processing.activation.phaseRunner(
       contextParams,
       sourceResults.storySource,
-      sourceResults.enabledSources,
-      sourceResults.disabledSources
+      sourceResults.enabledSources
     );
 
     // Grab the triggered bias groups as content activates.
@@ -74,13 +73,13 @@ export default usModule((require, exports) => {
     const exportResults = processing.export.phaseRunner(
       contextParams,
       sourceResults.storySource,
+      sourceResults.disabledSources,
       biasGroupResults.biasGroups,
-      activationResults.disabled,
       activationResults.rejected,
       selectionResults.unselected,
       assemblyResults.rejections,
       assemblyResults.insertions,
-      rx.defer(() => assemblyResults.assembly)
+      assemblyResults.assembly
     );
 
     const recorder = await rx.firstValueFrom(exportResults.contextRecorder);
