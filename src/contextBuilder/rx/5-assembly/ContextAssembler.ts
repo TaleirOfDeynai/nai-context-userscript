@@ -237,14 +237,14 @@ export default usModule((require, exports) => {
         const structuredOutput = [...this.#assembly.structuredOutput()];
 
         const description = [
-          `Inserted "${source.identifier}"`,
+          `"${source.identifier}"`,
           getInsertionText(result),
           getStartText(result),
           getRelativeText(result),
           getShuntingText(result),
         ].filter(Boolean).join(" ");
 
-        this.#logger.info(`${description}; ${prevTokens} => ${availableTokens}`);
+        this.#logger.info(`Inserted ${description}; ${prevTokens} => ${availableTokens}`);
 
         this.#reportSubject.next(Object.freeze({
           source, result,
