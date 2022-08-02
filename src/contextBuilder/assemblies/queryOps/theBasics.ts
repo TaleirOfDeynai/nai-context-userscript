@@ -34,7 +34,7 @@ export const getFirstFragment = (assembly: IFragmentAssembly) =>
  * if the assembly is empty.
  */
 export const getLastFragment = (assembly: IFragmentAssembly) =>
-  IterOps.first(iterateOn(assembly)) ?? assembly.prefix;
+  IterOps.last(iterateOn(assembly)) ?? assembly.suffix;
 
 /**
  * Gets the source assembly of an assembly.
