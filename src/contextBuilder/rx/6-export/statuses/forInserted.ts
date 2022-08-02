@@ -1,14 +1,17 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { dew } from "@utils/dew";
+import { first } from "@utils/iterables";
 import NaiContextBuilder from "@nai/ContextBuilder";
 import $QueryOps from "../../../assemblies/queryOps";
 import { selection } from "../../_shared";
 import { checkThis, getSubContextPart } from "./_shared";
 
-import type { AnyValueOf } from "@utils/utility-types";
+import type { AnyValueOf, UndefOr } from "@utils/utility-types";
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { TrimStates, TrimMethods, ReportReasons } from "@nai/ContextBuilder";
+import type { AssemblyResultMap } from "../../../SearchService";
 import type { Assembler } from "../../5-assembly";
 
 export default usModule((require, exports) => {
@@ -48,13 +51,38 @@ export default usModule((require, exports) => {
     return contextConfig.maximumTrimType;
   };
 
+  const getMatch = (resultMap: UndefOr<AssemblyResultMap>) => {
+    if (!resultMap) return undefined;
+    const theResults = first(resultMap.values());
+    if (!theResults) return undefined;
+    return first(theResults);
+  };
+
   const getKeyPart = (inserted: Assembler.Inserted) => {
     const { location } = inserted.result;
-    if (!location.isKeyRelative) return checkThis({ keyRelative: false });
+    if (location.isKeyRelative) {
+      const triggeringKey = location.matchedKey.source;
+      const keyIndex = location.matchedKey.index;
+      return checkThis({ keyRelative: true, triggeringKey, keyIndex });
+    }
 
-    const triggeringKey = location.matchedKey.source;
-    const keyIndex = location.matchedKey.index;
-    return checkThis({ keyRelative: true, triggeringKey, keyIndex });
+    const match = dew(() => {
+      const { activations } = inserted.source;
+      if (!activations) return undefined;
+
+      const theKeyedMatch = getMatch(activations.get("keyed"));
+      if (theKeyedMatch) return theKeyedMatch;
+
+      const theCascade = activations.get("cascade");
+      if (!theCascade) return undefined;
+      return getMatch(first(theCascade.matches.values()));
+    });
+
+    if (!match) return checkThis({ keyRelative: false });
+
+    const triggeringKey = match.source;
+    const keyIndex = match.index;
+    return checkThis({ keyRelative: false, triggeringKey, keyIndex });
   };
 
   /** Converts sources that were inserted during assembly into {@link ContextStatus}. */

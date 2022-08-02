@@ -365,8 +365,8 @@ const theModule = usModule((require, exports) => {
       toInsert: ContentLike,
       toSplit: ContentLike
     ): boolean {
-      const canInsert = Boolean(toInsert.fieldConfig?.allowInnerInsertion ?? true);
-      const canSplit = Boolean(toSplit.fieldConfig?.allowInsertionInside ?? false);
+      const canInsert = Boolean(toInsert.contextConfig.allowInnerInsertion ?? true);
+      const canSplit = Boolean(toSplit.contextConfig.allowInsertionInside ?? false);
       return canInsert && canSplit;
     }
 

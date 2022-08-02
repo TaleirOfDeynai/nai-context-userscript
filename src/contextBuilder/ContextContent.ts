@@ -2,6 +2,7 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isNumber } from "@utils/is";
+import { protoExtend } from "@utils/object";
 import EventModule from "@nai/EventModule";
 import ContextModule from "@nai/ContextModule";
 import UUID from "@nai/UUID";
@@ -219,8 +220,14 @@ const theModule = usModule((require, exports) => {
 
     static async forStory(contextParams: ContextParams) {
       const { storyState } = contextParams;
-      const contextConfig = storyState.storyContent.storyContextConfig;
+      const { storyContextConfig } = storyState.storyContent;
       const storyText = storyState.storyContent.story.getText();
+
+      const contextConfig = protoExtend(storyContextConfig, {
+        // NovelAI has a hardcoded exception for the story.  We want to avoid
+        // setting to this object, though, so we'll proto-extend it.
+        allowInsertionInside: true
+      });
 
       const { trimDirection, maximumTrimType } = contextConfig;
       const sourceText = dew(() => {
@@ -236,13 +243,7 @@ const theModule = usModule((require, exports) => {
         true
       );
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
-
-      const field: StoryContent = Object.assign(
-        new ContextField(contextConfig, searchText.text),
-        // The story has some implied insertion rules that we're making
-        // explicit here.
-        { allowInnerInsertion: false, allowInsertionInside: true }
-      );
+      const field = new ContextField(contextConfig, searchText.text);
 
       return new ContextContent(field, searchText, trimmer, contextParams);
     }

@@ -13,8 +13,8 @@ export default usModule((require, exports) => {
 
   function createStream(
     params: ContextParams,
-    excluded: rx.Observable<ContextStatus>,
-    included: rx.Observable<ContextStatus>
+    allIncluded: rx.Observable<ContextStatus>,
+    isStoryTrimmed: rx.Observable<boolean>
   ): rx.Observable<ResolvedPreamble> {
     // Sub-contexts don't need to bother with this.
     if (params.forSubContext) return rx.from([{ str: "", tokens: [] }]);
@@ -24,8 +24,8 @@ export default usModule((require, exports) => {
       Promise.resolve(params.storyContent.settings.model),
       Promise.resolve(params.storyContent.settings.prefix),
       Promise.resolve(params.prependPreamble),
-      helpers.isContextEmpty(included),
-      helpers.allStoryIncluded(excluded, included)
+      helpers.isContextEmpty(allIncluded),
+      isStoryTrimmed.pipe(rxop.map((r) => !r))
     ]).pipe(
       rxop.mergeMap((args) => getPreamble(...args))
     );

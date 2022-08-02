@@ -6,6 +6,9 @@ import * as IterOps from "@utils/iterables";
 import type { ContextStatus, StructuredOutput } from "@nai/ContextBuilder";
 import type { Assembler } from "../5-assembly";
 
+// For JSDoc links...
+import type { ContextRecorder } from "@nai/ContextBuilder";
+
 export default usModule((require, exports) => {
   /**
    * Determines if the context was empty.
@@ -17,40 +20,35 @@ export default usModule((require, exports) => {
   }
 
   /**
-   * Determining whether the story was trimmed is a bit involved, as the
-   * story may just be empty, which means it technically was not trimmed.
+   * This doesn't make sense, as we're checking if the story is either
+   * NOT trimmed or was trimmed INTO OBLIVION... but it's how NovelAI
+   * defines the {@link ContextRecorder.storyTrimmed} property and the
+   * output for the preamble relies on this specific behavior.
    */
-  function allStoryIncluded(
-    excluded: rx.Observable<ContextStatus>,
-    included: rx.Observable<ContextStatus>
+  function isStoryTrimmedSortOfIDK(
+    allStatuses: rx.Observable<ContextStatus>
   ): rx.Observable<boolean> {
-    return rx.concat(
-      included.pipe(
-        rxop.filter((status) => status.type === "story"),
-        rxop.map((inserted) => inserted.state === "included")
-      ),
-      excluded.pipe(
-        rxop.filter((status) => status.type === "story"),
-        rxop.map((inserted) => inserted.reason === "no text")
-      ),
-      // The default if both of these ended up empty.
-      rx.of(false)
-    ).pipe(rxop.first());
+    return allStatuses.pipe(
+      rxop.firstOrEmpty((s) => s.type === "story"),
+      rxop.map((s) => s.state !== "partially included"),
+      rxop.defaultIfEmpty(false),
+      rxop.share()
+    );
   }
 
   function orderZeroPoint(
     insertedResults: rx.Observable<Assembler.Inserted>
   ): rx.Observable<number> {
     const firstBelowZero = insertedResults.pipe(
-      rxop.first((inserted) => inserted.source.entry.contextConfig.budgetPriority <= 0),
-      rxop.catchError(() => rx.of(undefined)),
-      rxop.map((inserted) => inserted?.source.uniqueId)
+      rxop.firstOrEmpty((inserted) => inserted.source.entry.contextConfig.budgetPriority <= 0),
+      rxop.map((inserted) => inserted.source.uniqueId),
+      rxop.defaultIfEmpty(undefined)
     );
 
     const lastOutput = insertedResults.pipe(
-      rxop.last(),
-      rxop.catchError(() => rx.of(undefined)),
-      rxop.map((inserted) => inserted?.structuredOutput ?? [])
+      rxop.lastOrEmpty(),
+      rxop.map((inserted) => inserted.structuredOutput),
+      rxop.defaultIfEmpty([] as StructuredOutput[])
     );
 
     return rx.forkJoin([firstBelowZero, lastOutput]).pipe(
@@ -72,7 +70,7 @@ export default usModule((require, exports) => {
 
   return Object.assign(exports, {
     isContextEmpty,
-    allStoryIncluded,
+    isStoryTrimmedSortOfIDK,
     orderZeroPoint
   });
 });

@@ -6,6 +6,8 @@ import { isFunction } from "./is";
 import { ident } from "./functions";
 
 import type { UndefOr } from "./utility-types";
+import type { PredicateFn } from "./functions";
+import type { TypePredicate } from "./is";
 
 // Because this module is just going to export operators, instead of
 // importing multiple things, just re-export all of RxJS's operators.
@@ -38,6 +40,42 @@ export const collect = <T, U>(
   /** The collection function. */
   collectFn: (value: T, index: number) => UndefOr<U>
 ) => rx.pipe(rxop.map(collectFn), rxop.filter(isDefined));
+
+/**
+ * Locates the first element to pass the given type predicate or
+ * produces an empty observable if no element is found.
+ */
+function firstOrEmpty<T, U extends T>(predicate: TypePredicate<U, T>): rx.OperatorFunction<T, U>;
+/**
+ * Locates the first element to pass the given predicate or
+ * produces an empty observable if no element is found.
+ */
+function firstOrEmpty<T>(predicate: PredicateFn<T>): rx.OperatorFunction<T, T>;
+/** Gets the first element, if the observable is not empty. */
+function firstOrEmpty<T>(): rx.OperatorFunction<T, T>;
+function firstOrEmpty(predicate?: PredicateFn<any>) {
+  if (!isFunction(predicate)) return rx.pipe(rxop.take(1));
+  return rx.pipe(rxop.filter(predicate), rxop.take(1));
+}
+export { firstOrEmpty };
+
+/**
+ * Locates the last element to pass the given type predicate or
+ * produces an empty observable if no element is found.
+ */
+function lastOrEmpty<T, U extends T>(predicate: TypePredicate<U, T>): rx.OperatorFunction<T, U>;
+/**
+ * Locates the last element to pass the given predicate or
+ * produces an empty observable if no element is found.
+ */
+function lastOrEmpty<T>(predicate: PredicateFn<T>): rx.OperatorFunction<T, T>;
+/** Gets the last element, if the observable is not empty. */
+function lastOrEmpty<T>(): rx.OperatorFunction<T, T>;
+function lastOrEmpty(predicate?: PredicateFn<any>) {
+  if (!isFunction(predicate)) return rx.pipe(rxop.takeLast(1));
+  return rx.pipe(rxop.filter(predicate), rxop.takeLast(1));
+}
+export { lastOrEmpty };
 
 /**
  * Operator that manages a concurrent task runner that prefers executing

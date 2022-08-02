@@ -15,7 +15,7 @@ import $Statuses from "./statuses";
 import $StageReports from "./stageReports";
 import $Preamble from "./preamble";
 
-import type { ContextRecorder } from "@nai/ContextBuilder";
+import type { ContextRecorder, StructuredOutput } from "@nai/ContextBuilder";
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../1-source";
 import type { ActivationPhaseResult } from "../2-activation";
@@ -56,14 +56,21 @@ export default usModule((require, exports) => {
     /** The final assembly. */
     finalAssembly: AssemblyPhaseResult["assembly"]
   ): ExportPhaseResult {
-    const allDisabled = disabledSources.pipe(statuses.forDisabled);
+    const allDisabled = disabledSources.pipe(statuses.forDisabled, rxop.share());
     const allRejected = rx.merge(
       inactiveSources.pipe(rxop.mergeAll(), statuses.forInactive),
-      unselectedSources.pipe(rxop.mergeAll(), statuses.forUnselected),
-      unbudgetedResults.pipe(statuses.forUnbudgeted)
-    );
-    const allExcluded = rx.merge(allDisabled, allRejected);
-    const allIncluded = insertedResults.pipe(statuses.forInserted);
+      unselectedSources.pipe(rxop.mergeAll(), statuses.forUnselected)
+    ).pipe(rxop.share());
+    const allIncluded = insertedResults.pipe(statuses.forInserted, rxop.share());
+    const allStatuses = rx.merge(
+      unbudgetedResults.pipe(statuses.forUnbudgeted),
+      allDisabled,
+      allRejected,
+      allIncluded
+    ).pipe(rxop.share());
+
+    // The name implies there's shenanigans afoot.
+    const isStoryTrimmed = helpers.isStoryTrimmedSortOfIDK(allStatuses);
 
     // This ended up being oddly elegant.  Just convert streams directly
     // into properties to be assigned.
@@ -84,20 +91,18 @@ export default usModule((require, exports) => {
         rxop.defaultIfEmpty([] as number[])
       ),
       structuredOutput: insertedResults.pipe(
-        rxop.last(),
-        rxop.catchError(() => rx.of(undefined)),
-        rxop.map((r) => r?.structuredOutput ?? [])
+        rxop.lastOrEmpty(),
+        rxop.map((r) => r.structuredOutput),
+        rxop.defaultIfEmpty([] as StructuredOutput[])
       ),
       stageReports: stageReports.createStream(insertedResults).pipe(rxop.toArray()),
-      contextStatuses: allIncluded.pipe(rxop.toArray()),
+      contextStatuses: allStatuses.pipe(rxop.toArray()),
       keyRejections: allRejected.pipe(rxop.toArray()),
       disabled: allDisabled.pipe(rxop.toArray()),
       biases: biasGroups.pipe(rxop.defaultIfEmpty([])),
       orderZeroPoint: helpers.orderZeroPoint(insertedResults),
-      storyTrimmed: helpers.allStoryIncluded(allExcluded, allIncluded).pipe(
-        rxop.map((b) => !b)
-      ),
-      preamble: preamble.createStream(contextParams, allExcluded, allIncluded)
+      storyTrimmed: isStoryTrimmed,
+      preamble: preamble.createStream(contextParams, allIncluded, isStoryTrimmed)
     });
 
     const theRecorder = recorderProps.pipe(

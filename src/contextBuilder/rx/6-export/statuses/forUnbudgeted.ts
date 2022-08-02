@@ -32,7 +32,7 @@ export default usModule((require, exports) => {
             included: false,
             // We don't necessarily need to use a standard `reason` here.
             reason: result.reason as any,
-            calculatedTokens: stats.tokenBudget,
+            calculatedTokens: 0,
             actualReservedTokens: stats.actualReservedTokens
           }),
           getSubContextPart(rejected)
