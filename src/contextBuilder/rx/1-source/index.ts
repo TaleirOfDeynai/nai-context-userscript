@@ -10,6 +10,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
 import $SourceContent from "./content";
 import $SourceEphemeral from "./ephemeral";
@@ -58,15 +59,18 @@ export default usModule((require, exports) => {
       source.ephemeral(contextParams)
     ).pipe(logger.measureStream("All Sources"));
 
-    return {
-      storySource: defaultContent.pipe(
+    // Figure out which are enabled or disabled.
+    const separated = source.separateEnabled(contextParams.storyContent, allSources);
+
+    return lazyObject({
+      storySource: () => defaultContent.pipe(
         rxop.filter(filterStory),
         rxop.single(),
-        rxop.shareReplay()
+        rxop.shareReplay(1)
       ),
-      // Figure out which are enabled or disabled and return the partitioned streams.
-      ...source.separateEnabled(contextParams.storyContent, allSources)
-    };
+      enabledSources: () => separated.enabledSources,
+      disabledSources: () => separated.disabledSources
+    });
   }
 
   return Object.assign(exports, source, { phaseRunner: sourcePhase });

@@ -38,8 +38,8 @@ export class StackSubject<T> extends Subject<T> {
    */
   next(value: T) {
     if (this.#primed) {
-      super.next(value);
       this.#primed = false;
+      super.next(value);
       return;
     }
     this.#stack.push(value);

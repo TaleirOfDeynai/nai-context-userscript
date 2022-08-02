@@ -8,6 +8,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import NaiContextBuilder from "@nai/ContextBuilder";
 import $QueryOps from "../../assemblies/queryOps";
 import $Helpers from "./_helpers";
@@ -105,17 +106,13 @@ export default usModule((require, exports) => {
       preamble: preamble.createStream(contextParams, allIncluded, isStoryTrimmed)
     });
 
-    const theRecorder = recorderProps.pipe(
-      rxop.map((props) => Object.assign(new ContextRecorder(), props)),
-      rxop.single(),
-      rxop.shareReplay()
-    );
-
-    return {
-      get contextRecorder() {
-        return theRecorder;
-      }
-    };
+    return lazyObject({
+      contextRecorder: () => recorderProps.pipe(
+        rxop.map((props) => Object.assign(new ContextRecorder(), props)),
+        rxop.single(),
+        rxop.shareReplay(1)
+      )
+    });
   }
 
   return Object.assign(exports, { phaseRunner: exportPhase });

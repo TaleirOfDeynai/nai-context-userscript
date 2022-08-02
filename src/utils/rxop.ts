@@ -20,17 +20,17 @@ const isDefined = <T>(value: T): value is Exclude<T, undefined> =>
 export const whenCompleted = () => (
   /** The source observable. */
   source: rx.Observable<unknown>
-): rx.Observable<void> => new rx.Observable<void>((subscriber) => {
-  return source.subscribe({
-    complete: () => {
-      subscriber.next();
-      subscriber.complete();
-    },
-    error: (error) => {
-      subscriber.error(error);
-    }
-  })
-});
+): rx.Observable<void> => source.pipe(
+  rxop.ignoreElements(),
+  rxop.defaultIfEmpty(undefined)
+);
+
+/** Operator that delays the source until `toComplete` completes. */
+export const followUpAfter = <T>(
+  toComplete: rx.Observable<unknown>
+): rx.OperatorFunction<T, T> => rx.pipe(
+  rxop.delayWhen(() => toComplete.pipe(whenCompleted()))
+);
 
 /**
  * Operator that applies a partial function to every element of the

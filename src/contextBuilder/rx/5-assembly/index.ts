@@ -11,6 +11,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import $ContextAssembler from "./ContextAssembler";
 
 import type { Assembly } from "../../assemblies";
@@ -51,17 +52,17 @@ export default usModule((require, exports) => {
     );
 
     // A little weird pulling these out.
-    return {
-      get insertions() {
-        return assembler.pipe(rxop.mergeMap((assembler) => assembler.insertions));
-      },
-      get rejections() {
-        return assembler.pipe(rxop.mergeMap((assembler) => assembler.rejections));
-      },
-      get assembly() {
-        return assembler.pipe(rxop.mergeMap((assembler) => assembler.finalAssembly));
-      }
-    };
+    return lazyObject({
+      insertions: () => assembler.pipe(
+        rxop.mergeMap((assembler) => assembler.insertions)
+      ),
+      rejections: () => assembler.pipe(
+        rxop.mergeMap((assembler) => assembler.rejections)
+      ),
+      assembly: () => assembler.pipe(
+        rxop.mergeMap((assembler) => assembler.finalAssembly)
+      )
+    });
   };
 
   return Object.assign(exports, { phaseRunner: assemblyPhase });

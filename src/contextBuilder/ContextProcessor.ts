@@ -66,7 +66,7 @@ export default usModule((require, exports) => {
 
     const assemblyResults = processing.assembly.phaseRunner(
       contextParams,
-      rx.defer(() => selectionResults.totalReservedTokens),
+      selectionResults.totalReservedTokens,
       selectionResults.inFlight
     );
 

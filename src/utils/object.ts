@@ -1,4 +1,5 @@
 import { assert } from "./assert";
+import { callOnce } from "./callOnce";
 import { chain, toPairs, fromPairs } from "./iterables";
 
 type ExtendObj<T extends {}, U extends {}> = T & Readonly<{
@@ -37,4 +38,23 @@ export function protoExtend(proto: any, extensions: any): any {
     .value((iter) => fromPairs(iter));
 
   return Object.freeze(Object.create(proto, propMap));
+};
+
+type LazyRecord = Record<string, () => unknown>;
+type LazyObject<T extends LazyRecord> = {
+  [K in keyof T]: ReturnType<T[K]>;
+};
+
+/**
+ * Given an object with properties that have an arity-0 function as their
+ * value, returns a new object with those properties replaced with
+ * the result of calling the function.
+ * 
+ * Each function of a property will only ever be called once.
+ */
+export const lazyObject = <T extends LazyRecord>(proto: T): LazyObject<T> => {
+  const obj = {};
+  for (const [k, v] of Object.entries(proto))
+    Object.defineProperty(obj, k, { get: callOnce(v) });
+  return Object.freeze(obj) as any;
 };

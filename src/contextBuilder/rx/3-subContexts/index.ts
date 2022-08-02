@@ -7,6 +7,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
 import $Category from "./category";
 
@@ -48,21 +49,19 @@ export default usModule((require, exports) => {
       rxop.shareReplay()
     );
 
-    return {
-      get subContexts() {
-        return inFlight.pipe(
-          rxop.filter((source): source is SubContextSource => "subContext" in source),
-          rxop.toArray(),
-          rxop.map((sources) => new Set(sources))
-        );
-      },
-      get activated() {
-        return inFlight.pipe(
-          rxop.toArray(),
-          rxop.map((sources) => new Set(sources))
-        );
-      }
-    };
+    return lazyObject({
+      subContexts: () => inFlight.pipe(
+        rxop.filter((source): source is SubContextSource => "subContext" in source),
+        rxop.toArray(),
+        rxop.map((sources) => new Set(sources)),
+        rxop.shareReplay(1)
+      ),
+      activated: () => inFlight.pipe(
+        rxop.toArray(),
+        rxop.map((sources) => new Set(sources)),
+        rxop.shareReplay(1)
+      )
+    });
   }
 
   return Object.assign(exports, subContexts, { phaseRunner: subContextPhase });

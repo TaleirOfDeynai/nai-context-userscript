@@ -13,6 +13,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
 import $ActForced, { ForcedActivation } from "./forced";
 import $ActKeyed, { KeyedActivation } from "./keyed";
@@ -155,25 +156,21 @@ export default usModule((require, exports) => {
       rxop.shareReplay()
     );
 
-    return {
-      get rejected() {
-        return inFlightRejections.pipe(
-          rxop.toArray(),
-          rxop.delayWhen(() => inFlightActivations.pipe(rxop.whenCompleted())),
-          rxop.map((sources) => new Set(sources))
-        );
-      },
-      get activated() {
-        return inFlightActivations.pipe(
-          rxop.toArray(),
-          rxop.delayWhen(() => inFlightActivations.pipe(rxop.whenCompleted())),
-          rxop.map((sources) => new Set(sources))
-        );
-      },
-      get inFlight() {
-        return inFlight;
-      }
-    };
+    return lazyObject({
+      rejected: () => inFlightRejections.pipe(
+        rxop.toArray(),
+        rxop.followUpAfter(inFlightActivations),
+        rxop.map((sources) => new Set(sources)),
+        rxop.shareReplay(1)
+      ),
+      activated: () => inFlightActivations.pipe(
+        rxop.toArray(),
+        rxop.followUpAfter(inFlightActivations),
+        rxop.map((sources) => new Set(sources)),
+        rxop.shareReplay(1)
+      ),
+      inFlight: () => inFlight
+    });
   }
 
   return Object.assign(exports, activation, { phaseRunner: activationPhase });

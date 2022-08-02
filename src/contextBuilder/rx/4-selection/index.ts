@@ -13,6 +13,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
 import $Vanilla from "./vanilla";
 import $Configured from "./configured";
@@ -63,37 +64,28 @@ export default usModule((require, exports) => {
       rxop.shareReplay()
     );
 
-    const inFlightUnselected = activatedSources.pipe(
-      rxop.rejectedBy(inFlightSelected, (source) => source.uniqueId),
-      logger.measureStream("In-flight Unselected"),
-      rxop.shareReplay()
-    );
-
-    return {
-      get totalReservedTokens() {
-        return inFlightSelected.pipe(
-          rxop.reduce<BudgetedSource, number>(
-            (tokens, { budgetStats }) => tokens + budgetStats.actualReservedTokens,
-            0
-          )
-        );
-      },
-      get selected() {
-        return inFlightSelected.pipe(
-          rxop.toArray(),
-          rxop.map((sources) => new Set(sources))
-        );
-      },
-      get unselected() {
-        return inFlightUnselected.pipe(
-          rxop.toArray(),
-          rxop.map((sources) => new Set(sources))
-        );
-      },
-      get inFlight() {
-        return inFlightSelected;
-      }
-    };
+    return lazyObject({
+      totalReservedTokens: () => inFlightSelected.pipe(
+        rxop.reduce<BudgetedSource, number>(
+          (tokens, { budgetStats }) => tokens + budgetStats.actualReservedTokens,
+          0
+        ),
+        rxop.shareReplay(1)
+      ),
+      selected: () => inFlightSelected.pipe(
+        rxop.toArray(),
+        rxop.map((sources) => new Set(sources)),
+        rxop.shareReplay(1)
+      ),
+      unselected: () => activatedSources.pipe(
+        rxop.rejectedBy(inFlightSelected, (source) => source.uniqueId),
+        logger.measureStream("In-flight Unselected"),
+        rxop.toArray(),
+        rxop.map((sources) => new Set(sources)),
+        rxop.shareReplay(1)
+      ),
+      inFlight: () => inFlightSelected
+    });
   };
 
   return Object.assign(exports, selectors, { phaseRunner: selectionPhase });

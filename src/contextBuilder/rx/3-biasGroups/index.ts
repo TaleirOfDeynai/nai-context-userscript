@@ -7,6 +7,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
+import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
 import $BiasLore from "./lore";
 import $BiasCategory from "./category";
@@ -44,14 +45,10 @@ export default usModule((require, exports) => {
       rxop.shareReplay()
     );
 
-    return {
-      get biasGroups() {
-        return inFlight.pipe(rxop.toArray());
-      },
-      get inFlight() {
-        return inFlight;
-      }
-    };
+    return lazyObject({
+      biasGroups: () => inFlight.pipe(rxop.toArray(), rxop.shareReplay(1)),
+      inFlight: () => inFlight
+    });
   }
 
   return Object.assign(exports, biasGroups, { phaseRunner: biasGroupPhase });

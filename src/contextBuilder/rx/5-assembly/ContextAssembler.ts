@@ -113,11 +113,11 @@ export default usModule((require, exports) => {
       this.#reportSubject = new rx.Subject<Assembler.Report>();
 
       this.#reportObs = this.#reportSubject.pipe(
-        this.#logger.measureStream("In-Flight Reports").markItems((item) => {
+        this.#logger.measureStream("In-Flight Assembly Reports").markItems((item) => {
           const status = isInserted(item) ? "inserted" : "rejected";
           return `${item.source.identifier} (${status})`;
         }),
-        rxop.shareReplay()
+        rxop.share()
       );
     }
 
@@ -130,13 +130,21 @@ export default usModule((require, exports) => {
 
     /** The stream of reports where an insertion occurred. */
     get insertions(): rx.Observable<Assembler.Inserted> {
-      return this.reports.pipe(rxop.filter(isInserted));
+      return this.#insertions ??= this.reports.pipe(
+        rxop.filter(isInserted),
+        rxop.share()
+      );
     }
+    #insertions: rx.Observable<Assembler.Inserted>
 
     /** The stream of reports where an insertion was rejected. */
     get rejections(): rx.Observable<Assembler.Rejected> {
-      return this.reports.pipe(rxop.filter(isRejected));
+      return this.#rejections ??= this.reports.pipe(
+        rxop.filter(isRejected),
+        rxop.share()
+      );
     }
+    #rejections: rx.Observable<Assembler.Rejected>;
 
     /**
      * The final form of the assembly, after the final report has been emitted.
@@ -144,10 +152,13 @@ export default usModule((require, exports) => {
      * After this emits, the assembler has finished its work.
      */
     get finalAssembly(): rx.Observable<CompoundAssembly> {
-      return rx.from([this.#assembly]).pipe(
-        rxop.delayWhen(() => this.reports.pipe(rxop.whenCompleted()))
+      return this.#finalAssembly ??= rx.from([this.#assembly]).pipe(
+        rxop.followUpAfter(this.reports),
+        rxop.tap((assembly) => this.#logger.info(assembly)),
+        rxop.shareReplay(1)
       );
     }
+    #finalAssembly: rx.Observable<CompoundAssembly>;
 
     readonly #logger: ILogger;
     readonly #assembly: CompoundAssembly;
