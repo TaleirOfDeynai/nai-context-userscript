@@ -20,6 +20,8 @@ import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { chain } from "@utils/iterables";
 import $QueryOps from "../../assemblies/queryOps";
+import $CursorOps from "../../assemblies/cursorOps";
+import $Cursors from "../../cursors";
 import { selection } from "../_shared";
 import Sorters from "./_sorters";
 
@@ -37,6 +39,8 @@ type RangedSource = ExtendField<ActivatedSource, {
 
 export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);
+  const cursorOps = $CursorOps(require);
+  const cursors = $Cursors(require);
 
   /**
    * Sorts all inputs and emits them in order of their formalized insertion
@@ -69,7 +73,11 @@ export default usModule((require, exports) => {
 
     return (sources: rx.Observable<ActivatedSource>) => storySource.pipe(
       rxop.mergeMap((s) => {
-        const { maxOffset } = queryOps.getStats(s.entry.searchedText);
+        // The search range is in characters of the story that were searchable.
+        // We'll want to start relative to the full-text of the story and
+        // then convert back to a fragment cursor.
+        const { searchedText } = s.entry;
+        const ftLength = queryOps.getText(searchedText).length;
 
         return sources.pipe(
           // Activation does not take search range into account.  We'll do
@@ -96,7 +104,14 @@ export default usModule((require, exports) => {
             if (!keyed || source.activations.size > 1) return source;
   
             const { searchRange } = source.entry.fieldConfig;
-            const minRange = maxOffset - searchRange;
+            const ftOffset = ftLength - searchRange;
+            // It can only be inside the search range.
+            if (ftOffset <= 0) return source;
+
+            // Perform the cursor re-mapping to get the minimum offset allowed.
+            const ftCursor = cursors.fullText(searchedText, ftOffset);
+            const { offset: minRange } = cursorOps.fromFullText(searchedText, ftCursor);
+
             const selections = chain(keyed.values())
               .flatten()
               .map((r) => r.selection)
