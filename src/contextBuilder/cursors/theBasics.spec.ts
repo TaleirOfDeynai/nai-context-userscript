@@ -78,7 +78,8 @@ describe("toSelection", () => {
       groups: Object.freeze([]),
       namedGroups: Object.freeze({}),
       index: 40,
-      length: 10
+      length: 10,
+      source: ""
     });
     const result = toSelection(mockMatch, mockOrigin, "fragment");
 
@@ -94,7 +95,8 @@ describe("toSelection", () => {
       groups: Object.freeze([]),
       namedGroups: Object.freeze({}),
       index: 30,
-      length: 10
+      length: 10,
+      source: ""
     });
     const result = toSelection(mockMatch, mockOrigin, "fullText");
 
@@ -110,7 +112,8 @@ describe("toSelection", () => {
       groups: Object.freeze([]),
       namedGroups: Object.freeze({}),
       index: 30,
-      length: 0
+      length: 0,
+      source: ""
     });
 
     const result = toSelection(zeroMatch, mockOrigin, "fragment");
