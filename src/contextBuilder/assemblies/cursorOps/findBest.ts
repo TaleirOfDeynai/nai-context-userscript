@@ -71,7 +71,12 @@ export default usModule((require, exports) => {
      * the returned cursor will be inside the content, but it will do
      * its best.
      */
-    preferContent: boolean = false
+    preferContent: boolean = false,
+    /**
+     * Whether to use the prefix/suffix of the given assembly or its source
+     * when no suitable fragments are found.
+     */
+    fallbackToSource: boolean = true
   ): Cursor.Fragment => {
     // This also does the various assertions, so no need to repeat those.
     if ($IsFoundIn(require).isFoundIn(assembly, cursor)) {
@@ -116,10 +121,10 @@ export default usModule((require, exports) => {
     // boundaries of each significant block instead, defined completely by
     // the prefix and suffix.  This is one of the reasons why we're habitually
     // generating these, even if they're empty.
-    const { prefix, suffix } = queryOps.getSource(assembly);
+    const fallback = fallbackToSource ? queryOps.getSource(assembly) : assembly;
     const [newOffset] = assertExists(
       "Expected to have boundaries from prefix and suffix.",
-      chain(_iterBounds([prefix, suffix], cursor.offset))
+      chain(_iterBounds([fallback.prefix, fallback.suffix], cursor.offset))
         .reduce(undefined, _offsetReducer)
     );
     return makeCursor(assembly, newOffset);

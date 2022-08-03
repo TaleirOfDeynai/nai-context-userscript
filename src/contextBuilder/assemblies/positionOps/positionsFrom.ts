@@ -1,17 +1,15 @@
-import usConfig from "@config";
 import { usModule } from "@utils/usModule";
-import { dew } from "@utils/dew";
 import { chain, batch, flatMap, mapIter, skip } from "@utils/iterables";
 import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
-import $SplitUpFrom from "./splitUpFrom";
+import $SplitToSelections from "./splitToSelections";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { Cursor } from "../../cursors";
 import type { IFragmentAssembly } from "../_interfaces";
-import type { TextFragment } from "../../TextSplitterService";
 import type { TrimType } from "../../TrimmingProviders";
 import type { IterDirection } from "./cursorForDir";
+import type { SplitSelection } from "./splitToSelections";
 
 interface ForDir {
   /**
@@ -26,7 +24,7 @@ interface ForDir {
    * - `toTop`: Direction of iteration ← \n|\n|~\n~
    * - `toBottom`: Direction of iteration → ~\n~|\n|\n
    */
-  handleNewlines: (iter: Iterable<TextFragment[]>) => Iterable<TextFragment>;
+  handleNewlines: (iter: Iterable<SplitSelection[]>) => Iterable<SplitSelection>;
   /**
    * Partial function constructing a cursor for {@link positionsFrom}.
    * 
@@ -36,50 +34,53 @@ interface ForDir {
    * - Convert the fragment to a cursor.
    */
   toPosition: (a: IFragmentAssembly, c: Cursor.Fragment) =>
-    (f: TextFragment) => UndefOr<Cursor.Fragment>;
+    (f: SplitSelection) => UndefOr<Cursor.Fragment>;
 }
 
-const lineBatcher = (c: TextFragment, p: TextFragment) =>
+const lineBatcher = (c: SplitSelection, p: SplitSelection) =>
   c.content === p.content && c.content === "\n";
 
 export default usModule((require, exports) => {
   const ss = $TextSplitterService(require);
-  const { splitUpFrom } = $SplitUpFrom(require);
+  const { splitToSelections } = $SplitToSelections(require);
 
   /**
    * Yields batches of normal fragments, but for batches of `\n` fragments,
    * it will insert a zero-length fragment between each of them then remove
    * the `\n` fragments.
    */
-  const makeHandler = (toLineOffset: (f: TextFragment) => number) => {
-    const emptyFrom = (f: TextFragment) => ss.createFragment("", toLineOffset(f));
+  const makeHandler = (toLineCursor: (f: SplitSelection) => Cursor.Fragment) => {
+    const emptyFrom = (f: SplitSelection): SplitSelection => {
+      const c = toLineCursor(f);
+      return { content: "", selection: [c, c] };
+    };
 
-    return (iter: Iterable<TextFragment[]>) => flatMap(iter, (frags) => {
+    return (iter: Iterable<SplitSelection[]>) => flatMap(iter, (splitUp) => {
       // Batches with a length greater than `1` will contain only `\n`
       // fragments.  For anything else, nothing special needs to be done.
-      if (frags.length === 1) return frags;
+      if (splitUp.length === 1) return splitUp;
       // Doing what was said above, but cleverly.
-      return mapIter(skip(frags, 1), emptyFrom);
+      return mapIter(skip(splitUp, 1), emptyFrom);
     });
   };
 
   const forDir: Record<IterDirection, ForDir> = {
     toTop: {
       /** Direction of iteration ← \n|\n|~\n~ */
-      handleNewlines: makeHandler(ss.afterFragment),
-      toPosition: (a, c) => (f) => {
-        if (f.content.length !== 0 && !ss.hasWords(f)) return undefined;
-        const offset = ss.beforeFragment(f);
+      handleNewlines: makeHandler(({ selection: s }) => s[1]),
+      toPosition: (a, c) => (s) => {
+        if (s.content.length !== 0 && !ss.hasWords(s.content)) return undefined;
+        const { offset } = s.selection[0];
         if (offset > c.offset) return undefined;
         return makeCursor(a, offset);
       }
     },
     toBottom: {
       /** Direction of iteration → ~\n~|\n|\n */
-      handleNewlines: makeHandler(ss.beforeFragment),
-      toPosition: (a, c) => (f) => {
-        if (f.content.length !== 0 && !ss.hasWords(f)) return undefined;
-        const offset = ss.beforeFragment(f);
+      handleNewlines: makeHandler(({ selection: s }) => s[0]),
+      toPosition: (a, c) => (s) => {
+        if (s.content.length !== 0 && !ss.hasWords(s.content)) return undefined;
+        const { offset } = s.selection[0];
         if (offset < c.offset) return undefined;
         return makeCursor(a, offset);
       }
@@ -120,7 +121,7 @@ export default usModule((require, exports) => {
     direction: IterDirection
   ): Iterable<Cursor.Fragment> => {
     // Do the work splitting everything up.
-    const fragments = splitUpFrom(assembly, cursor, splitType, direction);
+    const splitUp = splitToSelections(assembly, splitType, direction, cursor);
 
     // Prepare the functions used by this option.
     const fns = forDir[direction];
@@ -131,7 +132,7 @@ export default usModule((require, exports) => {
     // - The position before a fragment containing words.
     // - The zero-length position between two `\n` characters.
     // The position defined by the given cursor is handled by `locateInsertion`.
-    return chain(fragments)
+    return chain(splitUp)
       // Group consecutive `\n` characters together.
       .thru((iter) => batch(iter, lineBatcher))
       // Sort out and handle the `\n` batches from the normal fragments...

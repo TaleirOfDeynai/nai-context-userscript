@@ -54,7 +54,7 @@ describe("asFragmentCursor", () => {
   // We're only going to test that it attempts the conversion when
   // it is necessary, so we're not double-testing.
 
-  it("should return the cursor as-is when already an fragment cursor", () => {
+  it("should return the cursor as-is when already a fragment cursor", () => {
     const cursor = mockCursor(10, "fragment");
     expect(asFragmentCursor(cursor)).toBe(cursor);
   });

@@ -12,7 +12,7 @@ import $EntryPosition from "./entryPosition";
 import $LocateInsertion from "./locateInsertion";
 import $PositionsFrom from "./positionsFrom";
 import $ShuntOut from "./shuntOut";
-import $SplitUpFrom from "./splitUpFrom";
+import $SplitToSelections from "./splitToSelections";
 
 // Type re-exports...
 export { IterDirection } from "./cursorForDir";
@@ -25,7 +25,7 @@ export default usModule((require, exports) => {
     ...$EntryPosition(require),
     ...$LocateInsertion(require),
     ...$PositionsFrom(require),
-    ...$SplitUpFrom(require),
-    ...$ShuntOut(require)
+    ...$ShuntOut(require),
+    ...$SplitToSelections(require)
   });
 });

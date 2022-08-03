@@ -20,11 +20,15 @@ export default usModule((require, exports) => {
    * `content` array.
    */
   const isFoundIn = (
+    /** The assembly to check. */
     assembly: IFragmentAssembly,
-    cursor: Cursor.Fragment
+    /** The cursor to look for. */
+    cursor: Cursor.Fragment,
+    /** Whether to accept the cursor to targeting an empty prefix/suffix. */
+    allowEmpty: boolean = false
   ): boolean => {
     assert(
-      "Expected an fragment cursor.",
+      "Expected a fragment cursor.",
       cursor.type === "fragment"
     );
     assert(
@@ -32,7 +36,18 @@ export default usModule((require, exports) => {
       queryOps.checkRelated(assembly, cursor.origin)
     );
 
-    for (const frag of queryOps.iterateOn(assembly))
+    // When allowing empty, we explicitly check the affix fragments.
+    if (allowEmpty) {
+      if (cursors.isCursorInside(cursor, assembly.prefix)) return true;
+      if (cursors.isCursorInside(cursor, assembly.suffix)) return true;
+    }
+
+    // `iterateOn` will skip any empty affix fragments.  Since we'll have
+    // already checked them when allowing empty fragments, we can just
+    // iterate on the content fragments.
+    const frags = allowEmpty ? assembly.content : queryOps.iterateOn(assembly);
+
+    for (const frag of frags)
       if (cursors.isCursorInside(cursor, frag))
         return true;
 

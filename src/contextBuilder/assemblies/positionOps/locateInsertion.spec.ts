@@ -16,11 +16,11 @@ const { entryPosition } = $EntryPosition(fakeRequire);
 const { locateInsertion } = $LocateInsertion(fakeRequire);
 
 describe("locateInsertion", () => {
-  // Most of the heavy lifting is done by `splitUpFrom`, which is
-  // already tested.  Since this is more about what this method does
-  // with the fragments it gets back from `splitUpFrom`, we're
-  // just going to use simulated fragments and test its own internal
-  // behavior.
+  // Most of the heavy lifting is done by `splitToSelections`, which
+  // is already tested.  Since this is more about what this method
+  // does with the fragments it gets back from `splitToSelections`,
+  // we're just going to use simulated fragments and test its own
+  // internal behavior.
 
   const mockPosition = (
     cursor: InsertionPosition["cursor"],

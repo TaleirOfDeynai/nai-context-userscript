@@ -15,7 +15,7 @@ export default usModule((require, exports) => {
   const { isFoundIn } = $IsFoundIn(require);
 
   /**
-   * Converts an fragment cursor into a full-text cursor.
+   * Converts a fragment cursor into a full-text cursor.
    * 
    * The cursor must be addressing a fragment that exists within this assembly.
    */
@@ -24,16 +24,8 @@ export default usModule((require, exports) => {
     cursor: Cursor.Fragment
   ): Cursor.FullText => {
     assert(
-      "Expected an fragment cursor.",
-      cursor.type === "fragment"
-    );
-    assert(
-      "Expected cursor to be related to the given assembly.",
-      queryOps.checkRelated(assembly, cursor.origin)
-    );
-    assert(
       "Expected cursor to belong to a fragment of the given assembly.",
-      isFoundIn(assembly, cursor)
+      isFoundIn(assembly, cursor, true)
     );
 
     let fullLength = 0;

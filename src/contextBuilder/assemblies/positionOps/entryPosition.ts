@@ -1,5 +1,5 @@
 import { usModule } from "@utils/usModule";
-import { chain, first, last } from "@utils/iterables";
+import { first } from "@utils/iterables";
 import makeCursor from "../../cursors/Fragment";
 import $TextSplitterService from "../../TextSplitterService";
 import $QueryOps from "../queryOps";
@@ -44,8 +44,8 @@ export default usModule((require, exports) => {
   ): Cursor.Fragment => {
     if (insertionType) {
       const initCursor = entryPosition(assembly, direction);
-      return chain(positionsFrom(assembly, initCursor, insertionType, direction))
-        .value((c) => first(c) ?? initCursor);
+      const c = [...positionsFrom(assembly, initCursor, insertionType, direction)];
+      return first(c) ?? initCursor;
     }
     else if (direction === "toTop") {
       const frag = queryOps.getLastFragment(assembly) ?? assembly.prefix;

@@ -35,7 +35,7 @@ export default usModule((require, exports) => {
     cursor: Cursor.Fragment
   ): CursorPosition => {
     assert(
-      "Expected an fragment cursor.",
+      "Expected a fragment cursor.",
       cursor.type === "fragment"
     );
 

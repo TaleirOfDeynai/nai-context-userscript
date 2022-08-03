@@ -774,11 +774,12 @@ const theModule = usModule((require, exports) => {
               break;
             default:
               yield Object.freeze({ ...state, result });
+              break;
           }
         }
 
-        const offset = state.direction === "toTop" ? -1 : 1;
-        const nextIndex = state.target.index + offset;
+        const idxOffset = state.direction === "toTop" ? -1 : 1;
+        const nextIndex = state.target.index + idxOffset;
         const nextTarget = this.#makeTarget(nextIndex);
 
         if (!nextTarget) {
