@@ -701,9 +701,11 @@ const theModule = usModule((require, exports) => {
       // or after the suffix.  In these cases, we don't need to do any
       // splitting and we can just convert them into the appropriate
       // adjacent insertion.
-      if (cursor.offset <= ss.beforeFragment(getFirstFragment(target.assembly)))
+      const firstFrag = getFirstFragment(target.assembly) ?? target.assembly.prefix;
+      if (cursor.offset <= ss.beforeFragment(firstFrag))
         return this.#doInsertAdjacent(iterResult, source, inserted, "insertBefore");
-      if (cursor.offset >= ss.afterFragment(getLastFragment(target.assembly)))
+      const lastFrag = getLastFragment(target.assembly) ?? target.assembly.suffix;
+      if (cursor.offset >= ss.afterFragment(lastFrag))
         return this.#doInsertAdjacent(iterResult, source, inserted, "insertAfter");
 
       checks: {

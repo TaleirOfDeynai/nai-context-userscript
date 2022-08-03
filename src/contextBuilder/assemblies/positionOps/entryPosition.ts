@@ -48,11 +48,11 @@ export default usModule((require, exports) => {
         .value((c) => first(c) ?? initCursor);
     }
     else if (direction === "toTop") {
-      const frag = queryOps.getLastFragment(assembly);
+      const frag = queryOps.getLastFragment(assembly) ?? assembly.prefix;
       return makeCursor(assembly, ss.afterFragment(frag));
     }
     else {
-      const frag = queryOps.getFirstFragment(assembly);
+      const frag = queryOps.getFirstFragment(assembly) ?? assembly.suffix;
       return makeCursor(assembly, ss.beforeFragment(frag));
     }
   }

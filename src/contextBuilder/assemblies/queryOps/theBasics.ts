@@ -23,18 +23,14 @@ export function* iterateOn(
 }
 
 /**
- * Gets the first valid fragment of an assembly or the prefix fragment
- * if the assembly is empty.
+ * Gets the first non-empty fragment of an assembly, if one exists.
  */
 export const getFirstFragment = (assembly: IFragmentAssembly) =>
-  IterOps.first(iterateOn(assembly)) ?? assembly.prefix;
+  IterOps.first(iterateOn(assembly));
 
-/**
- * Gets the last valid fragment of an assembly or the suffix fragment
- * if the assembly is empty.
- */
+/** Gets the last non-empty fragment of an assembly, if one exists. */
 export const getLastFragment = (assembly: IFragmentAssembly) =>
-  IterOps.last(iterateOn(assembly)) ?? assembly.suffix;
+  IterOps.last(iterateOn(assembly));
 
 /**
  * Gets the source assembly of an assembly.
