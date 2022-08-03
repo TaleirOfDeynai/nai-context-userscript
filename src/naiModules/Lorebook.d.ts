@@ -14,16 +14,24 @@ export interface ContextConfig {
    * over whether the context assembler can insert this entry into
    * other entries that are already inserted into the context.
    * 
-   * The target entry must have `allowInsertionInside` set to `true`
-   * in order for this to be effective.
+   * If this is unset, it will insert if the other entry has its
+   * {@link allowInsertionInside} property set to `true`.
+   * 
+   * Setting this to `false` will force the entry to be shunted out
+   * of the target of the insert, even if that entry would have
+   * allowed it.
+   * 
+   * Setting this to `true` is effectively the same as leaving it
+   * unset, since the target of the insert has full control.
    */
   allowInnerInsertion?: boolean;
 
   /**
-   * This is the counter-config to `allowInnerInsertion`.  It
-   * allows another entry to be inserted into this entry after it
-   * has been inserted into the context.  Both entries must have
-   * the respective properties set to `true` for it to be permitted.
+   * If this property is set to `true`, the context assembler will be
+   * allowed to split this entry apart to insert another entry into
+   * the middle of its text.
+   * 
+   * This property will veto the {@link allowInnerInsertion} property.
    * 
    * For the moment, the story content is assumed to have this set to
    * `true`, regardless of its config's actual setting.  Everything

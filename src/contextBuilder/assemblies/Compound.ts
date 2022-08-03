@@ -365,9 +365,13 @@ const theModule = usModule((require, exports) => {
       toInsert: ContentLike,
       toSplit: ContentLike
     ): boolean {
-      const canInsert = Boolean(toInsert.contextConfig.allowInnerInsertion ?? true);
+      // The thing being split can hard veto the split.
       const canSplit = Boolean(toSplit.contextConfig.allowInsertionInside ?? false);
-      return canInsert && canSplit;
+      if (!canSplit) return false;
+
+      // Otherwise, the thing being inserted can explicitly choose to avoid
+      // the split, but will insert if it has no opinion.
+      return Boolean(toInsert.contextConfig.allowInnerInsertion ?? canSplit);
     }
 
     /**
@@ -506,13 +510,6 @@ const theModule = usModule((require, exports) => {
         "Must have at least one assembly to find a starting location.",
         this.#assemblies.length > 0
       );
-
-      // const { fieldConfig, contextConfig } = source.entry;
-      // const { insertionType, insertionPosition } = contextConfig;
-      // const direction = insertionPosition < 0 ? "toTop" : "toBottom";
-      // const remOffset = direction === "toTop" ? 1 : 0;
-      // const isKeyRelative = Boolean(fieldConfig?.keyRelative ?? false);
-      // const offset = Math.abs(insertionPosition + remOffset);
 
       const data = getInsertionData(source);
 

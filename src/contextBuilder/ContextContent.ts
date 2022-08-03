@@ -2,7 +2,6 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { isNumber } from "@utils/is";
-import { protoExtend } from "@utils/object";
 import EventModule from "@nai/EventModule";
 import ContextModule from "@nai/ContextModule";
 import UUID from "@nai/UUID";
@@ -223,11 +222,12 @@ const theModule = usModule((require, exports) => {
       const { storyContextConfig } = storyState.storyContent;
       const storyText = storyState.storyContent.story.getText();
 
-      const contextConfig = protoExtend(storyContextConfig, {
+      const contextConfig = {
+        ...storyContextConfig,
         // NovelAI has a hardcoded exception for the story.  We want to avoid
-        // setting to this object, though, so we'll proto-extend it.
+        // setting to this object, though, so we'll make a copy.
         allowInsertionInside: true
-      });
+      };
 
       const { trimDirection, maximumTrimType } = contextConfig;
       const sourceText = dew(() => {
