@@ -41,13 +41,14 @@ const theModule = usModule((require, exports) => {
   const { CompoundAssembly } = $CompoundAssembly(require);
 
   /**
-   * A class that represents a sub-context.
+   * A class that represents a group within a context; these are used as
+   * an alternative to the pre-assembled sub-context.
    * 
    * Everything in this is implemented pretty lazily and could be optimized
    * better.  Accessing most properties of {@link IFragmentAssembly} will
    * instantiate objects and perform iterations on the sub-assemblies.
    */
-  class SubContext
+  class ContextGroup
     extends CompoundAssembly
     implements AssemblyLike, ContentLike, SourceLike
   {
@@ -142,13 +143,13 @@ const theModule = usModule((require, exports) => {
     }
     readonly #suffix: TokenizedFragment;
 
-    /** A sub-context is always its own source. */
+    /** A context-group is always its own source. */
     get source(): this {
       return this;
     }
 
     /**
-     * A sub-context is treated as empty until it has a non-empty assembly
+     * A context-group is treated as empty until it has a non-empty assembly
      * inside it, regardless of if its `prefix` or `suffix` have content.
      */
     get isEmpty(): boolean {
@@ -159,11 +160,11 @@ const theModule = usModule((require, exports) => {
     /**
      * Implementation of {@link AssemblyLike.adaptCursor}.
      * 
-     * This will adapt the cursor to this sub-context's current `text` if
+     * This will adapt the cursor to this context-group's current `text` if
      * the cursor is targeting one of its sub-assemblies.
      * 
-     * This cursor is only valid for the current state of the sub-context;
-     * if the sub-context is modified, the cursor may point to a different
+     * This cursor is only valid for the current state of the group;
+     * if the group is modified, the cursor may point to a different
      * position than intended.
      */
     adaptCursor(cursor: Cursor.Fragment): UndefOr<Cursor.Fragment> {
@@ -226,7 +227,7 @@ const theModule = usModule((require, exports) => {
         !this.isEmpty
       );
 
-      // Sub-contexts cannot be inserted into using the same method as normal
+      // Context-groups cannot be inserted into using the same method as normal
       // fragment assemblies.  So, if the insertion point is within this assembly,
       // it's getting shunted out, period.
       const result = posOps.locateInsertion(this, insertionType, positionData);
@@ -254,7 +255,7 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
-     * Converts this sub-context into a into a static {@link TokenizedAssembly}.
+     * Converts this context-group into a into a static {@link TokenizedAssembly}.
      * 
      * The conversion is a destructive process.  All information about assemblies
      * that were inserted will be lost and cursors targeting those assemblies will
@@ -301,11 +302,12 @@ const theModule = usModule((require, exports) => {
       ]);
     }
   }
-  /** Creates an empty sub-context for a category. */
+
+  /** Creates an empty context-group for a category. */
   async function forCategory(
     codec: AugmentedTokenCodec,
     category: CategoryWithSubContext
-  ): Promise<CategoryContext> {
+  ): Promise<CategoryGroup> {
     const { name, subcontextSettings } = category;
     const { contextConfig } = subcontextSettings;
 
@@ -325,17 +327,17 @@ const theModule = usModule((require, exports) => {
     ]) as [TokenizedFragment, TokenizedFragment];
 
     return Object.assign(
-      new SubContext(codec, `S:${name}`, "lore", contextConfig, prefix, suffix),
+      new ContextGroup(codec, `S:${name}`, "lore", contextConfig, prefix, suffix),
       { category: name }
     );
   };
 
   return Object.assign(exports, {
-    SubContext,
+    ContextGroup,
     forCategory
   });
 });
 
 export default theModule;
-export type SubContext = InstanceType<ReturnType<typeof theModule>["SubContext"]>;
-export type CategoryContext = SubContext & { category: string };
+export type ContextGroup = InstanceType<ReturnType<typeof theModule>["ContextGroup"]>;
+export type CategoryGroup = ContextGroup & { category: string };

@@ -44,9 +44,9 @@ export interface AssemblyLike extends ITokenizedAssembly {
   splitAt?: TokenizedAssembly["splitAt"];
 
   /**
-   * Special method for sub-contexts.  Returns a new cursor that is
+   * Special method for context-groups.  Returns a new cursor that is
    * relative to this assembly, but only for the current state of the
-   * sub-context (which changes if a sub-assembly is inserted into it).
+   * group (which changes if a sub-assembly is inserted into it).
    */
   adaptCursor?: (cursor: Cursor.Fragment) => UndefOr<Cursor.Fragment>;
 }
@@ -255,12 +255,12 @@ const theModule = usModule((require, exports) => {
 
       this.#assemblies = [];
       this.#tokens = [];
-      this.#subContexts = new Set();
+      this.#groups = new Set();
       this.#knownSources = new Set();
       this.#textToSource = new Map();
     }
 
-    #subContexts: Set<CompoundAssembly>;
+    #groups: Set<CompoundAssembly>;
     #knownSources: Set<SourceLike>;
     #textToSource: Map<unknown, SourceLike>;
 
@@ -308,7 +308,7 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       budget: number
     ): Promise<Insertion.Result> {
-      // Fast-path: No text, instant rejection (unless it's a sub-context).
+      // Fast-path: No text, instant rejection (unless it's a group).
       if (source.entry.text === "")
         if (!(source instanceof CompoundAssembly))
           return NO_TEXT;
@@ -411,9 +411,9 @@ const theModule = usModule((require, exports) => {
 
     /** Gets all sources that are within this compound assembly. */
     protected enumerateSources(): Set<SourceLike> {
-      if (!this.#subContexts.size) return this.#knownSources;
+      if (!this.#groups.size) return this.#knownSources;
 
-      return chain(this.#subContexts)
+      return chain(this.#groups)
         .flatMap((c) => c.enumerateSources())
         .prepend(this.#knownSources)
         .value((sources) => new Set(sources));
@@ -427,8 +427,8 @@ const theModule = usModule((require, exports) => {
       const direct = this.#textToSource.get(assembly.source ?? assembly);
       if (direct) return direct;
 
-      // It's possible that it could be in a sub-context.
-      for (const asm of this.#subContexts) {
+      // It's possible that it could be in a context-group.
+      for (const asm of this.#groups) {
         const source = asm.findSource(assembly);
         if (source) return source;
       }
@@ -461,7 +461,7 @@ const theModule = usModule((require, exports) => {
       this.#textToSource.set(inserted.source ?? inserted, source);
 
       if (inserted instanceof CompoundAssembly)
-        this.#subContexts.add(inserted);
+        this.#groups.add(inserted);
 
       // Make sure we clean up the entry.
       await source.entry.finalize?.();
@@ -490,7 +490,7 @@ const theModule = usModule((require, exports) => {
       const cursor = cursorForDir(selection, direction);
       if (assembly.isFoundIn(cursor)) return cursor;
 
-      // The assembly can adapt the cursor itself.  This is used by sub-contexts
+      // The assembly can adapt the cursor itself.  This is used by groups
       // to convert a cursor for a sub-assembly into one for itself.
       const adapted = assembly.adaptCursor?.(cursor);
       if (adapted) return adapted;
@@ -757,7 +757,7 @@ const theModule = usModule((require, exports) => {
       while (true) {
         const curAsm = state.target.assembly;
 
-        // Check for emptiness; `SubContext` will report empty when it
+        // Check for emptiness; `ContextGroup` will report empty when it
         // has no assemblies inside it, in which case we should skip it.
         if (!curAsm.isEmpty) {
           const result = curAsm.locateInsertion(insertionType, state);
