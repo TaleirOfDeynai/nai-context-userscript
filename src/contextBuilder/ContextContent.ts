@@ -19,12 +19,6 @@ import type { ContextParams } from "./ParamsService";
 import type { Cursor } from "./cursors";
 import type { Assembly } from "./assemblies";
 
-/**
- * TODO:
- * - There's still some unused fields.  I believe they were to aid
- *   context assembly later on.
- */
-
 type InFlightTrimming = Promise<UndefOr<Assembly.Tokenized>>;
 
 export interface StoryContent extends IContextField {
