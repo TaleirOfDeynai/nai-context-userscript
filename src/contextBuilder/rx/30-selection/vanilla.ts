@@ -8,9 +8,8 @@
  *   purposes of experimentation, this sorting order is configurable.
  * 
  * Configuration that affects this module:
- * - Disabled by `weightedRandom.groupByInsertionPriority`.
- * - Disabled by `weightedRandom.groupBySubContext`.
- * - Output ordering affected by `selection.ordering`.
+ * - Disabled by `weightedRandom.enabled`.
+ * - Output ordering affected by `selection.insertionOrdering`.
  */
 
 import usConfig from "@config";

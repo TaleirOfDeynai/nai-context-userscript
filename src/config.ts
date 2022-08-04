@@ -5,16 +5,6 @@ import type { ShuntingMode } from "./contextBuilder/assemblies/Compound";
 /** Configuration options affecting comment removal. */
 const comments = {
   /**
-   * The context builder receives a flag to enable or disable the
-   * removal of comments.  This flag defaults to `true`, but I
-   * don't exactly know when NovelAI would explicitly provide
-   * `false`.
-   * 
-   * If you end up seeing comments appear in your context, try enabling
-   * this to force comment removal on.
-   */
-  alwaysRemove: false,
-  /**
    * Vanilla NovelAI removes comments before keyword searching is
    * performed.  If lorebook keywords could match text in comments,
    * they could be used to gain more control over cascade activation
@@ -54,58 +44,11 @@ const story = {
 
 /** Configuration options affecting lorebook features. */
 const lorebook = {
-  /**
-   * Vanilla NovelAI only allows key-relative entries to be inserted
-   * when a matching key is found for an item already in context.
-   * 
-   * Unfortunately, if the only content it can match is inserted after
-   * the entry, the entry is effectively useless, which is silly
-   * user-experience.
-   * 
-   * If this is set to `true`, entries that meet the following
-   * conditions will automatically reserve their tokens:
-   * - The entry has "key relative" enabled.
-   * - The entry has "cascading activation" disabled.
-   * - The entry does not have a custom token reservation configured.
-   * - The entry has a higher insertion priority than the story content.
-   * 
-   * Any entry that does not meet these conditions will function as it
-   * does in vanilla NovelAI.
-   * 
-   * If the entry's match is not found in the story due to all matches
-   * being trimmed out, the entry will simply be dropped and the claimed
-   * tokens refunded.
-   * 
-   * When the tokens are refunded, all currently selected entries
-   * with lower insertion priority versus the dropped entry will be
-   * re-evaluated to see if they can provide more content.
-   * 
-   * While this makes context assembly more challenging (to us
-   * developers), it removes the burden of complexity off the end-user.
-   * They can get their entry in where it's supposed to go without
-   * having to concern themselves with token reservations.
-   */
-  keyRelativeReservations: false
+  /** Nothing here at the moment. */
 } as const;
 
 /** Configuration options relating to the selection phase, in general. */
 const selection = {
-  /**
-   * Defines the ordering of entries during the selection process.
-   * 
-   * This technically has more to do with how entries are grouped
-   * when {@link weightedRandom.groupBySelectionOrder} is active,
-   * as all entries that are considered equal by this ordering will
-   * be grouped into a selection group.
-   * 
-   * This is combined with {@link selection.insertionOrdering} to define
-   * the final insertion order that is given to the assembler.
-   * 
-   * The allowed sorters are found {@link SorterKey here}.
-   */
-  selectionOrdering: [
-    "budgetPriority"
-  ],
   /**
    * Defines how to sort entries into formal insertion order.
    * 
@@ -193,28 +136,7 @@ const subContext = {
    *   sub-contexts in isolation can be done concurrently, which results
    *   in better background worker utilization.
    */
-  groupedInsertion: false,
-  /**
-   * For key-relative entries, vanilla NovelAI will only insert the entry
-   * if another entry in the same context with a higher insertion priority
-   * has text matching at least one keyword.
-   * 
-   * That is, the context needs to currently contain a match for a key
-   * at insertion time.  Because entries of sub-contexts are normally
-   * isolated from the root context, these entries cannot find their way
-   * into the story.
-   * 
-   * If this is set to `true` and `groupedInsertion` is also enabled, a
-   * different behavior will be used that will allow key-relative entries
-   * belonging to a sub-context to be inserted into the root context
-   * instead; they will not be compulsively grouped.
-   * 
-   * The tokens used by the key-relative entry will still count toward
-   * the sub-context's internal budget, even if it is separated from the
-   * group.  This allows key-relative entries to work the same everywhere,
-   * but be constrained by a budget shared with all entries of a category.
-   */
-  rootRelativeInsertion: false
+  groupedInsertion: false
 } as const;
 
 /**
@@ -251,54 +173,22 @@ const subContext = {
  */
 const weightedRandom = {
   /**
-   * A weighted selection group is created for entries that share the same
-   * {@link CC.budgetPriority insertion priority}.
-   * 
-   * The behavior of {@link LC.orderByKeyLocations} will only apply to
-   * insertion order; not selection order.
+   * Enables the weighted-random selection strategy.
    */
-  groupBySelectionOrder: false,
+  enabled: false,
   /**
-   * A weighted selection group is created for entries that belong to the
-   * same category sub-context.
+   * Defines the the criteria for ordering and grouping entries into
+   * selection groups.  All entries that are found to be equal to one
+   * another will be grouped.
    * 
-   * This option retains tight control over what ends up in the root
-   * context, but allows sub-contexts to be used as a looser option
-   * when desired.
+   * These groups are then selected from until exhausted.
    * 
-   * The general process can be reasoned like the following:
-   * 1) External entries with a higher insertion priority are inserted.
-   * 2) When the insertion priority for the whole sub-context is reached,
-   *    selection of the category's entries can begin.
-   * 3) Within the sub-context, {@link CC.budgetPriority insertion priority}
-   *    is ignored for all entries that qualify for random selection, even
-   *    if `groupBySelectionOrder` is enabled; the sub-context group
-   *    supersedes the insertion priority group.
-   * 4) Non-qualifying entries are selected first, then random selection is
-   *    performed.
-   * 5) Selection is repeated until the sub-context's budget is satisfied
-   *    or no entries remain for selection.
-   * 
-   * If `groupBySelectionOrder` is also enabled, the whole sub-context is
-   * treated as a composite entry that is a member of the insertion priority
-   * group corresponding to the sub-context's insertion priority.
-   * - When `subCategory.groupedInsertion` is `false`:
-   *   - If the sub-context contains only entries that do not qualify for
-   *     random selection, the whole sub-context will be selected immediately.
-   *   - Otherwise, the composite entry has a selection weight equal to the
-   *     sum of the weights of all entries within the category that were
-   *     selected when the sub-context was assembled in isolation.
-   *   - When this composite entry is selected, the entire assembled
-   *     sub-context is selected in one go.
-   * - When `subCategory.groupedInsertion` is `true`:
-   *   - Entries within the category that do not qualify for random selection
-   *     will be selected immediately.
-   *   - Afterwards, the composite entry has a selection weight equal to the
-   *     highest weight of all currently unselected entries within the category.
-   *   - When this composite entry is selected, one entry of the sub-context
-   *     will then be randomly selected.
+   * This uses the same sorters as {@link selection.insertionOrdering}
+   * and the allowed sorters are found {@link SorterKey here}.
    */
-  groupBySubContext: false
+  selectionOrdering: [
+    "budgetPriority"
+  ]
 } as const;
 
 /** Configuration options relating to context assembly. */
