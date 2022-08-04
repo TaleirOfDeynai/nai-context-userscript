@@ -1,13 +1,4 @@
-/**
- * This handles the assembly of category sub-contexts and the removal
- * of entries that ended up incorporated into a sub-context.
- * 
- * Configuration that affects this module:
- * - Becomes a noop when `subContext.groupedInsertion` is `true`.
- */
-
 import _conforms from "lodash/conforms";
-import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -130,9 +121,6 @@ export default usModule((require, exports) => {
     /** The story's source. */
     storySource: SourcePhaseResult["storySource"]
   ) => {
-    if (usConfig.subContext.groupedInsertion)
-      return (sources: rx.Observable<ActivatedSource>) => sources;
-
     // Create a map of the categories for look up.
     const categoryMap = new Map(
       contextParams.storyContent.lorebook.categories

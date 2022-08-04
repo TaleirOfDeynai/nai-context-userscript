@@ -33,8 +33,6 @@ export interface SourcePhaseResult {
   disabledSources: rx.Observable<DisabledSource>
 }
 
-const logger = createLogger("Source Phase");
-
 export default usModule((require, exports) => {
   const source = {
     content: $SourceContent(require).createStream,
@@ -49,6 +47,8 @@ export default usModule((require, exports) => {
     /** The context builder parameters. */
     contextParams: ContextParams
   ): SourcePhaseResult {
+    const logger = createLogger(`Source Phase: ${contextParams.contextName}`);
+
     // We'll want to pull the story out of NAI's default content.
     const defaultContent = source.content(contextParams).pipe(rxop.shareReplay());
 

@@ -11,6 +11,7 @@
  * been provided for matching.
  */
 
+import usConfig from "@config";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isIterable, isString } from "@utils/is";
@@ -42,7 +43,7 @@ export type TextResultMap = Map<string, readonly TextResult[]>;
 export type AssemblyResultMap = Map<string, readonly AssemblyResult[]>;
 export type EntryResultMap<T extends KeyedContent> = Map<T, AssemblyResultMap>;
 
-const logger = createLogger("SearchService");
+const logger = createLogger("Search Service");
 
 export default usModule((require, exports) => {
   const matcherService = $MatcherService(require);
@@ -81,6 +82,10 @@ export default usModule((require, exports) => {
     const retainedEntries = [...resultsCache].slice(-nextSize);
     resultsCache = new Map(retainedEntries);
 
+    // Report the current cache only if logging is on.  Since this map is
+    // mutated, I want to make sure the console gets an isolated instance.
+    if (usConfig.debugLogging)
+      logger.info("Cache state:", new Map(retainedEntries));
     logger.info({ curSize, idealSize, nextSize });
   }
 

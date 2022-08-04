@@ -48,7 +48,7 @@ export interface MatchResult {
   readonly length: number;
 }
 
-const logger = createLogger("MatcherService");
+const logger = createLogger("Matcher Service");
 
 export default usModule((require, exports) => {
   const loreEntryHelpers = require(LoreEntryHelpers);

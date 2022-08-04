@@ -23,8 +23,6 @@ export interface BiasGroupPhaseResult {
   readonly inFlight: rx.Observable<ResolvedBiasGroup>;
 }
 
-const logger = createLogger("Bias Groups Phase");
-
 export default usModule((require, exports) => {
   const biasGroups = {
     lore: $BiasLore(require).createStream,
@@ -37,6 +35,8 @@ export default usModule((require, exports) => {
     /** The currently in-flight activations. */
     inFlightActivations: ActivationPhaseResult["inFlight"]
   ): BiasGroupPhaseResult {
+    const logger = createLogger(`Bias Groups Phase: ${contextParams.contextName}`);
+
     const inFlight = rx.merge(
       biasGroups.lore(inFlightActivations),
       biasGroups.category(contextParams.storyContent, inFlightActivations)

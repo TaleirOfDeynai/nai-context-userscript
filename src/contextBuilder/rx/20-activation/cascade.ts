@@ -21,7 +21,7 @@ type CascadingSource = ExtendField<EnabledSource, {
 
 type CascadingState = ActivationState<CascadingSource>;
 
-const logger = createLogger("activation/cascade");
+const logger = createLogger("Cascade Activation");
 
 export interface CascadeActivation {
   /**

@@ -1,9 +1,14 @@
 /**
- * The Bias-Groups Phase takes the activated and rejected entries
- * and determines which bias-groups should be activated to service
- * that feature.
+ * The Sub-Context Phase handles the assembly of category sub-contexts
+ * and the removal of entries that ended up incorporated into a
+ * sub-context from the stream that will be fed into the selection
+ * phase.
+ * 
+ * Configuration that affects this module:
+ * - Becomes a noop when `subContext.groupedInsertion` is `true`.
  */
 
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
@@ -27,8 +32,6 @@ export interface SubContextPhaseResult {
   readonly activated: rx.Observable<Set<ActivatedSource | SubContextSource>>;
 }
 
-const logger = createLogger("Sub-Contexts Phase");
-
 export default usModule((require, exports) => {
   const subContexts = {
     category: $Category(require).createStream
@@ -42,6 +45,16 @@ export default usModule((require, exports) => {
     /** The fully activated set of sources. */
     activatedSet: ActivationPhaseResult["activated"]
   ): SubContextPhaseResult {
+    // This phase becomes a noop if context-groups are enabled instead.
+    if (usConfig.subContext.groupedInsertion) {
+      return Object.freeze({
+        subContexts: rx.of(new Set<SubContextSource>()),
+        activated: activatedSet
+      });
+    }
+
+    const logger = createLogger(`Sub-Context Phase: ${contextParams.contextName}`);
+
     const inFlight = activatedSet.pipe(
       rxop.mergeAll(),
       subContexts.category(contextParams, storySource),

@@ -22,7 +22,7 @@ import $ActCascade, { CascadeActivation } from "./cascade";
 
 import type { ConstrainedMap } from "@utils/utility-types";
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult, EnabledSource, DisabledSource } from "../10-source";
+import type { SourcePhaseResult, EnabledSource } from "../10-source";
 
 /** Just provides a source of types for {@link ActivationMap}. */
 interface ActivationMapping {
@@ -76,8 +76,6 @@ export interface ActivationPhaseResult {
   readonly inFlight: ActivationObservable;
 }
 
-const logger = createLogger("Activation Phase");
-
 export default usModule((require, exports) => {
   const activation = {
     cascade: $ActCascade(require).checkActivation,
@@ -94,6 +92,8 @@ export default usModule((require, exports) => {
     /** The in-flight enabled sources. */
     enabledSources: SourcePhaseResult["enabledSources"]
   ): ActivationPhaseResult {
+    const logger = createLogger(`Activation Phase: ${contextParams.contextName}`);
+
     const activationStates = enabledSources.pipe(
       rxop.map((source): ActivationState => ({ source, activations: new Map() })),
       rxop.shareReplay()
