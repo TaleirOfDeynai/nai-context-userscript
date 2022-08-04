@@ -12,7 +12,7 @@ import type { IContextField } from "@nai/ContextModule";
 import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ContextSource } from "../../ContextSource";
-import type { ActivationObservable } from "../2-activation";
+import type { ActivationObservable } from "../20-activation";
 
 interface BiasedField extends IContextField {
   loreBiasGroups: LoreEntry["loreBiasGroups"];

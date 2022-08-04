@@ -28,8 +28,8 @@ import Sorters from "./_sorters";
 import type { LoreEntryConfig } from "@nai/Lorebook";
 import type { ContextParams } from "../../ParamsService";
 import type { ContextSource, ExtendField } from "../../ContextSource";
-import type { StorySource } from "../1-source";
-import type { ActivatedSource } from "../2-activation";
+import type { StorySource } from "../10-source";
+import type { ActivatedSource } from "../20-activation";
 import type { BudgetedSource } from "../_shared";
 import type { SorterKey } from "./_sorters";
 

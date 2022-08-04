@@ -4,7 +4,7 @@ import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
 
 import type { StageReport } from "@nai/ContextBuilder";
-import type { Assembler } from "../5-assembly";
+import type { Assembler } from "../40-assembly";
 
 export default usModule((require, exports) => {
   const { StageReport } = require(NaiContextBuilder);

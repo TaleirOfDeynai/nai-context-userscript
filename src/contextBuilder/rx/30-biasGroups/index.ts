@@ -14,7 +14,7 @@ import $BiasCategory from "./category";
 
 import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
 import type { ContextParams } from "../../ParamsService";
-import type { ActivationPhaseResult } from "../2-activation";
+import type { ActivationPhaseResult } from "../20-activation";
 
 export interface BiasGroupPhaseResult {
   /** Produces the complete array of {@link ResolvedBiasGroup} instances. */

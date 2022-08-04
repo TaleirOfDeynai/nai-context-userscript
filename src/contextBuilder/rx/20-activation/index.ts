@@ -22,7 +22,7 @@ import $ActCascade, { CascadeActivation } from "./cascade";
 
 import type { ConstrainedMap } from "@utils/utility-types";
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult, EnabledSource, DisabledSource } from "../1-source";
+import type { SourcePhaseResult, EnabledSource, DisabledSource } from "../10-source";
 
 /** Just provides a source of types for {@link ActivationMap}. */
 interface ActivationMapping {

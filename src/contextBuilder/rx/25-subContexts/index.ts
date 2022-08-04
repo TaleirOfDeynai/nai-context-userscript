@@ -12,8 +12,8 @@ import { createLogger } from "@utils/logging";
 import $Category from "./category";
 
 import type { ContextParams } from "../../ParamsService";
-import type { ActivationPhaseResult, ActivatedSource } from "../2-activation";
-import type { SourcePhaseResult } from "../1-source";
+import type { ActivationPhaseResult, ActivatedSource } from "../20-activation";
+import type { SourcePhaseResult } from "../10-source";
 import type { SubContextSource } from "../_shared";
 
 export interface SubContextPhaseResult {

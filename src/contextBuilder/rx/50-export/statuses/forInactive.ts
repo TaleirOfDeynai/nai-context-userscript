@@ -5,7 +5,7 @@ import NaiContextBuilder from "@nai/ContextBuilder";
 import { checkThis } from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
-import type { RejectedSource } from "../../2-activation";
+import type { RejectedSource } from "../../20-activation";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);

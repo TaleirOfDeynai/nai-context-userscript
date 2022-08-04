@@ -11,7 +11,7 @@ import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
 import type { PhraseBiasConfig, Categories } from "@nai/Lorebook";
-import type { ActivationObservable } from "../2-activation";
+import type { ActivationObservable } from "../20-activation";
 
 type BiasedCategory = Categories.Category & {
   categoryBiasGroups: PhraseBiasConfig[]

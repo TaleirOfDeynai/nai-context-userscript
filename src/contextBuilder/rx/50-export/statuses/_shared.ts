@@ -3,7 +3,7 @@ import { subContext } from "../../_shared";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { ContextStatus, ContextRecorder } from "@nai/ContextBuilder";
-import type { Assembler } from "../../5-assembly";
+import type { Assembler } from "../../40-assembly";
 import type { BudgetedSource, SubContextSource } from "../../_shared";
 
 /** Just type-checks the ContextStatus interface. */

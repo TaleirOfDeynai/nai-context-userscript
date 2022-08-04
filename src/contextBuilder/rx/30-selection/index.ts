@@ -19,8 +19,8 @@ import $Vanilla from "./vanilla";
 import $Configured from "./configured";
 
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult } from "../1-source";
-import type { ActivationPhaseResult } from "../2-activation";
+import type { SourcePhaseResult } from "../10-source";
+import type { ActivationPhaseResult } from "../20-activation";
 import type { BudgetedSource } from "../_shared";
 
 // Re-export this for convenience.

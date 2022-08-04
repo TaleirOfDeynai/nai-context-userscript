@@ -6,7 +6,7 @@ import { selection } from "../../_shared";
 import { checkThis, getSubContextPart } from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
-import type { Assembler } from "../../5-assembly";
+import type { Assembler } from "../../40-assembly";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);

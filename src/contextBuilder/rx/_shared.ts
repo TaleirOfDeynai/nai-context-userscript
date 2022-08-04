@@ -9,7 +9,7 @@ import type { LoreEntry, PhraseBiasConfig } from "@nai/Lorebook";
 import type { SourceLike } from "../assemblies/Compound";
 import type { ContextSource } from "../ContextSource";
 import type { NormalizedBudgetStats } from "../ContextContent";
-import type { ActivationSource, ActivatedSource, RejectedSource } from "./2-activation";
+import type { ActivationSource, ActivatedSource, RejectedSource } from "./20-activation";
 
 // Activation stuff.
 

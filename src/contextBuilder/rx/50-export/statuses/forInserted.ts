@@ -12,7 +12,7 @@ import type { AnyValueOf, UndefOr } from "@utils/utility-types";
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { TrimStates, TrimMethods, ReportReasons } from "@nai/ContextBuilder";
 import type { AssemblyResultMap } from "../../../SearchService";
-import type { Assembler } from "../../5-assembly";
+import type { Assembler } from "../../40-assembly";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);

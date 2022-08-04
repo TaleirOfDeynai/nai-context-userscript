@@ -6,7 +6,7 @@ import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { EphemeralEntry } from "@nai/EphemeralHelpers";
 import type { ExtendField } from "../../ContextSource";
-import type { EnabledSource } from "../1-source";
+import type { EnabledSource } from "../10-source";
 import type { ActivationState } from ".";
 
 type EphemeralSource = ExtendField<EnabledSource, EphemeralEntry>;

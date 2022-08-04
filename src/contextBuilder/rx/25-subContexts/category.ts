@@ -16,15 +16,15 @@ import ContextBuilder from "@nai/ContextBuilder";
 import $ContextContent from "../../ContextContent";
 import $ContextSource from "../../ContextSource";
 import { categories } from "../_shared";
-import $SelectionPhase from "../4-selection";
-import $AssemblyPhase from "../5-assembly";
-import $ExportPhase from "../6-export";
+import $SelectionPhase from "../30-selection";
+import $AssemblyPhase from "../40-assembly";
+import $ExportPhase from "../50-export";
 
 import type { Categories } from "@nai/Lorebook";
 import type { TypePredicate } from "@utils/is";
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult } from "../1-source";
-import type { ActivatedSource, ActivationMap } from "../2-activation";
+import type { SourcePhaseResult } from "../10-source";
+import type { ActivatedSource, ActivationMap } from "../20-activation";
 import type { CategorizedSource, SubContextSource } from "../_shared";
 
 type SubContextCategory = Categories.Category & Categories.WithSubcontext;

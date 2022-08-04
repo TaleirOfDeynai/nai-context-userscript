@@ -18,11 +18,11 @@ import $Preamble from "./preamble";
 
 import type { ContextRecorder, StructuredOutput } from "@nai/ContextBuilder";
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult } from "../1-source";
-import type { ActivationPhaseResult } from "../2-activation";
-import type { BiasGroupPhaseResult } from "../3-biasGroups";
-import type { SelectionPhaseResult } from "../4-selection";
-import type { AssemblyPhaseResult } from "../5-assembly";
+import type { SourcePhaseResult } from "../10-source";
+import type { ActivationPhaseResult } from "../20-activation";
+import type { BiasGroupPhaseResult } from "../30-biasGroups";
+import type { SelectionPhaseResult } from "../30-selection";
+import type { AssemblyPhaseResult } from "../40-assembly";
 
 export interface ExportPhaseResult {
   readonly contextRecorder: rx.Observable<ContextRecorder>;

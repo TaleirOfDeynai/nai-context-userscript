@@ -16,7 +16,7 @@ import $ContextAssembler from "./ContextAssembler";
 
 import type { Assembly } from "../../assemblies";
 import type { ContextParams } from "../../ParamsService";
-import type { SelectionPhaseResult } from "../4-selection";
+import type { SelectionPhaseResult } from "../30-selection";
 import type { Assembler } from "./ContextAssembler";
 
 // Re-export these for convenience.

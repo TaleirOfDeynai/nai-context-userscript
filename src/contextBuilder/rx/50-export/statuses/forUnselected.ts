@@ -2,16 +2,20 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
-import { checkThis } from "./_shared";
+import { checkThis, getSubContextPart } from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
-import type { DisabledSource } from "../../1-source";
+import type { BudgetedSource } from "../../30-selection";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);
 
-  /** Converts disabled sources into {@link ContextStatus}. */
-  function forDisabled(sources: rx.Observable<DisabledSource>) {
+  /**
+   * Converts sources that were discarded during selection into {@link ContextStatus}.
+   * 
+   * This is unique to the user-script, and uses a non-standard `reason`.
+   */
+  function forUnselected(sources: rx.Observable<BudgetedSource>) {
     return sources.pipe(
       rxop.map((source): ContextStatus => Object.assign(
         new CB.ContextStatus(source.entry.field),
@@ -20,11 +24,13 @@ export default usModule((require, exports) => {
           unqiueId: source.uniqueId,
           type: source.type,
           included: false,
-          reason: CB.REASONS.Disabled
-        })
+          // We're using a non-standard `reason` here.
+          reason: "not selected" as any
+        }),
+        getSubContextPart(source)
       ))
     );
   }
 
-  return Object.assign(exports, { forDisabled });
+  return Object.assign(exports, { forUnselected });
 });

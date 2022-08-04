@@ -1,5 +1,5 @@
 import type { LorebookConfig as LC } from "@nai/Lorebook";
-import type { SorterKey } from "./contextBuilder/rx/4-selection/_sorters";
+import type { SorterKey } from "./contextBuilder/rx/30-selection/_sorters";
 import type { ShuntingMode } from "./contextBuilder/assemblies/Compound";
 
 /** Configuration options affecting comment removal. */

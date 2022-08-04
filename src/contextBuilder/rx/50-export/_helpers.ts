@@ -4,7 +4,7 @@ import { usModule } from "@utils/usModule";
 import * as IterOps from "@utils/iterables";
 
 import type { ContextStatus, StructuredOutput } from "@nai/ContextBuilder";
-import type { Assembler } from "../5-assembly";
+import type { Assembler } from "../40-assembly";
 
 // For JSDoc links...
 import type { ContextRecorder } from "@nai/ContextBuilder";
