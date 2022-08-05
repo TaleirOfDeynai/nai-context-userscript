@@ -4,6 +4,7 @@ import $Activation from "./activation";
 import $BiasGroups from "./biasGroups";
 import $Categories from "./categories";
 import $Selection from "./selection";
+import $Sorting from "./sorting";
 import $SubContexts from "./subContexts";
 
 import type { ContextSource } from "../../ContextSource";
@@ -18,6 +19,7 @@ export default usModule((require, exports) => {
     biasGroups: $BiasGroups(require),
     categories: $Categories(require),
     selection: $Selection(require),
+    sorting: $Sorting(require),
     subContexts: $SubContexts(require)
   });
 });

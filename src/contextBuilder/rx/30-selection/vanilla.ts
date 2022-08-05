@@ -12,25 +12,20 @@
  * - Output ordering affected by `selection.insertionOrdering`.
  */
 
-import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { assert } from "@utils/assert";
 import { chain } from "@utils/iterables";
 import $QueryOps from "../../assemblies/queryOps";
 import $CursorOps from "../../assemblies/cursorOps";
 import $Cursors from "../../cursors";
 import $Common from "../_common";
-import Sorters from "./_sorters";
 
 import type { LoreEntryConfig } from "@nai/Lorebook";
 import type { ContextParams } from "../../ParamsService";
 import type { ContextSource, ExtendField } from "../../ContextSource";
 import type { ActivatedSource } from "../_common/activation";
-import type { BudgetedSource } from "../_common/selection";
 import type { StorySource } from "../10-source";
-import type { SorterKey } from "./_sorters";
 
 type RangedSource = ExtendField<ActivatedSource, {
   searchRange: LoreEntryConfig["searchRange"]
@@ -40,7 +35,7 @@ export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);
   const cursorOps = $CursorOps(require);
   const cursors = $Cursors(require);
-  const { selection } = $Common(require);
+  const { sorting, selection } = $Common(require);
 
   /**
    * Sorts all inputs and emits them in order of their formalized insertion
@@ -50,23 +45,7 @@ export default usModule((require, exports) => {
     contextParams: ContextParams,
     storySource: rx.Observable<StorySource>
   ) => {
-    /** Sorting functions we're going to use. */
-    const chosenSorters = chain(usConfig.selection.insertionOrdering)
-      // Force the natural sorters to be the last ones.
-      .filter((k) => k !== "naturalByPosition" && k !== "naturalByType")
-      .appendVal<SorterKey>("naturalByType", "naturalByPosition")
-      // Check to make sure there's a sorter for each key.
-      .tap((k) => assert(`Unknown sorter "${k}" for \`selection.ordering\` config!`, k in Sorters))
-      .map((k) => Sorters[k](contextParams, require))
-      .toArray();
-
-    const sortingFn = (a: BudgetedSource, b: BudgetedSource) => {
-      for (let i = 0, len = chosenSorters.length; i < len; i++) {
-        const result = chosenSorters[i](a, b);
-        if (result !== 0) return result;
-      }
-      return 0;
-    };
+    const sortingFn = sorting.forInsertion(contextParams);
 
     const hasSearchRange = (source: ContextSource): source is RangedSource =>
       "searchRange" in source.entry.fieldConfig;
