@@ -10,8 +10,8 @@ import type { Observable as Obs } from "@utils/rx";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { AssemblyResultMap } from "../../SearchService";
 import type { ContextSource, ExtendField } from "../../ContextSource";
+import type { ActivationState } from "../_common/activation";
 import type { StorySource } from "../10-source";
-import type { ActivationState } from ".";
 
 type SearchableSource = ExtendField<ContextSource, {
   keys: LoreEntry["keys"];

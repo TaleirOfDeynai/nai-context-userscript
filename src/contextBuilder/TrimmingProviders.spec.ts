@@ -170,7 +170,7 @@ describe("comment removal", () => {
       const reCommentLine = reversed ? /^\n?##/ : /^##/;
       const checkFrags = chain(withComments.matchAll(reSplit))
         // Drop lines with comments.
-        .filter(([text]: string[]) => !reCommentLine.test(text))
+        .filter(([text]) => !reCommentLine.test(text))
         // Break the non-comment lines into fragments of either
         // `"\n"` or other text.
         .thru(function*(iter) {

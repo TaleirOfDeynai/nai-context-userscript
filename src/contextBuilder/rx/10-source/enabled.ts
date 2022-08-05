@@ -2,7 +2,7 @@ import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { categories } from "../_shared";
+import $Common from "../_common";
 
 import type { Categories } from "@nai/Lorebook";
 import type { StoryContent } from "@nai/EventModule";
@@ -16,7 +16,9 @@ export interface DisabledSource extends ContextSource {
   enabled: false;
 };
 
-export default usModule((_require, exports) => {
+export default usModule((require, exports) => {
+  const { categories } = $Common(require);
+
   const isEnabled = _conforms({
     entry: _conforms({
       fieldConfig: (c: { enabled?: boolean }) => {
@@ -29,7 +31,7 @@ export default usModule((_require, exports) => {
   });
 
   const checkCategory = (allCategories: Map<string, Categories.Category>) =>
-    (source: ContextSource<any>): boolean => {
+    (source: ContextSource): boolean => {
       // The entry must have a category to even be disabled through it.
       if (!categories.isCategorized(source)) return true;
 

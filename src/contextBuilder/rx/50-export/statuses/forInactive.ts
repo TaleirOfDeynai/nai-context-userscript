@@ -2,13 +2,14 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
-import { checkThis } from "./_shared";
+import $Shared from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
-import type { RejectedSource } from "../../20-activation";
+import type { RejectedSource } from "../../_common/activation";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);
+  const { checkThis } = $Shared(require);
 
   const toReason = (source: RejectedSource) => {
     switch (source.type) {

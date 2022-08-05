@@ -1,14 +1,24 @@
-import { subContext } from "../../_shared";
+import { usModule } from "@utils/usModule";
+import $Common from "../../_common";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { Assembler } from "../../40-assembly";
-import type { BudgetedSource } from "../../_shared";
+import type { BudgetedSource } from "../../_common/selection";
 
-/** Just type-checks the ContextStatus interface. */
-export const checkThis = <T extends Partial<ContextStatus>>(obj: T): T => obj;
+export default usModule((require, exports) => {
+  const { subContexts } = $Common(require);
 
-export const getSubContextPart = (value: Assembler.Report | BudgetedSource) => {
-  const source = "source" in value ? value.source : value;
-  if (!source || !subContext.isSubContextSource(source)) return undefined;
-  return { subContext: source.subContext };
-};
+  /** Just type-checks the ContextStatus interface. */
+  const checkThis = <T extends Partial<ContextStatus>>(obj: T): T => obj;
+
+  const getSubContextPart = (value: Assembler.Report | BudgetedSource) => {
+    const source = "source" in value ? value.source : value;
+    if (!source || !subContexts.isSubContextSource(source)) return undefined;
+    return { subContext: source.subContext };
+  };
+
+  return Object.assign(exports, {
+    checkThis,
+    getSubContextPart
+  });
+});

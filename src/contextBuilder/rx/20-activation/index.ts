@@ -15,45 +15,15 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
-import $ActForced, { ForcedActivation } from "./forced";
-import $ActKeyed, { KeyedActivation } from "./keyed";
-import $ActEphemeral, { EphemeralActivation } from "./ephemeral";
-import $ActCascade, { CascadeActivation } from "./cascade";
+import $ActForced from "./forced";
+import $ActKeyed from "./keyed";
+import $ActEphemeral from "./ephemeral";
+import $ActCascade from "./cascade";
 
-import type { ConstrainedMap } from "@utils/utility-types";
 import type { ContextParams } from "../../ParamsService";
-import type { SourcePhaseResult, EnabledSource } from "../10-source";
-
-/** Just provides a source of types for {@link ActivationMap}. */
-interface ActivationMapping {
-  forced: ForcedActivation;
-  keyed: KeyedActivation;
-  ephemeral: EphemeralActivation;
-  cascade: CascadeActivation;
-}
-
-/** A {@link Map} for types of activations. */
-export type ActivationMap = ConstrainedMap<ActivationMapping>;
-
-/** Shared state for activators. */
-export type ActivationState<T extends EnabledSource = EnabledSource> = {
-  source: T,
-  activations: ActivationMap
-};
-
-export interface ActivatedSource extends EnabledSource {
-  activated: true;
-  activations: ActivationMap;
-};
-
-export interface RejectedSource extends EnabledSource {
-  activated: false;
-  activations: ActivationMap;
-};
-
-export type ActivationSource = ActivatedSource | RejectedSource;
-
-export type ActivationObservable = rx.Observable<ActivationSource>;
+import type { SourcePhaseResult } from "../10-source";
+import type { RejectedSource, ActivatedSource } from "../_common/activation";
+import type { ActivationObservable, ActivationState } from "../_common/activation";
 
 export interface ActivationPhaseResult {
   /** Produces the complete set of {@link RejectedSource rejected sources}. */

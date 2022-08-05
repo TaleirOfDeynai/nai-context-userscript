@@ -2,36 +2,18 @@ import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isArray } from "@utils/is";
 import { chain } from "@utils/iterables";
-import { biasGroups } from "../_shared";
+import $Common from "../_common";
 
 import type { UndefOr } from "@utils/utility-types";
-import type { TypePredicate } from "@utils/is";
-import type { IContextField } from "@nai/ContextModule";
 import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
-import type { LoreEntry } from "@nai/Lorebook";
-import type { ContextSource } from "../../ContextSource";
-import type { ActivationObservable } from "../20-activation";
-
-interface BiasedField extends IContextField {
-  loreBiasGroups: LoreEntry["loreBiasGroups"];
-}
-
-type BiasedSource = ContextSource<BiasedField>;
+import type { ActivationObservable } from "../_common/activation";
 
 /**
  * Checks each {@link ContextSource} for lore bias group inclusions.
  */
-export default usModule((_require, exports) => {
-  const isBiased = _conforms({
-    entry: _conforms({
-      fieldConfig: _conforms({
-        // Need a non-empty array to qualify.
-        loreBiasGroups: (v) => isArray(v) && Boolean(v.length)
-      })
-    })
-  }) as TypePredicate<BiasedSource>;
+export default usModule((require, exports) => {
+  const { biasGroups } = $Common(require);
 
   const createStream = (
     /** The stream of activation results. */
@@ -42,7 +24,7 @@ export default usModule((_require, exports) => {
       shared.pipe(
         rxop.collect((source): UndefOr<ResolvedBiasGroup> => {
           if (!source.activated) return undefined;
-          if (!isBiased(source)) return undefined;
+          if (!biasGroups.isBiased(source)) return undefined;
 
           const groups = chain(source.entry.fieldConfig.loreBiasGroups)
             .filter(biasGroups.whenActive)
@@ -58,7 +40,7 @@ export default usModule((_require, exports) => {
       shared.pipe(
         rxop.collect((source): UndefOr<ResolvedBiasGroup> => {
           if (source.activated) return undefined;
-          if (!isBiased(source)) return undefined;
+          if (!biasGroups.isBiased(source)) return undefined;
 
           const groups = chain(source.entry.fieldConfig.loreBiasGroups)
             .filter(biasGroups.whenInactive)

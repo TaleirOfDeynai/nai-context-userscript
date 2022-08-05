@@ -2,36 +2,27 @@ import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isUndefined } from "@utils/is";
 import ContextBuilder from "@nai/ContextBuilder";
 import $ContextContent from "../../ContextContent";
 import $ContextSource from "../../ContextSource";
-import { categories } from "../_shared";
+import $Common from "../_common";
 import $SelectionPhase from "../30-selection";
 import $AssemblyPhase from "../40-assembly";
 import $ExportPhase from "../50-export";
 
-import type { Categories } from "@nai/Lorebook";
-import type { TypePredicate } from "@utils/is";
 import type { ContextParams } from "../../ParamsService";
+import type { ActivatedSource, ActivationMap } from "../_common/activation";
+import type { CategorizedSource, SubContextCategory } from "../_common/categories";
+import type { SubContextSource } from "../_common/subContexts";
 import type { SourcePhaseResult } from "../10-source";
-import type { ActivatedSource, ActivationMap } from "../20-activation";
-import type { CategorizedSource, SubContextSource } from "../_shared";
 
-type SubContextCategory = Categories.Category & Categories.WithSubcontext;
 type ACSource = ActivatedSource & CategorizedSource;
 
 export default usModule((require, exports) => {
   const { REASONS } = require(ContextBuilder);
+  const { categories } = $Common(require);
   const { ContextContent } = $ContextContent(require);
   const contextSource = $ContextSource(require);
-
-  const isSubContextCategory = _conforms({
-    createSubcontext: (v) => v === true,
-    subcontextSettings: (v) => !isUndefined(v)
-  }) as TypePredicate<SubContextCategory>;
-
-  const isCategorized = categories.isCategorized as TypePredicate<ACSource, ActivatedSource>;
 
   const createSource = (
     contextParams: ContextParams,
@@ -124,14 +115,14 @@ export default usModule((require, exports) => {
     // Create a map of the categories for look up.
     const categoryMap = new Map(
       contextParams.storyContent.lorebook.categories
-        .filter(isSubContextCategory)
+        .filter(categories.isSubContextCategory)
         .map((cat) => [cat.id ?? cat.name, cat] as const)
     );
 
     return (sources: rx.Observable<ActivatedSource>) => {
       // First, we'll need to partition the categorized entries from
       // other entries.  We'll stream them back out toward the end.
-      const [categorized, theRest] = rx.partition(sources, isCategorized);
+      const [categorized, theRest] = rx.partition(sources, categories.isCategorized);
 
       return rx.merge(
         theRest,

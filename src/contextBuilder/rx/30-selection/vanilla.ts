@@ -21,15 +21,15 @@ import { chain } from "@utils/iterables";
 import $QueryOps from "../../assemblies/queryOps";
 import $CursorOps from "../../assemblies/cursorOps";
 import $Cursors from "../../cursors";
-import { selection } from "../_shared";
+import $Common from "../_common";
 import Sorters from "./_sorters";
 
 import type { LoreEntryConfig } from "@nai/Lorebook";
 import type { ContextParams } from "../../ParamsService";
 import type { ContextSource, ExtendField } from "../../ContextSource";
+import type { ActivatedSource } from "../_common/activation";
+import type { BudgetedSource } from "../_common/selection";
 import type { StorySource } from "../10-source";
-import type { ActivatedSource } from "../20-activation";
-import type { BudgetedSource } from "../_shared";
 import type { SorterKey } from "./_sorters";
 
 type RangedSource = ExtendField<ActivatedSource, {
@@ -40,6 +40,7 @@ export default usModule((require, exports) => {
   const queryOps = $QueryOps(require);
   const cursorOps = $CursorOps(require);
   const cursors = $Cursors(require);
+  const { selection } = $Common(require);
 
   /**
    * Sorts all inputs and emits them in order of their formalized insertion

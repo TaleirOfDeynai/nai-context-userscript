@@ -2,28 +2,19 @@ import _conforms from "lodash/conforms";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import { isArray } from "@utils/is";
 import { chain } from "@utils/iterables";
-import { categories, biasGroups } from "../_shared";
+import $Common from "../_common";
 
-import type { TypePredicate } from "@utils/is";
 import type { Observable as Obs } from "@utils/rx";
 import type { StoryContent } from "@nai/EventModule";
 import type { ResolvedBiasGroup } from "@nai/ContextBuilder";
-import type { PhraseBiasConfig, Categories } from "@nai/Lorebook";
-import type { ActivationObservable } from "../20-activation";
-
-type BiasedCategory = Categories.Category & {
-  categoryBiasGroups: PhraseBiasConfig[]
-};
+import type { ActivationObservable } from "../_common/activation";
 
 /**
- * Checks each {@link ContextSource} for lore bias group inclusions.
+ * Checks each source for lore bias group inclusions.
  */
-export default usModule((_require, exports) => {
-  const isBiasedCategory = _conforms({
-    categoryBiasGroups: (v) => isArray(v) && Boolean(v.length)
-  }) as TypePredicate<BiasedCategory>;
+export default usModule((require, exports) => {
+  const { categories, biasGroups } = $Common(require);
 
   const createStream = (
     /** The story contents, to source the categories from. */
@@ -42,7 +33,7 @@ export default usModule((_require, exports) => {
         // Create a map of the categories for look up.
         const categoryMap = new Map(
           storyContent.lorebook.categories
-            .filter(isBiasedCategory)
+            .filter(categories.isBiasedCategory)
             .map((cat) => [cat.name, cat] as const)
         );
 

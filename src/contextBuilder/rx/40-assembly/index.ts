@@ -21,7 +21,7 @@ import type { Assembler } from "./ContextAssembler";
 
 // Re-export these for convenience.
 export { Assembler };
-export { InsertableSource, InsertableObservable } from "../_shared";
+export { InsertableSource, InsertableObservable } from "../_common/selection";
 
 export interface AssemblyPhaseResult {
   readonly insertions: rx.Observable<Assembler.Inserted>;

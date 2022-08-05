@@ -5,13 +5,13 @@ import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import ContextBuilder from "@nai/ContextBuilder";
 import $CompoundAssembly from "../../assemblies/Compound";
-import { selection } from "../_shared";
+import $Common from "../_common";
 
 import type { ILogger } from "@utils/logging";
 import type { StructuredOutput } from "@nai/ContextBuilder";
 import type { CompoundAssembly, Insertion } from "../../assemblies/Compound";
 import type { ContextParams } from "../../ParamsService";
-import type { BudgetedSource, InsertableSource, InsertableObservable } from "../_shared";
+import type { BudgetedSource, InsertableSource, InsertableObservable } from "../_common/selection";
 
 export namespace Assembler {
   interface Base {
@@ -37,6 +37,7 @@ export namespace Assembler {
 export default usModule((require, exports) => {
   const { REASONS } = require(ContextBuilder);
   const { CompoundAssembly } = $CompoundAssembly(require);
+  const { selection } = $Common(require);
 
   const NO_SPACE = Object.freeze({
     type: "rejected",

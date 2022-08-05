@@ -2,13 +2,14 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
-import { checkThis, getSubContextPart } from "./_shared";
+import $Shared from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { BudgetedSource } from "../../30-selection";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);
+  const { checkThis, getSubContextPart } = $Shared(require);
 
   /**
    * Converts sources that were discarded during selection into {@link ContextStatus}.

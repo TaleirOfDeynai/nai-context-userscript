@@ -2,14 +2,16 @@ import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import NaiContextBuilder from "@nai/ContextBuilder";
-import { selection } from "../../_shared";
-import { checkThis, getSubContextPart } from "./_shared";
+import $Common from "../../_common";
+import $Shared from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { Assembler } from "../../40-assembly";
 
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);
+  const { selection } = $Common(require);
+  const { checkThis, getSubContextPart } = $Shared(require);
 
   /** Converts sources that were discarded during assembly into {@link ContextStatus}. */
   function forUnbudgeted(results: rx.Observable<Assembler.Rejected>) {

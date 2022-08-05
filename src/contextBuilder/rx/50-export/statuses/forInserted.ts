@@ -5,8 +5,8 @@ import { dew } from "@utils/dew";
 import { first } from "@utils/iterables";
 import NaiContextBuilder from "@nai/ContextBuilder";
 import $QueryOps from "../../../assemblies/queryOps";
-import { selection } from "../../_shared";
-import { checkThis, getSubContextPart } from "./_shared";
+import $Common from "../../_common";
+import $Shared from "./_shared";
 
 import type { AnyValueOf, UndefOr } from "@utils/utility-types";
 import type { ContextStatus } from "@nai/ContextBuilder";
@@ -17,6 +17,8 @@ import type { Assembler } from "../../40-assembly";
 export default usModule((require, exports) => {
   const CB = require(NaiContextBuilder);
   const queryOps = $QueryOps(require);
+  const { selection } = $Common(require);
+  const { checkThis, getSubContextPart } = $Shared(require);
 
   const toReason = (inserted: Assembler.Inserted): AnyValueOf<ReportReasons> => {
     const { activations } = inserted.source;

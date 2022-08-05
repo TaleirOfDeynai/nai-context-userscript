@@ -15,7 +15,7 @@ const assert = (msg: string, check: boolean) => {
  * Validates that `value` passes the given type predicate.  If it fails, an error
  * with `msg` is thrown.
  */
-const assertAs = <T>(msg: string, checkFn: TypePredicate<T>, value: any): T => {
+const assertAs = <T>(msg: string, checkFn: TypePredicate<T, any>, value: any): T => {
   assert(msg, checkFn(value));
   return value;
 };

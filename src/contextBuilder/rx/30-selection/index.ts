@@ -21,7 +21,7 @@ import $Configured from "./configured";
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../10-source";
 import type { ActivationPhaseResult } from "../20-activation";
-import type { BudgetedSource } from "../_shared";
+import type { BudgetedSource } from "../_common/selection";
 
 // Re-export this for convenience.
 export { BudgetedSource };

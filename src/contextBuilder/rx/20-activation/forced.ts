@@ -7,8 +7,8 @@ import ContextBuilder from "@nai/ContextBuilder";
 import type { Observable } from "@utils/rx";
 import type { AnyValueOf } from "@utils/utility-types";
 import type { ReportReasons } from "@nai/ContextBuilder";
+import type { ActivationState } from "../_common/activation";
 import type { ContextSource, SourceType } from "../../ContextSource";
-import type { ActivationState } from ".";
 
 export type ForcedActivation = AnyValueOf<ReportReasons>;
 

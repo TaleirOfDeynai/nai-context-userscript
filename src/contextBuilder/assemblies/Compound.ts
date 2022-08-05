@@ -15,7 +15,7 @@ import $TokenizedAssembly from "./Tokenized";
 import type { UndefOr } from "@utils/utility-types";
 import type { StructuredOutput } from "@nai/ContextBuilder";
 import type { IContextField } from "@nai/ContextModule";
-import type { BudgetedSource } from "../rx/_shared";
+import type { BudgetedSource } from "../rx/_common/selection";
 import type { TrimType } from "../TrimmingProviders";
 import type { ContextContent } from "../ContextContent";
 import type { AssemblyResultMap, AssemblyResult } from "../SearchService";

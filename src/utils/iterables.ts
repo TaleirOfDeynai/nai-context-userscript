@@ -72,7 +72,7 @@ export interface ChainComposition<TIterIn extends Iterable<unknown>> {
   /** Removes falsey values from the iterable and refines the element's type to remove `undefined` and `null`. */
   filter(predicateFn: BooleanConstructor): ChainComposition<Iterable<Exclude<ElementOf<TIterIn>, null | undefined>>>;
   /** Filters to a specific type, as described by the type-guard predicate. */
-  filter<TOut>(predicateFn: TypePredicate<TOut>): ChainComposition<Iterable<TOut>>;
+  filter<TOut extends ElementOf<TIterIn>>(predicateFn: TypePredicate<TOut, ElementOf<TIterIn>>): ChainComposition<Iterable<TOut>>;
   /** Filters to those elements that pass a predicate function. */
   filter(predicateFn: PredicateFn<ElementOf<TIterIn>>): ChainComposition<Iterable<ElementOf<TIterIn>>>;
   /** Collects each applicable element into a tuple. */

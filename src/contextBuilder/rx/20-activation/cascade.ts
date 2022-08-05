@@ -11,8 +11,8 @@ import type { IContextField } from "@nai/ContextModule";
 import type { LoreEntry } from "@nai/Lorebook";
 import type { ExtendField } from "../../ContextSource";
 import type { AssemblyResultMap } from "../../SearchService";
+import type { ActivationState } from "../_common/activation";
 import type { EnabledSource } from "../10-source";
-import type { ActivationState } from ".";
 
 type CascadingSource = ExtendField<EnabledSource, {
   keys: LoreEntry["keys"];

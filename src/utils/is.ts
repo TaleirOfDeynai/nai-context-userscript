@@ -13,7 +13,11 @@ declare global {
   }
 }
 
-export type TypePredicate<TOut extends TIn, TIn = any> = (value: TIn) => value is TOut;
+export type TypePredicate<TOut extends TIn, TIn = unknown>
+  = (value: TIn) => value is TOut;
+
+export type TypePredicateOf<TOut>
+  = <TIn>(value: TIn) => value is TIn & TOut;
 
 export type Thenable<T> = Pick<Promise<T>, "then">;
 

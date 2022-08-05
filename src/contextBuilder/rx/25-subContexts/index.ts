@@ -14,12 +14,14 @@ import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
+import $Common from "../_common";
 import $Category from "./category";
 
 import type { ContextParams } from "../../ParamsService";
-import type { ActivationPhaseResult, ActivatedSource } from "../20-activation";
+import type { ActivatedSource } from "../_common/activation";
+import type { SubContextSource } from "../_common/subContexts";
+import type { ActivationPhaseResult } from "../20-activation";
 import type { SourcePhaseResult } from "../10-source";
-import type { SubContextSource } from "../_shared";
 
 export interface SubContextPhaseResult {
   /** Produces the complete set of {@link SubContextSource} instances. */
@@ -36,6 +38,8 @@ export default usModule((require, exports) => {
   const subContexts = {
     category: $Category(require).createStream
   } as const;
+
+  const { subContexts: { isSubContextSource } } = $Common(require);
 
   function subContextPhase(
     /** The context builder parameters. */
@@ -64,7 +68,7 @@ export default usModule((require, exports) => {
 
     return lazyObject({
       subContexts: () => inFlight.pipe(
-        rxop.filter((source): source is SubContextSource => "subContext" in source),
+        rxop.filter(isSubContextSource),
         rxop.toArray(),
         rxop.map((sources) => new Set(sources)),
         rxop.shareReplay(1)
