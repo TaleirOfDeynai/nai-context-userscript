@@ -21,12 +21,12 @@ import $Configured from "./configured";
 import type { ContextParams } from "../../ParamsService";
 import type { SourcePhaseResult } from "../10-source";
 import type { ActivationPhaseResult } from "../20-activation";
-import type { BudgetedSource } from "../_common/selection";
+import type { BudgetedSource, InsertableSource } from "../_common/selection";
 
 // Re-export this for convenience.
 export { BudgetedSource };
 
-export type SelectionObservable = rx.Observable<BudgetedSource>;
+export type SelectionObservable = rx.Observable<InsertableSource>;
 
 export interface SelectionPhaseResult {
   readonly selected: rx.Observable<Set<BudgetedSource>>;

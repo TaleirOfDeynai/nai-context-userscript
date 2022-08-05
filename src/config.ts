@@ -68,6 +68,7 @@ const selection = {
    * 
    * To have vanilla style ordering, you should structure as so:
    * - `"budgetPriority"`
+   * - `"contextGroup"`
    * - `"reservation"`
    * - ...then any other sorters you'd like to apply.
    * 
@@ -90,6 +91,7 @@ const selection = {
    */
   insertionOrdering: [
     "budgetPriority",
+    "contextGroup",
     "reservation",
     "activationEphemeral",
     "activationForced",

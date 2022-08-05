@@ -5,6 +5,7 @@ import { chain } from "@utils/iterables";
 
 // All the sorting functions available for use.
 import budgetPriority from "./budgetPriority";
+import $ContextGroup from "./contextGroup";
 import $Reservation from "./reservation";
 import activationEphemeral from "./activationEphemeral";
 import activationForced from "./activationForced";
@@ -28,6 +29,7 @@ export type EntrySorter =
 const theModule = usModule((require, exports) => {
   const sorters = Object.freeze({
     budgetPriority,
+    ...$ContextGroup(require),
     ...$Reservation(require),
     activationEphemeral,
     activationForced,

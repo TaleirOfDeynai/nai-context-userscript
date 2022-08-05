@@ -64,10 +64,15 @@ export default usModule((require, exports) => {
       subContexts.activated
     );
 
+    const contextGroups = processing.contextGroups.phaseRunner(
+      contextParams,
+      selectionResults.inFlight
+    );
+
     const assemblyResults = processing.assembly.phaseRunner(
       contextParams,
       selectionResults.totalReservedTokens,
-      selectionResults.inFlight
+      contextGroups.inFlight
     );
 
     const exportResults = processing.export.phaseRunner(

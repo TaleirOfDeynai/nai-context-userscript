@@ -328,7 +328,7 @@ const theModule = usModule((require, exports) => {
 
     return Object.assign(
       new ContextGroup(codec, `S:${name}`, "lore", contextConfig, prefix, suffix),
-      { category: name }
+      { category }
     );
   };
 
@@ -340,4 +340,4 @@ const theModule = usModule((require, exports) => {
 
 export default theModule;
 export type ContextGroup = InstanceType<ReturnType<typeof theModule>["ContextGroup"]>;
-export type CategoryGroup = ContextGroup & { category: string };
+export type CategoryGroup = ContextGroup & { category: CategoryWithSubContext };

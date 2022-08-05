@@ -16,12 +16,13 @@ import $ContextAssembler from "./ContextAssembler";
 
 import type { Assembly } from "../../assemblies";
 import type { ContextParams } from "../../ParamsService";
+import type { InsertableObservable } from "../_common/selection";
 import type { SelectionPhaseResult } from "../30-selection";
 import type { Assembler } from "./ContextAssembler";
 
 // Re-export these for convenience.
-export { Assembler };
-export { InsertableSource, InsertableObservable } from "../_common/selection";
+export { Assembler, InsertableObservable };
+export { InsertableSource } from "../_common/selection";
 
 export interface AssemblyPhaseResult {
   readonly insertions: rx.Observable<Assembler.Inserted>;
@@ -41,8 +42,8 @@ export default usModule((require, exports) => {
     contextParams: ContextParams,
     /** The total reserved tokens, from the selection phase. */
     totalReservedTokens: SelectionPhaseResult["totalReservedTokens"],
-    /** The currently in-flight selections. */
-    inFlightSelections: SelectionPhaseResult["inFlight"]
+    /** The currently in-flight insertable and selected entries. */
+    inFlightSelections: InsertableObservable
   ): AssemblyPhaseResult {
     const assembler = totalReservedTokens.pipe(
       rxop.map((reservedTokens) => contextAssembler(contextParams, reservedTokens)),
