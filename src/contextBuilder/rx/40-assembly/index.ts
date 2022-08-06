@@ -14,6 +14,7 @@ import { usModule } from "@utils/usModule";
 import { lazyObject } from "@utils/object";
 import $ContextAssembler from "./ContextAssembler";
 
+import type { ContextGroup } from "../../assemblies/ContextGroup";
 import type { Assembly } from "../../assemblies";
 import type { ContextParams } from "../../ParamsService";
 import type { InsertableObservable } from "../_common/selection";
@@ -48,7 +49,10 @@ export default usModule((require, exports) => {
     /** The context groups, if any, from the context groups phase. */
     contextGroups: ContextGroupPhaseResult["contextGroups"]
   ): AssemblyPhaseResult {
-    const assembler = rx.forkJoin([contextGroups, totalReservedTokens]).pipe(
+    const assembler = rx.forkJoin([
+      contextGroups.pipe(rxop.defaultIfEmpty(new Set<ContextGroup>())),
+      totalReservedTokens
+    ]).pipe(
       rxop.map((args) => contextAssembler(contextParams, ...args)),
       rxop.map((processFn) => processFn(inFlightSelections)),
       rxop.single(),

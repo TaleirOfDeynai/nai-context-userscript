@@ -122,15 +122,10 @@ export default usModule((require, exports) => {
       rxop.mergeMap(async (inserted): Promise<ContextStatus> => {
         const { source, result } = inserted;
 
-        const field = source.entry.field ?? {
-          text: source.entry.text,
-          contextConfig: source.entry.contextConfig
-        };
-
         const stats = await selection.getBudgetStats(source);
 
         return Object.assign(
-          new ContextStatus(field),
+          new ContextStatus(source.entry.field),
           checkThis({
             identifier: source.identifier,
             unqiueId: source.uniqueId,

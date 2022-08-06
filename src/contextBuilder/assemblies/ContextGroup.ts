@@ -55,6 +55,7 @@ const theModule = usModule((require, exports) => {
     constructor(
       codec: AugmentedTokenCodec,
       identifier: string,
+      uniqueId: string,
       type: SourceType,
       contextConfig: Readonly<ContextConfig>,
       prefix: TokenizedFragment,
@@ -63,12 +64,11 @@ const theModule = usModule((require, exports) => {
       super(codec, contextConfig.tokenBudget);
 
       this.#identifier = identifier;
+      this.#uniqueId = uniqueId;
       this.#type = type;
       this.#contextConfig = contextConfig;
       this.#prefix = prefix;
       this.#suffix = suffix;
-
-      this.#uniqueId = uuid.v4();
     }
 
     // Implementations for `SourceLike`.
@@ -90,6 +90,14 @@ const theModule = usModule((require, exports) => {
   
     get entry() {
       return this;
+    }
+
+    get field() {
+      return {
+        text: "",
+        id: this.#uniqueId,
+        contextConfig: this.#contextConfig
+      };
     }
 
     // Implementations for `ContentLike`.
@@ -313,7 +321,7 @@ const theModule = usModule((require, exports) => {
     codec: AugmentedTokenCodec,
     category: CategoryWithSubContext
   ): Promise<CategoryGroup> {
-    const { name, subcontextSettings } = category;
+    const { name, id, subcontextSettings } = category;
     const { contextConfig } = subcontextSettings;
 
     const [prefix, suffix] = await Promise.all([
@@ -332,7 +340,15 @@ const theModule = usModule((require, exports) => {
     ]) as [TokenizedFragment, TokenizedFragment];
 
     return Object.assign(
-      new ContextGroup(codec, `S:${name}`, "lore", contextConfig, prefix, suffix),
+      new ContextGroup(
+        codec,
+        `S:${name}`,
+        id ?? uuid.v4(),
+        "lore",
+        contextConfig,
+        prefix,
+        suffix
+      ),
       { category }
     );
   }

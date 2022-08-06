@@ -55,10 +55,10 @@ export interface AssemblyLike extends ITokenizedAssembly {
 /** The bare minimum needed for content. */
 export interface ContentLike {
   readonly text: string;
+  readonly field: Readonly<IContextField>;
   readonly contextConfig: ContextContent["contextConfig"];
   readonly trimmed: Promise<UndefOr<AssemblyLike>>;
 
-  readonly field?: IContextField;
   readonly fieldConfig?: Record<string, unknown>;
   isCursorLoose?: ContextContent["isCursorLoose"];
   rebudget?: ContextContent["rebudget"];

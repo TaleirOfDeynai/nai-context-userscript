@@ -92,7 +92,7 @@ export default usModule((require, exports) => {
           return exported.contextRecorder;
         },
         rxop.mergeMap(async (recorder): Promise<SubContextSource> => {
-          const theField = { text: recorder.output, contextConfig };
+          const theField = { text: recorder.output, id: group.key, contextConfig };
           const theContent = await ContextContent.forField(theField, contextParams);
           return Object.assign(
             contextSource.create(theContent, "lore", `S:${category.name}`),

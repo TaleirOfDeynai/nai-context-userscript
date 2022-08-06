@@ -50,7 +50,7 @@ export default usModule((require, exports) => {
     storyContent: StoryContent,
     sources: rx.Observable<T>
   ) => {
-    const catKvps = storyContent.lorebook.categories.map((c) => [c.name, c] as const);
+    const catKvps = storyContent.lorebook.categories.map((c) => [c.id ?? c.name, c] as const);
     const isCategoryEnabled = checkCategory(new Map(catKvps));
 
     const [enabled, disabled] = rx.partition(sources, (source) => {
