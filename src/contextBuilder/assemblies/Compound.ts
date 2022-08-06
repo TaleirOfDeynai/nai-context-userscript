@@ -721,17 +721,6 @@ const theModule = usModule((require, exports) => {
         isSuccessResult, result
       );
 
-      // It's possible that the cursor is positioned before the prefix
-      // or after the suffix.  In these cases, we don't need to do any
-      // splitting and we can just convert them into the appropriate
-      // adjacent insertion.
-      const firstFrag = getFirstFragment(target.assembly) ?? target.assembly.prefix;
-      if (cursor.offset <= ss.beforeFragment(firstFrag))
-        return this.#doInsertAdjacent(iterResult, source, inserted, "insertBefore");
-      const lastFrag = getLastFragment(target.assembly) ?? target.assembly.suffix;
-      if (cursor.offset >= ss.afterFragment(lastFrag))
-        return this.#doInsertAdjacent(iterResult, source, inserted, "insertAfter");
-
       checks: {
         // If there is no source, we can't check if we can even split.
         if (!target.source) break checks;

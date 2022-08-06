@@ -133,8 +133,11 @@ const theModule = usModule((require, exports) => {
     readonly #prefix: TokenizedFragment;
 
     get content(): readonly TextFragment[] {
+      const text = super.text;
+      if (!text) return Object.freeze([]);
+
       let offset = this.#prefix.text.length;
-      return Object.freeze([ss.createFragment(super.text, offset)]);
+      return Object.freeze([ss.createFragment(text, offset)]);
     }
 
     get suffix(): TextFragment {
@@ -267,6 +270,8 @@ const theModule = usModule((require, exports) => {
 
     /** Yields the structured output of the assembly. */
     *structuredOutput(): Iterable<StructuredOutput> {
+      if (this.isEmpty) return;
+
       const { uniqueId: identifier, type } = this;
       if (this.#prefix.text) yield { identifier, type, text: this.#prefix.text };
       yield* super.structuredOutput();

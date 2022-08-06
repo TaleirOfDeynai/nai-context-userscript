@@ -58,6 +58,45 @@ export default usModule((require, exports) => {
   const { positionsFrom } = $PositionsFrom(require);
 
   /**
+   * Handles some edge-cases regarding the insertion position indicated
+   * by a cursor.
+   */
+  const fixCursor = (
+    /** The assembly of the cursor. */
+    assembly: IFragmentAssembly,
+    /** The cursor to check. */
+    cursor: Cursor.Fragment
+  ): PositionResult => {
+    // If the cursor is on the outer boundary of the assembly, then
+    // we need to insert before or after the assembly.
+    const firstFrag = queryOps.getFirstFragment(assembly);
+    if (firstFrag && cursor.offset <= ss.beforeFragment(firstFrag))
+      return { type: "insertBefore", shunted: 0 };
+    const lastFrag = queryOps.getLastFragment(assembly);
+    if (lastFrag && cursor.offset >= ss.afterFragment(lastFrag))
+      return { type: "insertAfter", shunted: 0 };
+
+    // We're not going to split on the prefix or suffix, just to avoid
+    // the complexity of it, so we need to check where we are.
+    switch (cursorOps.positionOf(assembly, cursor)) {
+      // This is the best case; everything is just fine, but this
+      // fragment will need to be split.
+      case "content": return { type: "inside", cursor };
+      // This tells it to insert before this fragment.
+      case "prefix": return {
+        type: "insertBefore",
+        shunted: cursor.offset - ss.beforeFragment(assembly.prefix)
+      };
+      // And this after this fragment.
+      case "suffix": return {
+        type: "insertAfter",
+        shunted: ss.afterFragment(assembly.suffix) - cursor.offset
+      };
+      default: throw new Error("Unexpected position.");
+    }
+  };
+
+  /**
    * Locates a position relative to the given `position`.
    * 
    * This is intended to be used during the insertion phase to find
@@ -88,7 +127,7 @@ export default usModule((require, exports) => {
 
     // Fast-path: If we're given an offset of 0, we don't need to move
     // the cursor at all.
-    if (offset === 0) return { type: "inside", cursor: initCursor };
+    if (offset === 0) return fixCursor(assembly, initCursor);
 
     const result = dew(() => {
       // Tracks how many elements we still need to pass.
@@ -113,24 +152,7 @@ export default usModule((require, exports) => {
     // If we got a remainder, we tell it to carry on.
     if (isNumber(result)) return { type: direction, remainder: result };
 
-    // We're not going to split on the prefix or suffix, just to avoid
-    // the complexity of it, so we need to check where we are.
-    switch (cursorOps.positionOf(assembly, result)) {
-      // This is the best case; everything is just fine, but this
-      // fragment will need to be split.
-      case "content": return { type: "inside", cursor: result };
-      // This tells it to insert before this fragment.
-      case "prefix": return {
-        type: "insertBefore",
-        shunted: result.offset - ss.beforeFragment(assembly.prefix)
-      };
-      // And this after this fragment.
-      case "suffix": return {
-        type: "insertAfter",
-        shunted: ss.afterFragment(assembly.suffix) - result.offset
-      };
-      default: throw new Error("Unexpected position.");
-    }
+    return fixCursor(assembly, result);
   }
 
   return Object.assign(exports, {

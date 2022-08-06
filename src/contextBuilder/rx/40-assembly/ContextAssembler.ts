@@ -21,10 +21,16 @@ import type { CategorizedSource } from "../_common/categories";
 
 export namespace Assembler {
   interface Base {
+    /** The source of the entry that was inserted. */
     source: InsertableSource;
+    /** Reserved tokens still remaining at time of insertion. */
     reservedTokens: number;
+    /** Tokens currently available at time of insertion. */
     availableTokens: number;
+    /** Tokens currently consumed at time of insertion. */
     consumedTokens: number;
+    /** Actual change in tokens from insertion. */
+    deltaTokens: number;
   }
 
   export interface Rejected extends Base {
@@ -68,7 +74,7 @@ export default usModule((require, exports) => {
   };
 
   const getStartText = (result: Insertion.SuccessResult) => {
-    if (result.type === "initial") return undefined;
+    if (result.type === "initial") return "as initial entry";
     const { location } = result;
 
     if (location.isKeyRelative) {
@@ -85,9 +91,10 @@ export default usModule((require, exports) => {
     }
   };
 
-  const getGroupText = (group: UndefOr<ContextGroup>) => {
+  const getGroupText = (group: UndefOr<ContextGroup>, inserted: boolean) => {
     if (!group) return undefined;
-    return `of group "${group.identifier}"`;
+    if (inserted) return `of group "${group.identifier}"`;
+    return `of pending group "${group.identifier}"`;
   };
 
   const getRelativeText = (result: Insertion.SuccessResult) => {
@@ -275,36 +282,6 @@ export default usModule((require, exports) => {
       return Math.min(tokenBudget, this.#currentBudget);
     }
 
-    #buildStructuredOutput() {
-      const fromInserted = this.#assembly.structuredOutput();
-      const fromGroups = IterOps.chain(this.#waitingGroups)
-        .collect((group) => {
-          const tokenCount = group.tokens.length;
-          if (tokenCount === 0) return undefined;
-
-          const { identifier, type } = group;
-          const text = [
-            `<Uninserted context-group "`,
-            identifier,
-            `" with ${tokenCount} tokens.>\n`
-          ].join(" ");
-
-          return { identifier, type, text } as StructuredOutput;
-        })
-        .toArray();
-      
-      if (!fromGroups.length) return [...fromInserted];
-
-      // I want a newline between the waiting groups and real entries.
-      const init = IterOps.take(fromGroups, fromGroups.length - 1);
-      const last = IterOps.last(fromGroups) as StructuredOutput;
-      return [
-        ...init,
-        { ...last, text: `${last.text}\n`},
-        ...fromInserted
-      ];
-    }
-
     #doReport(
       source: InsertableSource,
       result: Insertion.Result,
@@ -314,23 +291,25 @@ export default usModule((require, exports) => {
       const reservedTokens = this.#reservedTokens;
       const availableTokens = this.#availableTokens;
       const consumedTokens = this.#consumedTokens;
+      const deltaTokens = prevTokens - availableTokens;
 
       if (result.type === "rejected") {
         this.#reportSubject.next(Object.freeze({
           source, result,
           reservedTokens,
           availableTokens,
-          consumedTokens
+          consumedTokens,
+          deltaTokens
         }));
       }
       else {
-        const structuredOutput = this.#buildStructuredOutput();
+        const structuredOutput = [...this.#assembly.structuredOutput()];
 
         const description = [
           `"${source.identifier}"`,
           getInsertionText(result),
           getStartText(result),
-          getGroupText(group),
+          getGroupText(group, group ? this.#assembly.hasAssembly(group) : false),
           getRelativeText(result),
           getShuntingText(result),
         ].filter(Boolean).join(" ");
@@ -342,6 +321,7 @@ export default usModule((require, exports) => {
           reservedTokens,
           availableTokens,
           consumedTokens,
+          deltaTokens,
           description,
           structuredOutput
         }));

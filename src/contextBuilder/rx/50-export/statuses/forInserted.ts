@@ -5,6 +5,7 @@ import { dew } from "@utils/dew";
 import { first } from "@utils/iterables";
 import NaiContextBuilder from "@nai/ContextBuilder";
 import $QueryOps from "../../../assemblies/queryOps";
+import $ContextGroup from "../../../assemblies/ContextGroup";
 import $Common from "../../_common";
 import $Shared from "./_shared";
 
@@ -17,10 +18,14 @@ import type { Assembler } from "../../40-assembly";
 export default usModule((require, exports) => {
   const { ContextStatus, REASONS } = require(NaiContextBuilder);
   const queryOps = $QueryOps(require);
+  const { isContextGroup } = $ContextGroup(require);
   const { selection } = $Common(require);
   const { checkThis, getSubContextPart } = $Shared(require);
 
   const toReason = (inserted: Assembler.Inserted): string => {
+    if (isContextGroup(inserted.source))
+      return inserted.source.isEmpty ? "empty group" : "filled group";
+
     const { activations } = inserted.source;
 
     // Sub-contexts use the default reason.
@@ -57,6 +62,9 @@ export default usModule((require, exports) => {
   };
 
   const toTrimState = (inserted: Assembler.Inserted): AnyValueOf<TrimStates> => {
+    if (isContextGroup(inserted.source))
+      return inserted.source.isEmpty ? "not included" : "included";
+
     const { assembly } = inserted.result;
     if (assembly.isSource) return "included";
 
@@ -67,6 +75,8 @@ export default usModule((require, exports) => {
   };
 
   const toTrimMethod = (inserted: Assembler.Inserted): AnyValueOf<TrimMethods> => {
+    if (isContextGroup(inserted.source)) return "no trim";
+
     const { contextConfig } = inserted.source.entry;
     if (contextConfig.trimDirection === "doNotTrim") return "no trim";
     return contextConfig.maximumTrimType;
@@ -129,7 +139,9 @@ export default usModule((require, exports) => {
             state: toTrimState(inserted),
             reason: toReason(inserted),
             includedText: result.assembly.text,
-            calculatedTokens: result.assembly.tokens.length,
+            // It's possible that inserting a group could actually reduce the
+            // tokens used.  We're just not going to report that.
+            calculatedTokens: Math.max(0, inserted.deltaTokens),
             actualReservedTokens: stats.actualReservedTokens,
             trimMethod: toTrimMethod(inserted)
           }),
