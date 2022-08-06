@@ -18,6 +18,7 @@ import type { Assembly } from "../../assemblies";
 import type { ContextParams } from "../../ParamsService";
 import type { InsertableObservable } from "../_common/selection";
 import type { SelectionPhaseResult } from "../30-selection";
+import type { ContextGroupPhaseResult } from "../35-contextGroups";
 import type { Assembler } from "./ContextAssembler";
 
 // Re-export these for convenience.
@@ -43,10 +44,12 @@ export default usModule((require, exports) => {
     /** The total reserved tokens, from the selection phase. */
     totalReservedTokens: SelectionPhaseResult["totalReservedTokens"],
     /** The currently in-flight insertable and selected entries. */
-    inFlightSelections: InsertableObservable
+    inFlightSelections: InsertableObservable,
+    /** The context groups, if any, from the context groups phase. */
+    contextGroups: ContextGroupPhaseResult["contextGroups"]
   ): AssemblyPhaseResult {
-    const assembler = totalReservedTokens.pipe(
-      rxop.map((reservedTokens) => contextAssembler(contextParams, reservedTokens)),
+    const assembler = rx.forkJoin([contextGroups, totalReservedTokens]).pipe(
+      rxop.map((args) => contextAssembler(contextParams, ...args)),
       rxop.map((processFn) => processFn(inFlightSelections)),
       rxop.single(),
       rxop.shareReplay(1)

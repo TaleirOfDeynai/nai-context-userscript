@@ -69,7 +69,9 @@ export default usModule((require, exports) => {
           const assembled = assemblyRunner(
             subContextParams,
             selected.totalReservedTokens,
-            selected.inFlight
+            selected.inFlight,
+            // No context-groups are in use here.
+            rx.EMPTY
           );
 
           const exported = exportRunner(

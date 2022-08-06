@@ -24,6 +24,7 @@ import type { Cursor } from "../cursors";
 import type { ITokenizedAssembly } from "./_interfaces";
 import type { FragmentAssembly } from "./Fragment";
 import type { TokenizedAssembly } from "./Tokenized";
+import type { ContextGroup } from "./ContextGroup";
 import type { Position, IterDirection, InsertionPosition } from "./positionOps";
 
 // For JSDoc links...
@@ -354,6 +355,34 @@ const theModule = usModule((require, exports) => {
 
       // Should not happen, but let me know if it does.
       throw new Error("Unexpected end of iteration.");
+    }
+
+    /** Determines if an assembly has been inserted. */
+    hasAssembly(assembly: AssemblyLike) {
+      return this.#assemblies.includes(assembly);
+    }
+
+    /** Determines if some assembly was inserted with the given source. */
+    hasSource(source: SourceLike) {
+      return this.#knownSources.has(source);
+    }
+
+    /**
+     * Called when a context-group that is contained within this assembly has
+     * its tokens updated.  This brings the compound assembly's tokens up to
+     * date.
+     * 
+     * No error is thrown if the group is not yet contained within this
+     * assembly; it just will not update in that case.
+     */
+    async updatedGroup(group: ContextGroup): Promise<number> {
+      // We only need to update if we have this assembly.
+      if (!this.hasAssembly(group)) return 0;
+
+      const newTokens = await this.mendTokens(this.#assemblies.map(toTokens));
+      const diffLength = newTokens.length - this.#tokens.length;
+      this.#tokens = newTokens;
+      return diffLength;
     }
 
     /**

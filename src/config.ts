@@ -138,7 +138,7 @@ const subContext = {
    *   sub-contexts in isolation can be done concurrently, which results
    *   in better background worker utilization.
    */
-  groupedInsertion: false
+  groupedInsertion: true
 } as const;
 
 /**

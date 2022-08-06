@@ -330,11 +330,22 @@ const theModule = usModule((require, exports) => {
       new ContextGroup(codec, `S:${name}`, "lore", contextConfig, prefix, suffix),
       { category }
     );
-  };
+  }
+
+  function isContextGroup<T>(value: T): value is T & ContextGroup {
+    return value instanceof ContextGroup;
+  }
+
+  function isCategoryGroup<T>(value: T): value is T & CategoryGroup {
+    if (!isContextGroup(value)) return false;
+    return "category" in value;
+  }
 
   return Object.assign(exports, {
     ContextGroup,
-    forCategory
+    forCategory,
+    isContextGroup,
+    isCategoryGroup
   });
 });
 

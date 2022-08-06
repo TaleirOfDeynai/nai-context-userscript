@@ -10,7 +10,8 @@
     "prepending",
     "rebudget",
     "rxop",
-    "subcontext"
+    "subcontext",
+    "uninserted"
   ],
   "typescript.tsdk": "node_modules/typescript/lib"
 }

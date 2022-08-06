@@ -72,7 +72,8 @@ export default usModule((require, exports) => {
     const assemblyResults = processing.assembly.phaseRunner(
       contextParams,
       selectionResults.totalReservedTokens,
-      contextGroups.inFlight
+      contextGroups.inFlight,
+      contextGroups.contextGroups
     );
 
     const exportResults = processing.export.phaseRunner(
