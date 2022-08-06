@@ -23,7 +23,7 @@ export default usModule((require, exports) => {
     state.source.type === "ephemeral";
 
   const checkActivation = (storyContent: StoryContent) => {
-    const { step } = storyContent.story;
+    const step = storyContent.getStoryStep();
     return (states: Obs<ActivationState>): Obs<ActivationState> => states.pipe(
       rxop.filter(isEphemeral),
       rxop.filter(({ source: { entry } }) => helpers.checkActivation(entry.field, step)),

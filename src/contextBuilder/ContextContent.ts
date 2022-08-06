@@ -214,7 +214,7 @@ const theModule = usModule((require, exports) => {
     static async forStory(contextParams: ContextParams) {
       const { storyState } = contextParams;
       const { storyContextConfig } = storyState.storyContent;
-      const storyText = storyState.storyContent.story.getText();
+      const storyText = storyState.storyContent.getStoryText();
 
       const contextConfig = {
         ...storyContextConfig,

@@ -65,8 +65,11 @@ export interface StoryContent {
   phraseBiasGroups: unknown | undefined;
   settings: StorySettings;
   settingsDirty: boolean;
-  story: StoryController;
+  story?: StoryController;
   storyContextConfig: Lorebook.ContextConfig;
+
+  getStoryText(): string;
+  getStoryStep(): number;
 }
 
 export interface StoryMetadata {
