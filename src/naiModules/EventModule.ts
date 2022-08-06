@@ -151,7 +151,7 @@ export interface IEventModule {
 }
 
 class EventModule extends ModuleDef<IEventModule> {
-  moduleId = 20203;
+  moduleId = 69485;
   expectedExports = 4;
   mapping = {
     "bi": ["StoryState", "function"],

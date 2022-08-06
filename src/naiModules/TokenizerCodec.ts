@@ -44,7 +44,7 @@ export interface ITokenizerCodec {
 }
 
 class TokenizerCodec extends ModuleDef<ITokenizerCodec> {
-  moduleId = 75310;
+  moduleId = 53744;
   expectedExports = 3;
   mapping = {
     "PT": ["GlobalEncoder", "function"]

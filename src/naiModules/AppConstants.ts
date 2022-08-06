@@ -6,7 +6,7 @@ export interface IAppConstants {
 }
 
 class AppConstants extends ModuleDef<IAppConstants> {
-  moduleId = 40371;
+  moduleId = 68098;
   expectedExports = 50;
   mapping = {
     "uV": ["contextSize", "number"],

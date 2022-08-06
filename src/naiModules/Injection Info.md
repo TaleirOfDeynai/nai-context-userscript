@@ -11,6 +11,7 @@ g: typeof AppConstants;
 p: typeof EventModule;
 v: typeof TokenizerHelpers;
 b: typeof TokenizerCodec;
+B: typeof ModelModule;
 _: typeof ContextModule;
 w: typeof EphemeralHelpers;
 C: typeof LoreEntryHelpers;
@@ -18,7 +19,7 @@ C: typeof LoreEntryHelpers;
 
 ```
 // typeof ContextBuilder
-43752
+63237
 
 o = n(41520),
 s = n(66434),
@@ -26,19 +27,19 @@ A = n(7444),
 c = n(27835),
 u = n(8057),
 l = n(53693),
-h = n(85466),
+h = n(6549),
 f = n.n(h),
 d = n(5185),
-g = n(40371),
-p = n(20203),
-y = n(84454),
-m = n(15459),
-v = n(97882),
-b = n(75310),
-I = n(76964),
-E = n(80872),
-B = n(66965),
-_ = n(65417),
-w = n(23952),
-C = n(38734);
+g = n(68098),
+p = n(69485),
+y = n(38209),
+m = n(74354),
+v = n(51951),
+b = n(53744),
+I = n(96217),
+E = n(38453),
+B = n(81229),
+_ = n(29818),
+w = n(72977),
+C = n(64796);
 ```
