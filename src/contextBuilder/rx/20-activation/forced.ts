@@ -5,12 +5,14 @@ import { usModule } from "@utils/usModule";
 import ContextBuilder from "@nai/ContextBuilder";
 
 import type { Observable } from "@utils/rx";
-import type { AnyValueOf } from "@utils/utility-types";
-import type { ReportReasons } from "@nai/ContextBuilder";
 import type { ActivationState } from "../_common/activation";
 import type { ContextSource, SourceType } from "../../ContextSource";
 
-export type ForcedActivation = AnyValueOf<ReportReasons>;
+// For JSDoc links...
+import type { ReportReasons } from "@nai/ContextBuilder";
+
+/** Typically, one of {@link ReportReasons}. */
+export type ForcedActivation = string;
 
 /**
  * Checks each {@link ContextSource} for forced activation conditions.

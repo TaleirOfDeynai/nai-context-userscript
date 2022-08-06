@@ -501,13 +501,8 @@ const theModule = usModule((require, exports) => {
     #getActivator(source: SourceLike, target: SourceLike): UndefOr<AssemblyResultMap> {
       const { activations } = source;
       if (!activations) return undefined;
-
       if (target.type === "story") return activations.get("keyed");
-
-      const { field } = target.entry;
-      if (!field) return undefined;
-
-      return activations.get("cascade")?.matches.get(field);
+      return activations.get("cascade")?.matches.get(target);
     }
 
     #handleSelection(

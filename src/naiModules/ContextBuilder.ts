@@ -28,7 +28,7 @@ export interface ReportReasons {
   EphemeralActive: "ephemeral active";
   EphemeralInactive: "ephemeral inactive";
   KeyTriggered: "key activated";
-  KeyTriggeredNonStory: "key (non-story)";
+  KeyTriggeredNonStory: "key in: ";
   NoContextKey: "no key in context";
   NoKeyTriggered: "no key";
   NoSpace: "no space";
@@ -87,7 +87,8 @@ export namespace Virtual {
     /** Misspelled in NAI source. */
     unqiueId: string;
     state: AnyValueOf<TrimStates>;
-    reason: AnyValueOf<ReportReasons>;
+    /** Expected to be one of the {@link ReportReasons}. */
+    reason: string;
     triggeringKey: string;
     keyIndex: number;
     includedText: string;

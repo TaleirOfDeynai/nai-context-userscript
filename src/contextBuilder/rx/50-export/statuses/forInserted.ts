@@ -10,31 +10,50 @@ import $Shared from "./_shared";
 
 import type { AnyValueOf, UndefOr } from "@utils/utility-types";
 import type { ContextStatus } from "@nai/ContextBuilder";
-import type { TrimStates, TrimMethods, ReportReasons } from "@nai/ContextBuilder";
+import type { TrimStates, TrimMethods } from "@nai/ContextBuilder";
 import type { AssemblyResultMap } from "../../../SearchService";
 import type { Assembler } from "../../40-assembly";
 
 export default usModule((require, exports) => {
-  const CB = require(NaiContextBuilder);
+  const { ContextStatus, REASONS } = require(NaiContextBuilder);
   const queryOps = $QueryOps(require);
   const { selection } = $Common(require);
   const { checkThis, getSubContextPart } = $Shared(require);
 
-  const toReason = (inserted: Assembler.Inserted): AnyValueOf<ReportReasons> => {
+  const toReason = (inserted: Assembler.Inserted): string => {
     const { activations } = inserted.source;
 
     // Sub-contexts use the default reason.
-    if (!activations) return CB.REASONS.Default;
+    if (!activations) return REASONS.Default;
 
     // Forced activations provide their own reason.
-    const forced = activations.get("forced");
-    if (forced) return forced;
+    forcedChecks: {
+      const forced = activations.get("forced");
+      if (!forced) break forcedChecks;
+      return forced;
+    }
 
-    if (activations.has("ephemeral")) return CB.REASONS.EphemeralActive;
-    if (activations.has("keyed")) return CB.REASONS.KeyTriggered;
-    if (activations.has("cascade")) return CB.REASONS.KeyTriggeredNonStory;
+    ephemeralChecks: {
+      if (!activations.has("ephemeral")) break ephemeralChecks;
+      return REASONS.EphemeralActive;
+    }
+    
+    keyedChecks: {
+      if (!activations.has("keyed")) break keyedChecks;
+      return REASONS.KeyTriggered;
+    }
 
-    return CB.REASONS.Default;
+    // NovelAI now includes the identifier of the matched entry.
+    cascadeChecks: {
+      const cascade = activations.get("cascade");
+      if (!cascade) break cascadeChecks;
+      const firstDegree = first(cascade.matches);
+      if (!firstDegree) break cascadeChecks;
+      const [source] = firstDegree;
+      return `${REASONS.KeyTriggeredNonStory}${source.identifier}`;
+    }
+
+    return REASONS.Default;
   };
 
   const toTrimState = (inserted: Assembler.Inserted): AnyValueOf<TrimStates> => {
@@ -101,7 +120,7 @@ export default usModule((require, exports) => {
         const stats = await selection.getBudgetStats(source);
 
         return Object.assign(
-          new CB.ContextStatus(field),
+          new ContextStatus(field),
           checkThis({
             identifier: source.identifier,
             unqiueId: source.uniqueId,

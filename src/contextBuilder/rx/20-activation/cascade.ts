@@ -12,6 +12,7 @@ import type { LoreEntry } from "@nai/Lorebook";
 import type { ExtendField } from "../../ContextSource";
 import type { AssemblyResultMap } from "../../SearchService";
 import type { ActivationState } from "../_common/activation";
+import type { SomeContextSource } from "../_common";
 import type { EnabledSource } from "../10-source";
 
 type CascadingSource = ExtendField<EnabledSource, {
@@ -50,7 +51,7 @@ export interface CascadeActivation {
    * A record of the matches from each activated entry that this entry
    * found a keyword match within.
    */
-  matches: Map<IContextField, AssemblyResultMap>;
+  matches: Map<SomeContextSource, AssemblyResultMap>;
 }
 
 /**
@@ -116,8 +117,8 @@ export default usModule((require, exports) => {
               initialDegree: curDegree,
               finalDegree: curDegree,
               matches: new Map()
-            };
-            data.matches.set(activated.entry, results);
+            } as CascadeActivation;
+            data.matches.set(activated, results);
             state.activations.set("cascade", data);
 
             // Update the final degree based on the current degree.
