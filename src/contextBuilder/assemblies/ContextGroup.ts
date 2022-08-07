@@ -2,7 +2,9 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { assert } from "@utils/assert";
+import * as IterOps from "@utils/iterables";
 import UUID from "@nai/UUID";
+import getTokensForSplit from "./tokenOps/getTokensForSplit";
 import makeCursor from "../cursors/Fragment";
 import $TextSplitterService from "../TextSplitterService";
 import $CursorOps from "./cursorOps";
@@ -22,6 +24,9 @@ import type { IFragmentAssembly } from "./_interfaces";
 import type { TokenizedAssembly } from "./Tokenized";
 import type { AssemblyLike, ContentLike, SourceLike } from "./Compound";
 import type { Position, IterDirection, InsertionPosition } from "./positionOps";
+
+// For JSDoc links...
+import type { TrimOptions } from "../TrimmingService";
 
 type CategoryWithSubContext = Categories.BaseCategory & Categories.WithSubcontext;
 
@@ -69,7 +74,24 @@ const theModule = usModule((require, exports) => {
       this.#contextConfig = contextConfig;
       this.#prefix = prefix;
       this.#suffix = suffix;
+      this.#trimmedFrag = undefined;
     }
+
+    /**
+     * Creates a fragment from {@link Compound.text}, but emulates the
+     * behavior of trimming with {@link TrimOptions.preserveEnds} set
+     * to `false`.
+     * 
+     * This is the typical of lorebook entries.
+     */
+    get trimmedFrag(): TextFragment {
+      return this.#trimmedFrag ??= dew(() => {
+        const text = this.isEmpty ? "" : super.text;
+        const offset = this.#prefix.text.length;
+        return this.#trimEnds(ss.createFragment(text, offset));
+      });
+    }
+    #trimmedFrag: UndefOr<TextFragment>;
 
     // Implementations for `SourceLike`.
 
@@ -122,7 +144,7 @@ const theModule = usModule((require, exports) => {
 
       return [
         this.#prefix.text,
-        super.text,
+        this.trimmedFrag.content,
         this.#suffix.text
       ].join("");
     }
@@ -141,11 +163,11 @@ const theModule = usModule((require, exports) => {
     readonly #prefix: TokenizedFragment;
 
     get content(): readonly TextFragment[] {
-      const text = super.text;
-      if (!text) return Object.freeze([]);
+      const fragment = this.trimmedFrag;
+      if (!fragment.content) return Object.freeze([]);
 
-      let offset = this.#prefix.text.length;
-      return Object.freeze([ss.createFragment(text, offset)]);
+      let offset = this.#prefix.text.length + fragment.offset;
+      return Object.freeze([ss.createFragment(fragment.content, offset)]);
     }
 
     get suffix(): TextFragment {
@@ -187,7 +209,10 @@ const theModule = usModule((require, exports) => {
           if (!asm.isRelatedTo(cursor.origin)) break checks;
           // It may still be in a split sub-assembly.
           if (!asm.isFoundIn(cursor)) break checks;
-          return makeCursor(this, offset);
+          // In case the cursor was in a trimmed portion at the start
+          // or end of the content, adjust the cursor so it's in a
+          // valid location for this assembly.
+          return cursorOps.findBest(this, makeCursor(this, offset), true);
         }
 
         offset += asm.text.length;
@@ -280,9 +305,43 @@ const theModule = usModule((require, exports) => {
     *structuredOutput(): Iterable<StructuredOutput> {
       if (this.isEmpty) return;
 
+      // Similar to the problem outlined in `mendTokens`, the structured
+      // output must also reflect the trimmed `text` or NovelAI will fail
+      // an assertion.
+
+      // Fortunately, `trimmedFrag` should be correct and `super.structuredOutput`
+      // should concatenate into `super.text`.  So, we can just convert each
+      // element into fragments, slice up `trimmedFrag` and replace the `text`
+      // of the structured output.
+
       const { uniqueId: identifier, type } = this;
+      // Yield the prefix, if needed.
       if (this.#prefix.text) yield { identifier, type, text: this.#prefix.text };
-      yield* super.structuredOutput();
+
+      // Here we work on the content.
+      let remaining = this.trimmedFrag;
+      let offset = 0;
+      for (const so of super.structuredOutput()) {
+        // There's probably no reason to yield empty elements.
+        if (!so.text) continue;
+
+        const srcFrag = ss.createFragment(so.text, offset);
+        const splitOffset = srcFrag.offset + srcFrag.content.length;
+        if (ss.isOffsetInside(splitOffset, remaining)) {
+          const [left, right] = ss.splitFragmentAt(remaining, splitOffset);
+          yield { ...so, text: left.content };
+          remaining = right;
+        }
+        else {
+          // We'd better be done!
+          yield { ...so, text: remaining.content };
+          remaining = ss.createFragment("", splitOffset);
+        }
+        
+        offset += so.text.length;
+      }
+
+      // Yield the suffix, if needed.
       if (this.#suffix.text) yield { identifier, type, text: this.#suffix.text };
     }
 
@@ -308,11 +367,102 @@ const theModule = usModule((require, exports) => {
     }
 
     protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
+      // We have a problem here; we need the tokens to decode into the
+      // same text as will be in `this.text`, but these tokens may not
+      // reflect that. The whitespace that is removed in `trimmedFrag`
+      // is still present in the tokens.  Sadly, we must do work some
+      // foul magic to get this internally consistent.
+
+      // First, mend the tokens as they were given.
+      const origTokens = await super.mendTokens(tokensToMend);
+      // Now, we'll need to decode them, since the `assemblies` array is
+      // not yet updated.  Accessing `text` or `trimmedText` will produce
+      // an outdated result.
+      const origFrag = ss.createFragment(await this.codec.decode(origTokens), 0);
+      // And now apply the trimming behavior.  The fragment's offsets will
+      // tell us how much was trimmed.  We can use this to trim the tokens.
+      const trimmedFrag = this.#trimEnds(origFrag);
+
+      const [leftTokens, leftFrag] = await this.#dropLeft(
+        ss.beforeFragment(trimmedFrag),
+        origTokens,
+        origFrag
+      );
+
+      const [trimmedContent] = await this.#dropRight(
+        ss.afterFragment(trimmedFrag),
+        leftTokens,
+        leftFrag
+      );
+
+      // Now, we just need to mend once more with the prefix and suffix
+      // tokens included.
       return await super.mendTokens([
         this.#prefix.tokens,
-        ...tokensToMend,
+        trimmedContent,
         this.#suffix.tokens
       ]);
+    }
+
+    protected async updateState(
+      newAssemblies: AssemblyLike[],
+      tokens: Tokens,
+      source: SourceLike,
+      inserted: AssemblyLike
+    ): Promise<number> {
+      // Invalidate the cached trimmed-text.
+      this.#trimmedFrag = undefined;
+      return await super.updateState(newAssemblies, tokens, source, inserted);
+    }
+
+    /**
+     * Trims the given `fragment`, emulating the behavior of trimming with
+     * {@link TrimOptions.preserveEnds} set to `false`.
+     * 
+     * This is the typical way to handle lorebook entries prior to insertion
+     * and yeah, this detail makes this a bit gross.
+     */
+    #trimEnds(fragment: TextFragment): TextFragment {
+      if (!fragment.content) return fragment;
+
+      return IterOps.chain([fragment])
+        .thru(ss.makeFragmenter(this.contextConfig.maximumTrimType))
+        .pipe(IterOps.journey, ss.hasWords)
+        .value((iter) => ss.mergeFragments([...iter]));
+    }
+
+    /** Drops the characters before `offset`. */
+    async #dropLeft(
+      offset: number,
+      curTokens: Tokens,
+      curFrag: TextFragment
+    ): Promise<[Tokens, TextFragment]> {
+      // No need if the offset is right at the start.
+      if (offset === ss.beforeFragment(curFrag))
+        return [curTokens, curFrag];
+
+      const [, newFrag] = ss.splitFragmentAt(curFrag, offset);
+      const [, newTokens] = await getTokensForSplit(
+        this.codec, offset, curTokens, curFrag.content
+      );
+      return [newTokens, newFrag];
+    }
+
+    /** Drops the characters after `offset`. */
+    async #dropRight(
+      offset: number,
+      curTokens: Tokens,
+      curFrag: TextFragment
+    ): Promise<[Tokens, TextFragment]> {
+      // No need if the offset is right at the end.
+      if (offset === ss.afterFragment(curFrag))
+        return [curTokens, curFrag];
+
+      const [newFrag] = ss.splitFragmentAt(curFrag, offset);
+      const [newTokens] = await getTokensForSplit(
+        this.codec, offset, curTokens, curFrag.content
+      );
+      return [newTokens, newFrag];
     }
   }
 
