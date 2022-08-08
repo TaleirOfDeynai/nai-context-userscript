@@ -59,9 +59,20 @@ export const toReplay = <T>(
 /**
  * Gets the last value from the given `source` async-iterable as
  * a promise.  This will run the source to the end, naturally.
+ * 
+ * Throws an error if the source is empty.
  */
 export const lastValueFrom = <T>(source: AsyncIterable<T>): Promise<T> =>
   rx.lastValueFrom(rx.from(source));
+
+/**
+ * Gets the last value from the given `source` async-iterable as
+ * a promise.  This will run the source to the end, naturally.
+ * 
+ * If the source is empty, returns `undefined`.
+ */
+export const lastValueOrUndef = <T>(source: AsyncIterable<T>): Promise<UndefOr<T>> =>
+  rx.lastValueFrom(rx.from(source).pipe(rx.defaultIfEmpty(undefined)));
 
 /**
  * Converts the given `source` async-iterable into a promise of

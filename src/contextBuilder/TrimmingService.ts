@@ -2,7 +2,7 @@ import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import { reduceIter, journey, buffer, flatMap, flatten } from "@utils/iterables";
-import { toReplay, lastValueFrom } from "@utils/asyncIterables";
+import { toReplay, lastValueOrUndef } from "@utils/asyncIterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TokenizerService from "./TokenizerService";
 import $TrimmingProviders from "./TrimmingProviders";
@@ -149,9 +149,12 @@ export default usModule((require, exports) => {
           suffix: assembly.suffix.content
         });
 
+        const result = await lastValueOrUndef(encoding);
+        if (!result) return;
+
         yield await makeTrimResult(
           assembly,
-          await lastValueFrom(encoding),
+          result,
           EMPTY,
           tokenCodec
         );
