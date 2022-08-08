@@ -150,6 +150,14 @@ const theModule = usModule((require, exports) => {
     }
 
     /**
+     * The content text of the assembly.  If this assembly is empty, its
+     * content will also be empty.
+     */
+    get contentText() {
+      return this.trimmedFrag.content;
+    }
+
+    /**
      * The current tokens of the assembly.  If this assembly is empty,
      * its tokens will also be empty.
      */

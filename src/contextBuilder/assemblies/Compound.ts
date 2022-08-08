@@ -33,6 +33,7 @@ import type { ReportReasons } from "@nai/ContextBuilder";
 /** The bare minimum needed for an assembly. */
 export interface AssemblyLike extends ITokenizedAssembly {
   readonly text: string;
+  readonly contentText: string;
   readonly isEmpty: boolean;
 
   isRelatedTo: FragmentAssembly["isRelatedTo"];
@@ -309,11 +310,6 @@ const theModule = usModule((require, exports) => {
       source: SourceLike,
       budget: number
     ): Promise<Insertion.Result> {
-      // Fast-path: No text, instant rejection (unless it's a group).
-      if (source.entry.text === "")
-        if (!(source instanceof CompoundAssembly))
-          return NO_TEXT;
-      
       // Ensure the budget works for the current state of the assembly.
       budget = this.validateBudget(budget);
 
@@ -324,6 +320,11 @@ const theModule = usModule((require, exports) => {
       if (!this.#assemblies.length) {
         const inserted = await this.#getAssembly(source.entry, budget);
         if (!inserted) return NO_SPACE;
+
+        // Fast-path: No content, instant rejection (unless it's a group).
+        if (inserted.contentText === "")
+          if (!(source instanceof CompoundAssembly))
+            return NO_TEXT;
 
         // We'll need at least one assembly to do anything key-relative.
         const data = getInsertionData(source);
@@ -339,6 +340,11 @@ const theModule = usModule((require, exports) => {
       // Can we fit it into the budget?
       const inserted = await this.#getAssembly(source.entry, budget);
       if (!inserted) return NO_SPACE;
+
+      // Fast-path: No content, instant rejection (unless it's a group).
+      if (inserted.contentText === "")
+        if (!(source instanceof CompoundAssembly))
+          return NO_TEXT;
 
       for (const iterResult of this.#iterateInsertion(startState)) {
         const { result } = iterResult;

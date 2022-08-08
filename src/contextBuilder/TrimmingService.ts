@@ -62,7 +62,7 @@ const EMPTY = async function*() {};
 
 export default usModule((require, exports) => {
   const providers = $TrimmingProviders(require);
-  const { hasWords } = $TextSplitterService(require);
+  const { hasWords, asEmptyFragment } = $TextSplitterService(require);
   const { appendEncoder } = $TokenizerService(require);
   const fragAssembly = $FragmentAssembly(require);
   const tokenAssembly = $TokenizedAssembly(require);
@@ -89,7 +89,23 @@ export default usModule((require, exports) => {
     );
 
     return Object.freeze({ assembly, split });
-  }
+  };
+
+  /** Constructs an empty result, a special case. */
+  const makeEmptyResult = async (
+    origin: Assembly.IFragment,
+    codec: AugmentedTokenCodec
+  ): Promise<TrimResult> => {
+    const assembly = await tokenAssembly.castTo(codec, {
+      source: origin,
+      prefix: asEmptyFragment(origin.prefix),
+      content: [],
+      suffix: asEmptyFragment(origin.suffix),
+      tokens: []
+    });
+
+    return Object.freeze({ assembly, split: EMPTY });
+  };
 
   // I'm not going to beat around the bush.  This will be quite ugly and
   // am just going to do this in the most straight forward way possible.
@@ -150,7 +166,14 @@ export default usModule((require, exports) => {
         });
 
         const result = await lastValueOrUndef(encoding);
-        if (!result) return;
+
+        // Undefined with `lastValueOrUndef` means the assembly was or became
+        // empty (such as due to comment removal).  Indicate this by yielding
+        // only an entirely empty result.
+        if (!result) {
+          yield await makeEmptyResult(assembly, tokenCodec);
+          return;
+        }
 
         yield await makeTrimResult(
           assembly,
@@ -211,6 +234,14 @@ export default usModule((require, exports) => {
           );
           lastResult = curResult;
         }
+
+        // If the trimmer never yields anything and we're still on the first
+        // sequencer (as evidenced by having no seed result), it had nothing
+        // to actually encode, which means the origin assembly is or became
+        // empty (like due to comment removal).  We'll indicate this by
+        // yielding an entirely empty result.
+        if (!lastResult && !seedResult)
+          yield await makeEmptyResult(assembly, tokenCodec);
       };
     }
 
