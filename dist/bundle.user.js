@@ -7814,6 +7814,19 @@ SOFTWARE.
             return assembly.text;
         return [...iterateOn(assembly)].map((f) => f.content).join("");
     };
+    /**
+     * Gets the text for an assembly.
+     *
+     * Will attempt to use the `contentText` property unless `force` is true.
+     */
+    const getContentText = (assembly, force = false) => {
+        if (!force && isString(assembly.contentText))
+            return assembly.contentText;
+        return chain(assembly.content)
+            .map((f) => f.content)
+            .toArray()
+            .join("");
+    };
     /** Checks if two assemblies have the same source, and thus, comparable content. */
     const checkRelated = (a, b) => getSource(a) === getSource(b);
     /** Checks if the given assembly has a prefix or suffix. */
@@ -7836,6 +7849,7 @@ SOFTWARE.
         getLastFragment: getLastFragment,
         getSource: getSource,
         getText: getText,
+        getContentText: getContentText,
         checkRelated: checkRelated,
         isAffixed: isAffixed,
         isEmpty: isEmpty,
@@ -8649,7 +8663,7 @@ SOFTWARE.
     });
 
     const theModule$6 = usModule((require, exports) => {
-        var _BaseAssembly_wrapped, _BaseAssembly_text, _BaseAssembly_assemblyStats, _BaseAssembly_contentStats, _BaseAssembly_isContiguous;
+        var _BaseAssembly_wrapped, _BaseAssembly_text, _BaseAssembly_contentText, _BaseAssembly_assemblyStats, _BaseAssembly_contentStats, _BaseAssembly_isContiguous;
         const manipOps = $ManipOps(require);
         const queryOps = $QueryOps(require);
         /**
@@ -8662,6 +8676,7 @@ SOFTWARE.
             constructor(wrapped, isContiguous) {
                 _BaseAssembly_wrapped.set(this, void 0);
                 _BaseAssembly_text.set(this, undefined);
+                _BaseAssembly_contentText.set(this, undefined);
                 _BaseAssembly_assemblyStats.set(this, undefined);
                 _BaseAssembly_contentStats.set(this, undefined);
                 _BaseAssembly_isContiguous.set(this, void 0);
@@ -8680,6 +8695,10 @@ SOFTWARE.
             /** The full, concatenated text of the assembly. */
             get text() {
                 return __classPrivateFieldSet(this, _BaseAssembly_text, __classPrivateFieldGet(this, _BaseAssembly_text, "f") ?? queryOps.getText(this, true), "f");
+            }
+            /** The concatenated text of the assembly's `content`. */
+            get contentText() {
+                return __classPrivateFieldSet(this, _BaseAssembly_contentText, __classPrivateFieldGet(this, _BaseAssembly_contentText, "f") ?? queryOps.getContentText(this, true), "f");
             }
             /** The stats for this assembly. */
             get stats() {
@@ -8717,7 +8736,7 @@ SOFTWARE.
              * Iterator that yields all fragments that are not empty.  This can
              * include both the {@link prefix} and the {@link suffix}.
              */
-            [(_BaseAssembly_wrapped = new WeakMap(), _BaseAssembly_text = new WeakMap(), _BaseAssembly_assemblyStats = new WeakMap(), _BaseAssembly_contentStats = new WeakMap(), _BaseAssembly_isContiguous = new WeakMap(), Symbol.iterator)]() {
+            [(_BaseAssembly_wrapped = new WeakMap(), _BaseAssembly_text = new WeakMap(), _BaseAssembly_contentText = new WeakMap(), _BaseAssembly_assemblyStats = new WeakMap(), _BaseAssembly_contentStats = new WeakMap(), _BaseAssembly_isContiguous = new WeakMap(), Symbol.iterator)]() {
                 return queryOps.iterateOn(__classPrivateFieldGet(this, _BaseAssembly_wrapped, "f"));
             }
         }
@@ -12171,6 +12190,9 @@ SOFTWARE.
     const onEndContext = new Subject();
 
     const logger$3 = createLogger();
+    const RE_ESCAPE = /[$()*+.?[\\\]^{|}]/g;
+    const RE_UNSAFE_LEADING = /^\W/;
+    const RE_UNSAFE_TRAILING = /\W$/;
     var $MatcherService = usModule((require, exports) => {
         const loreEntryHelpers = require(LoreEntryHelpers$2);
         /** A set of keys used for matching since the last maintenance cycle. */
@@ -12191,7 +12213,11 @@ SOFTWARE.
                     matcherCache.delete(key);
             logger$3.info(`Cleared ${startSize - matcherCache.size} unused matchers.`);
         });
-        const escapeForRegex = (str) => str.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&");
+        const escapeForRegex = (str) => str.replace(RE_ESCAPE, "\\$&");
+        /** Checks if the start is safe for the word boundary `\b` check. */
+        const leading = (key) => RE_UNSAFE_LEADING.test(key) ? "" : "\\b";
+        /** Checks if the end is safe for the word boundary `\b` check. */
+        const trailing = (key) => RE_UNSAFE_TRAILING.test(key) ? "" : "\\b";
         /**
          * A semi-reimplementation of an internal NAI method.
          *
@@ -12201,21 +12227,12 @@ SOFTWARE.
          */
         function toRegex(key) {
             const parseResult = loreEntryHelpers.tryParseRegex(key);
-            if (parseResult.isRegex)
-                return [new RegExp(parseResult.regex, `${parseResult.flags.join("")}g`), "regex"];
-            const escapedKey = escapeForRegex(key.trim());
-            checks: {
-                // These checks were probably a fix to some kind of interesting bug...
-                // Probably having to do with unicode regular expressions.
-                const firstCodePoint = key.codePointAt(0) ?? Number.MAX_SAFE_INTEGER;
-                if (firstCodePoint >= 128)
-                    break checks;
-                const lastCodePoint = key.codePointAt(key.length - 1) ?? Number.MAX_SAFE_INTEGER;
-                if (lastCodePoint >= 128)
-                    break checks;
-                return [new RegExp(`\\b${escapedKey}\\b`, "iug"), "simple"];
+            if (!parseResult.isRegex) {
+                const escapedKey = escapeForRegex(key.trim());
+                const newSource = `${leading(key)}${escapedKey}${trailing(key)}`;
+                return [new RegExp(newSource, "iug"), "simple"];
             }
-            return [new RegExp(`(?:^|\\W)(?:${escapedKey})(?:$|\\W)`, "iug"), "simple"];
+            return [new RegExp(parseResult.regex, `${parseResult.flags.join("")}g`), "regex"];
         }
         const toMatchResult = (source) => (regexExec) => {
             const [match, ...groups] = regexExec;
