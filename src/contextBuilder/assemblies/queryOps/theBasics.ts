@@ -50,6 +50,19 @@ export const getText = (assembly: IFragmentAssembly, force = false) => {
   return [...iterateOn(assembly)].map((f) => f.content).join("");
 };
 
+/**
+ * Gets the text for an assembly.
+ * 
+ * Will attempt to use the `contentText` property unless `force` is true.
+ */
+export const getContentText = (assembly: IFragmentAssembly, force = false) => {
+  if (!force && isString(assembly.contentText)) return assembly.contentText;
+  return IterOps.chain(assembly.content)
+    .map((f) => f.content)
+    .toArray()
+    .join("");
+}
+
 /** Checks if two assemblies have the same source, and thus, comparable content. */
 export const checkRelated = (a: IFragmentAssembly, b: IFragmentAssembly) =>
   getSource(a) === getSource(b);

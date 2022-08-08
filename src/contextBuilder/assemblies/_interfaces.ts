@@ -49,6 +49,8 @@ export interface IFragmentAssembly {
 
   /** The full, concatenated text of the assembly. */
   readonly text?: string;
+  /** The concatenated text of the assembly's `content`. */
+  readonly contentText?: string;
   /** The stats for this assembly. */
   readonly stats?: AssemblyStats;
   /** The stats for only the {@link content} portion of the assembly. */

@@ -49,6 +49,12 @@ const theModule = usModule((require, exports) => {
     }
     #text: UndefOr<string> = undefined;
 
+    /** The concatenated text of the assembly's `content`. */
+    get contentText(): string {
+      return this.#contentText ??= queryOps.getContentText(this, true);
+    }
+    #contentText: UndefOr<string> = undefined;
+
     /** The stats for this assembly. */
     get stats(): AssemblyStats {
       return this.#assemblyStats ??= queryOps.getStats(this, true);
