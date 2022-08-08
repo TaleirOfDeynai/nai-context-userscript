@@ -50,6 +50,10 @@ export interface MatchResult {
 
 const logger = createLogger("Matcher Service");
 
+const RE_ESCAPE = /[$()*+.?[\\\]^{|}]/g;
+const RE_UNSAFE_LEADING = /^\W/;
+const RE_UNSAFE_TRAILING = /\W$/;
+
 export default usModule((require, exports) => {
   const loreEntryHelpers = require(LoreEntryHelpers);
 
@@ -77,7 +81,12 @@ export default usModule((require, exports) => {
     logger.info(`Cleared ${startSize - matcherCache.size} unused matchers.`);
   });
 
-  const escapeForRegex = (str) => str.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&");
+  const escapeForRegex = (str) => str.replace(RE_ESCAPE, "\\$&");
+
+  /** Checks if the start is safe for the word boundary `\b` check. */
+  const leading = (key: string) => RE_UNSAFE_LEADING.test(key) ? "" : "\\b";
+  /** Checks if the end is safe for the word boundary `\b` check. */
+  const trailing = (key: string) => RE_UNSAFE_TRAILING.test(key) ? "" : "\\b";
 
   /**
    * A semi-reimplementation of an internal NAI method.
@@ -89,22 +98,13 @@ export default usModule((require, exports) => {
   function toRegex(key: string): [RegExp, MatcherFn["type"]] {
     const parseResult = loreEntryHelpers.tryParseRegex(key);
 
-    if (parseResult.isRegex)
-      return [new RegExp(parseResult.regex, `${parseResult.flags.join("")}g`), "regex"];
-
-    const escapedKey = escapeForRegex(key.trim());
-    checks: {
-      // These checks were probably a fix to some kind of interesting bug...
-      // Probably having to do with unicode regular expressions.
-      const firstCodePoint = key.codePointAt(0) ?? Number.MAX_SAFE_INTEGER;
-      if (firstCodePoint >= 128) break checks;
-      const lastCodePoint = key.codePointAt(key.length - 1) ?? Number.MAX_SAFE_INTEGER;
-      if (lastCodePoint >= 128) break checks;
-  
-      return [new RegExp(`\\b${escapedKey}\\b`, "iug"), "simple"];
+    if (!parseResult.isRegex) {
+      const escapedKey = escapeForRegex(key.trim());
+      const newSource = `${leading(key)}${escapedKey}${trailing(key)}`;
+      return [new RegExp(newSource, "iug"), "simple"];
     }
 
-    return [new RegExp(`(?:^|\\W)(?:${escapedKey})(?:$|\\W)`, "iug"), "simple"];
+    return [new RegExp(parseResult.regex, `${parseResult.flags.join("")}g`), "regex"];
   }
 
   const toMatchResult = (source: string) => (regexExec: RegExpExecArray): MatchResult => {
