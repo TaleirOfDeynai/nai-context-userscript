@@ -140,7 +140,7 @@ const theModule = usModule((require, exports) => {
       const origin = trimmer.origin;
       // The trimmer has the unmodified origin assembly.  We only need to
       // change things up if we need to remove comments for search.
-      if (!reComment.test(queryOps.getText(origin))) return origin;
+      if (!reComment.test(queryOps.getContentText(origin))) return origin;
       const provider = getProvider(true, "doNotTrim");
       // The do-not-trim provider does all its work in `preProcess`.
       const fragments = provider.preProcess(origin);

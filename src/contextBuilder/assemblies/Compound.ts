@@ -314,6 +314,10 @@ const theModule = usModule((require, exports) => {
       budget = this.validateBudget(budget);
 
       // Fast-path: No budget, instant rejection.
+      // We perform this check before even checking for the `NO_TEXT` case
+      // to avoid the cost of the `getAssembly` call.  This can result in
+      // "no space" being presented to the user when "no text" would
+      // technically be more informative.
       if (!budget) return NO_SPACE;
 
       // Fast-path: no fancy stuff for the first thing inserted.
