@@ -78,22 +78,25 @@ export default usModule((require, exports) => {
         rxop.map(activation.keyed),
         rxop.mergeMap((keyedActivator) => keyedActivator(activationStates))
       )
+    ).pipe(
+      // Sources may directly activate more than once.  We're gathering as
+      // much data on activation as possible, but the cascade wants
+      // only one direct activation each.
+      rxop.distinct(),
+      rxop.shareReplay()
+    );
+
+    // Join in the cascade.
+    const withCascade = rx.merge(
+      directActivations,
+      directActivations.pipe(activation.cascade(activationStates))
     );
     
     // The stream of in-flight activations.  Be aware that when a source comes
     // down the pipeline, we only know it activated.  The information in its
     // `activations` should be assumed to be incomplete until this entire
     // observable completes.
-    const inFlightActivations = directActivations.pipe(
-      // Sources may directly activate more than once.  We're gathering as
-      // much data on activation as possible, but the cascade wants
-      // only one direct activation each.
-      rxop.distinct(),
-      // Join in the cascade.
-      rxop.connect((directActivations) => rx.merge(
-        directActivations,
-        directActivations.pipe(activation.cascade(activationStates))
-      )),
+    const inFlightActivations = withCascade.pipe(
       // Again, only emit one activation per source; the cascade may now have
       // added some duplicates.
       rxop.distinct(),
