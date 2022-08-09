@@ -3100,7 +3100,7 @@ SOFTWARE.
       };
     });
 
-    function lastValueFrom$1(source, config) {
+    function lastValueFrom(source, config) {
       var hasConfig = typeof config === 'object';
       return new Promise(function (resolve, reject) {
         var _hasValue = false;
@@ -7035,7 +7035,7 @@ SOFTWARE.
                     const fragment = createFragment(d.value, prev.offset + prev.content.length);
                     return Object.assign(d, { fragment });
                 }, { fragment: createFragment("", 0, curPart.fragment) }), filter((d) => isOffsetInside(offset, d.fragment)), toArray());
-                const result = await lastValueFrom$1(processor);
+                const result = await lastValueFrom(processor);
                 switch (result.length) {
                     case 2: {
                         const [min, max] = result;
@@ -7766,8 +7766,10 @@ SOFTWARE.
     /**
      * Gets the last value from the given `source` async-iterable as
      * a promise.  This will run the source to the end, naturally.
+     *
+     * If the source is empty, returns `undefined`.
      */
-    const lastValueFrom = (source) => lastValueFrom$1(from(source));
+    const lastValueOrUndef = (source) => lastValueFrom(from(source).pipe(defaultIfEmpty(undefined)));
 
     /** Creates a fragment cursor. */
     const fragment = (origin, offset) => Object.freeze({ type: "fragment", origin, offset });
@@ -9690,7 +9692,7 @@ SOFTWARE.
     const EMPTY = async function* () { };
     var $TrimmingService = usModule((require, exports) => {
         const providers = $TrimmingProviders(require);
-        const { hasWords } = $TextSplitterService(require);
+        const { hasWords, asEmptyFragment } = $TextSplitterService(require);
         const { appendEncoder } = $TokenizerService(require);
         const fragAssembly = theModule$5(require);
         const tokenAssembly = theModule$4(require);
@@ -9705,6 +9707,17 @@ SOFTWARE.
             assert("Expected at least one text fragment.", fragments.length > 0);
             const assembly = await tokenAssembly.fromDerived(fragments, origin, { codec, tokens });
             return Object.freeze({ assembly, split });
+        };
+        /** Constructs an empty result, a special case. */
+        const makeEmptyResult = async (origin, codec) => {
+            const assembly = await tokenAssembly.castTo(codec, {
+                source: origin,
+                prefix: asEmptyFragment(origin.prefix),
+                content: [],
+                suffix: asEmptyFragment(origin.suffix),
+                tokens: []
+            });
+            return Object.freeze({ assembly, split: EMPTY });
         };
         // Actual implementation.
         function createTrimmer(assembly, contextParams, options, doReplay = false) {
@@ -9721,7 +9734,15 @@ SOFTWARE.
                         prefix: assembly.prefix.content,
                         suffix: assembly.suffix.content
                     });
-                    yield await makeTrimResult(assembly, await lastValueFrom(encoding), EMPTY, tokenCodec);
+                    const result = await lastValueOrUndef(encoding);
+                    // Undefined with `lastValueOrUndef` means the assembly was or became
+                    // empty (such as due to comment removal).  Indicate this by yielding
+                    // only an entirely empty result.
+                    if (!result) {
+                        yield await makeEmptyResult(assembly, tokenCodec);
+                        return;
+                    }
+                    yield await makeTrimResult(assembly, result, EMPTY, tokenCodec);
                 }
                 return Object.assign(doReplay ? toReplay(unSequenced) : unSequenced, { origin: assembly, provider });
             }
@@ -9752,6 +9773,13 @@ SOFTWARE.
                         yield await makeTrimResult(assembly, curResult, doReplay ? toReplay(innerSplit) : innerSplit, tokenCodec);
                         lastResult = curResult;
                     }
+                    // If the trimmer never yields anything and we're still on the first
+                    // sequencer (as evidenced by having no seed result), it had nothing
+                    // to actually encode, which means the origin assembly is or became
+                    // empty (like due to comment removal).  We'll indicate this by
+                    // yielding an entirely empty result.
+                    if (!lastResult && !seedResult)
+                        yield await makeEmptyResult(assembly, tokenCodec);
                 };
             };
             const outerSplit = nextSplit(provider.preProcess(assembly), sequencers, config.preserveEnds ? "ends" : "none");
@@ -9975,7 +10003,7 @@ SOFTWARE.
                 const origin = trimmer.origin;
                 // The trimmer has the unmodified origin assembly.  We only need to
                 // change things up if we need to remove comments for search.
-                if (!reComment.test(queryOps.getText(origin)))
+                if (!reComment.test(queryOps.getContentText(origin)))
                     return origin;
                 const provider = getProvider(true, "doNotTrim");
                 // The do-not-trim provider does all its work in `preProcess`.
@@ -12781,13 +12809,13 @@ SOFTWARE.
              * Inserts an assembly into this compound assembly as a sub-assembly.
              */
             async insert(source, budget) {
-                // Fast-path: No text, instant rejection (unless it's a group).
-                if (source.entry.text === "")
-                    if (!(source instanceof CompoundAssembly))
-                        return NO_TEXT;
                 // Ensure the budget works for the current state of the assembly.
                 budget = this.validateBudget(budget);
                 // Fast-path: No budget, instant rejection.
+                // We perform this check before even checking for the `NO_TEXT` case
+                // to avoid the cost of the `getAssembly` call.  This can result in
+                // "no space" being presented to the user when "no text" would
+                // technically be more informative.
                 if (!budget)
                     return NO_SPACE;
                 // Fast-path: no fancy stuff for the first thing inserted.
@@ -12795,6 +12823,10 @@ SOFTWARE.
                     const inserted = await __classPrivateFieldGet(this, _CompoundAssembly_instances, "m", _CompoundAssembly_getAssembly).call(this, source.entry, budget);
                     if (!inserted)
                         return NO_SPACE;
+                    // Fast-path: No content, instant rejection (unless it's a group).
+                    if (inserted.contentText === "")
+                        if (!(source instanceof CompoundAssembly))
+                            return NO_TEXT;
                     // We'll need at least one assembly to do anything key-relative.
                     const data = getInsertionData(source);
                     if (data.isKeyRelative)
@@ -12809,6 +12841,10 @@ SOFTWARE.
                 const inserted = await __classPrivateFieldGet(this, _CompoundAssembly_instances, "m", _CompoundAssembly_getAssembly).call(this, source.entry, budget);
                 if (!inserted)
                     return NO_SPACE;
+                // Fast-path: No content, instant rejection (unless it's a group).
+                if (inserted.contentText === "")
+                    if (!(source instanceof CompoundAssembly))
+                        return NO_TEXT;
                 for (const iterResult of __classPrivateFieldGet(this, _CompoundAssembly_instances, "m", _CompoundAssembly_iterateInsertion).call(this, startState)) {
                     const { result } = iterResult;
                     switch (result.type) {
@@ -13256,6 +13292,13 @@ SOFTWARE.
                     this.trimmedFrag.content,
                     __classPrivateFieldGet(this, _ContextGroup_suffix, "f").text
                 ].join("");
+            }
+            /**
+             * The content text of the assembly.  If this assembly is empty, its
+             * content will also be empty.
+             */
+            get contentText() {
+                return this.trimmedFrag.content;
             }
             /**
              * The current tokens of the assembly.  If this assembly is empty,
@@ -14838,18 +14881,18 @@ SOFTWARE.
             // Stream through the direct activations.
             const directActivations = merge(activationStates.pipe(activation.forced), activationStates.pipe(activation.ephemeral(contextParams.storyContent)), 
             // Still cheating to get as much done while waiting on the story.
-            storySource.pipe(map(activation.keyed), mergeMap((keyedActivator) => keyedActivator(activationStates))));
+            storySource.pipe(map(activation.keyed), mergeMap((keyedActivator) => keyedActivator(activationStates)))).pipe(
+            // Sources may directly activate more than once.  We're gathering as
+            // much data on activation as possible, but the cascade wants
+            // only one direct activation each.
+            distinct(), shareReplay());
+            // Join in the cascade.
+            const withCascade = merge(directActivations, directActivations.pipe(activation.cascade(activationStates)));
             // The stream of in-flight activations.  Be aware that when a source comes
             // down the pipeline, we only know it activated.  The information in its
             // `activations` should be assumed to be incomplete until this entire
             // observable completes.
-            const inFlightActivations = directActivations.pipe(
-            // Sources may directly activate more than once.  We're gathering as
-            // much data on activation as possible, but the cascade wants
-            // only one direct activation each.
-            distinct(), 
-            // Join in the cascade.
-            connect((directActivations) => merge(directActivations, directActivations.pipe(activation.cascade(activationStates)))), 
+            const inFlightActivations = withCascade.pipe(
             // Again, only emit one activation per source; the cascade may now have
             // added some duplicates.
             distinct(), map(({ source, activations }) => Object.assign(source, {
