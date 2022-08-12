@@ -9699,7 +9699,7 @@ SOFTWARE.
         const optionDefaults = {
             provider: "doNotTrim",
             maximumTrimType: "token",
-            preserveEnds: true
+            preserveMode: "both"
         };
         /** Constructs a result, with an assembly, from the given parameters. */
         const makeTrimResult = async (origin, encodeResult, split, codec) => {
@@ -9718,6 +9718,25 @@ SOFTWARE.
                 tokens: []
             });
             return Object.freeze({ assembly, split: EMPTY });
+        };
+        /**
+         * Private function that handles preparations for trimming.  It applies
+         * the sequencer with the given ending preservation mode, splitting up
+         * the fragments, and determines what preservation mode to use for the
+         * next sequencer.
+         */
+        const sequenceFrags = (content, sequencer, preserveMode) => {
+            const nextMode = preserveMode === "both" ? "both"
+                : preserveMode === "trailing" ? "both"
+                    // Use "leading" for "none" on recursion.
+                    : "leading";
+            const splitFrags = flatMap(content, sequencer.splitUp);
+            switch (preserveMode) {
+                case "both": return [splitFrags, nextMode];
+                case "leading": return [flatten(buffer(splitFrags, hasWords, false)), nextMode];
+                case "trailing": return [skipUntil(splitFrags, hasWords), nextMode];
+                default: return [journey(splitFrags, hasWords), nextMode];
+            }
         };
         // Actual implementation.
         function createTrimmer(assembly, contextParams, options, doReplay = false) {
@@ -9752,14 +9771,7 @@ SOFTWARE.
                     return EMPTY;
                 const [sequencer, ...restSequencers] = sequencers;
                 return async function* () {
-                    const fragments = dew(() => {
-                        const splitFrags = flatMap(content, sequencer.splitUp);
-                        switch (preserveMode) {
-                            case "ends": return splitFrags;
-                            case "initial": return flatten(buffer(splitFrags, hasWords, false));
-                            default: return journey(splitFrags, hasWords);
-                        }
-                    });
+                    const [fragments, nextMode] = sequenceFrags(content, sequencer, preserveMode);
                     const encoding = sequencer.encode(tokenCodec, fragments, {
                         prefix: assembly.prefix.content,
                         suffix: assembly.suffix.content,
@@ -9767,9 +9779,7 @@ SOFTWARE.
                     });
                     let lastResult = seedResult;
                     for await (const curResult of encoding) {
-                        const innerSplit = nextSplit(sequencer.prepareInnerChunk(curResult, lastResult), restSequencers, 
-                        // Use "initial" mode for recursive calls instead of "none".
-                        preserveMode === "ends" ? "ends" : "initial", lastResult);
+                        const innerSplit = nextSplit(sequencer.prepareInnerChunk(curResult, lastResult), restSequencers, nextMode, lastResult);
                         yield await makeTrimResult(assembly, curResult, doReplay ? toReplay(innerSplit) : innerSplit, tokenCodec);
                         lastResult = curResult;
                     }
@@ -9782,7 +9792,7 @@ SOFTWARE.
                         yield await makeEmptyResult(assembly, tokenCodec);
                 };
             };
-            const outerSplit = nextSplit(provider.preProcess(assembly), sequencers, config.preserveEnds ? "ends" : "none");
+            const outerSplit = nextSplit(provider.preProcess(assembly), sequencers, config.preserveMode);
             return Object.assign(doReplay ? toReplay(outerSplit) : outerSplit, { origin: assembly, provider });
         }
         /**
@@ -9843,14 +9853,8 @@ SOFTWARE.
                 return;
             // Split the current sequencer from the rest.
             const [sequencer, ...restSequencers] = sequencers;
-            const fragments = dew(() => {
-                const splitFrags = flatMap(content, sequencer.splitUp);
-                switch (preserveMode) {
-                    case "ends": return splitFrags;
-                    case "initial": return flatten(buffer(splitFrags, hasWords, false));
-                    default: return journey(splitFrags, hasWords);
-                }
-            });
+            // Split up those fragments.
+            const [fragments, nextMode] = sequenceFrags(content, sequencer, preserveMode);
             for (const buffered of buffer(fragments, hasWords)) {
                 const contentLength = buffered.reduce((p, c) => p + c.content.length, 0);
                 const nextLength = currentLength + contentLength;
@@ -9862,9 +9866,7 @@ SOFTWARE.
                     // Reverse the buffer if the sequencer is reversed.
                     if (sequencer.reversed)
                         buffered.reverse();
-                    yield* execTrimLength(restSequencers, buffered, maximumLength, 
-                    // Use "initial" mode for recursive calls instead of "none".
-                    preserveMode === "ends" ? "ends" : "initial", currentLength);
+                    yield* execTrimLength(restSequencers, buffered, maximumLength, nextMode, currentLength);
                     return;
                 }
             }
@@ -9881,7 +9883,7 @@ SOFTWARE.
          * prior to performing the trim.
          */
         function trimByLength(assembly, maximumLength, options) {
-            const { preserveEnds, provider: srcProvider, maximumTrimType } = { ...optionDefaults, ...options };
+            const { preserveMode, provider: srcProvider, maximumTrimType } = { ...optionDefaults, ...options };
             const provider = providers.asProvider(srcProvider);
             const fragments = provider.preProcess(assembly);
             const prefixLength = assembly.prefix.content.length;
@@ -9906,7 +9908,7 @@ SOFTWARE.
             }
             // Otherwise, we do our thorough trim.
             const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
-            const trimmedFrags = [...execTrimLength(sequencers, fragments, maximumLength, preserveEnds ? "ends" : "none")];
+            const trimmedFrags = [...execTrimLength(sequencers, fragments, maximumLength, preserveMode)];
             if (trimmedFrags.length === 0)
                 return undefined;
             // Un-reverse if the provider runs in reverse.
@@ -9986,12 +9988,13 @@ SOFTWARE.
                 }
                 const innerTrimmer = dew(() => {
                     const { trimDirection, maximumTrimType } = contextConfig;
+                    const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
                     const provider = getProvider(true, trimDirection);
                     // We can re-use the current trimmer.
                     if (trimmer.provider === provider)
                         return trimmer;
                     // We need a different trimmer.
-                    return createTrimmer(trimmer.origin, contextParams, { provider, maximumTrimType, preserveEnds: true }, false);
+                    return createTrimmer(trimmer.origin, contextParams, { provider, maximumTrimType, preserveMode }, false);
                 });
                 const result = await execTrimTokens(innerTrimmer, contextParams.contextSize);
                 if (result)
@@ -10068,7 +10071,7 @@ SOFTWARE.
                 const { text, contextConfig } = field;
                 const { maximumTrimType, trimDirection } = contextConfig;
                 const provider = getProvider(false, trimDirection);
-                const trimmer = createTrimmer(assembly.fromSource(text, contextConfig), contextParams, { provider, maximumTrimType, preserveEnds: false }, 
+                const trimmer = createTrimmer(assembly.fromSource(text, contextConfig), contextParams, { provider, maximumTrimType, preserveMode: "none" }, 
                 // Token reservations are most likely to benefit from replay.
                 contextConfig.reservedTokens > 0);
                 const searchText = await getSearchAssembly(false, trimmer, contextConfig, contextParams);
@@ -10090,8 +10093,11 @@ SOFTWARE.
                     const handled = storyState.handleEvent(ev);
                     return assembly.fromSource(handled.event.contextText, contextConfig);
                 });
+                // If we're trimming the top, we'll be iterating in reverse, so we must
+                // preserve the leading whitespace instead.
+                const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
                 const provider = getProvider(false, trimDirection);
-                const trimmer = createTrimmer(sourceText, contextParams, { provider, maximumTrimType, preserveEnds: false }, true);
+                const trimmer = createTrimmer(sourceText, contextParams, { provider, maximumTrimType, preserveMode }, true);
                 const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
                 const field = new ContextField(contextConfig, searchText.text);
                 return new ContextContent(field, searchText, trimmer, contextParams);
