@@ -1,7 +1,8 @@
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
-import { reduceIter, journey, buffer, flatMap, flatten } from "@utils/iterables";
+import * as IterOps from "@utils/iterables";
+import { flatten, buffer } from "@utils/iterables";
 import { toReplay, lastValueOrUndef } from "@utils/asyncIterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TokenizerService from "./TokenizerService";
@@ -31,10 +32,9 @@ export interface TrimOptions {
   maximumTrimType: TrimType;
   /**
    * This trimmer uses a technique that will drop "non-content" characters
-   * from the start and end of the string.  This should just be whitespace.
-   * Setting this to `true` will ensure these fragments are not lost.
+   * from the start and end of the string.  This is usually just whitespace.
    */
-  preserveEnds: boolean;
+  preserveMode: "leading" | "trailing" | "both" | "none";
 }
 
 export interface TrimResult {
@@ -70,7 +70,7 @@ export default usModule((require, exports) => {
   const optionDefaults: TrimOptions = {
     provider: "doNotTrim",
     maximumTrimType: "token",
-    preserveEnds: true
+    preserveMode: "both"
   };
 
   /** Constructs a result, with an assembly, from the given parameters. */
@@ -105,6 +105,32 @@ export default usModule((require, exports) => {
     });
 
     return Object.freeze({ assembly, split: EMPTY });
+  };
+
+  /**
+   * Private function that handles preparations for trimming.  It applies
+   * the sequencer with the given ending preservation mode, splitting up
+   * the fragments, and determines what preservation mode to use for the
+   * next sequencer.
+   */
+  const sequenceFrags = (
+    content: Iterable<TextFragment>,
+    sequencer: TextSequencer,
+    preserveMode: TrimOptions["preserveMode"]
+  ): [Iterable<TextFragment>, TrimOptions["preserveMode"]] => {
+    const nextMode
+      = preserveMode === "both" ? "both"
+      : preserveMode === "trailing" ? "both"
+      // Use "leading" for "none" on recursion.
+      : "leading";
+
+    const splitFrags = IterOps.flatMap(content, sequencer.splitUp);
+    switch (preserveMode) {
+      case "both": return [splitFrags, nextMode];
+      case "leading": return [flatten(buffer(splitFrags, hasWords, false)), nextMode];
+      case "trailing": return [IterOps.skipUntil(splitFrags, hasWords), nextMode];
+      default: return [IterOps.journey(splitFrags, hasWords), nextMode];
+    }
   };
 
   // I'm not going to beat around the bush.  This will be quite ugly and
@@ -194,7 +220,7 @@ export default usModule((require, exports) => {
     const nextSplit = (
       content: Iterable<TextFragment>,
       sequencers: TextSequencer[],
-      preserveMode: "initial" | "ends" | "none",
+      preserveMode: TrimOptions["preserveMode"],
       seedResult?: EncodeResult
     ) => {
       if (sequencers.length === 0) return EMPTY;
@@ -202,14 +228,7 @@ export default usModule((require, exports) => {
       const [sequencer, ...restSequencers] = sequencers;
 
       return async function*(): AsyncIterable<TrimResult> {
-        const fragments = dew(() => {
-          const splitFrags = flatMap(content, sequencer.splitUp);
-          switch (preserveMode) {
-            case "ends": return splitFrags;
-            case "initial": return flatten(buffer(splitFrags, hasWords, false));
-            default: return journey(splitFrags, hasWords);
-          }
-        });
+        const [fragments, nextMode] = sequenceFrags(content, sequencer, preserveMode);
 
         const encoding = sequencer.encode(tokenCodec, fragments, {
           prefix: assembly.prefix.content,
@@ -222,8 +241,7 @@ export default usModule((require, exports) => {
           const innerSplit = nextSplit(
             sequencer.prepareInnerChunk(curResult, lastResult),
             restSequencers,
-            // Use "initial" mode for recursive calls instead of "none".
-            preserveMode === "ends" ? "ends" : "initial",
+            nextMode,
             lastResult
           );
           yield await makeTrimResult(
@@ -248,7 +266,7 @@ export default usModule((require, exports) => {
     const outerSplit = nextSplit(
       provider.preProcess(assembly),
       sequencers,
-      config.preserveEnds ? "ends" : "none"
+      config.preserveMode
     );
 
     return Object.assign(
@@ -322,22 +340,15 @@ export default usModule((require, exports) => {
     sequencers: TextSequencer[],
     content: Iterable<TextFragment>,
     maximumLength: number,
-    preserveMode: "initial" | "ends" | "none",
+    preserveMode: TrimOptions["preserveMode"],
     currentLength: number = 0
   ): Iterable<TextFragment> {
     // If we have no sequencers left, end recursion.
     if (!sequencers.length) return;
     // Split the current sequencer from the rest.
     const [sequencer, ...restSequencers] = sequencers;
-
-    const fragments = dew(() => {
-      const splitFrags = flatMap(content, sequencer.splitUp);
-      switch (preserveMode) {
-        case "ends": return splitFrags;
-        case "initial": return flatten(buffer(splitFrags, hasWords, false));
-        default: return journey(splitFrags, hasWords);
-      }
-    });
+    // Split up those fragments.
+    const [fragments, nextMode] = sequenceFrags(content, sequencer, preserveMode);
 
     for (const buffered of buffer(fragments, hasWords)) {
       const contentLength = buffered.reduce((p, c) => p + c.content.length, 0);
@@ -355,8 +366,7 @@ export default usModule((require, exports) => {
           restSequencers,
           buffered,
           maximumLength,
-          // Use "initial" mode for recursive calls instead of "none".
-          preserveMode === "ends" ? "ends" : "initial",
+          nextMode,
           currentLength
         );
         return;
@@ -380,7 +390,7 @@ export default usModule((require, exports) => {
     maximumLength: number,
     options?: Partial<TrimOptions>
   ): UndefOr<Assembly.Fragment> {
-    const { preserveEnds, provider: srcProvider, maximumTrimType }
+    const { preserveMode, provider: srcProvider, maximumTrimType }
       = { ...optionDefaults, ...options };
 
     const provider = providers.asProvider(srcProvider);
@@ -396,7 +406,7 @@ export default usModule((require, exports) => {
       // Start by making a copy of our fragments; we'll need a stable
       // iterable for this.
       const theFrags = [...fragments];
-      const totalLength = reduceIter(
+      const totalLength = IterOps.reduceIter(
         theFrags,
         0 as number,
         (acc, frag) => frag.content.length + acc
@@ -415,7 +425,7 @@ export default usModule((require, exports) => {
     const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
     const trimmedFrags = [...execTrimLength(
       sequencers, fragments, maximumLength,
-      preserveEnds ? "ends" : "none"
+      preserveMode
     )];
 
     if (trimmedFrags.length === 0) return undefined;

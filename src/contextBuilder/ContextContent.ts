@@ -115,6 +115,7 @@ const theModule = usModule((require, exports) => {
 
       const innerTrimmer = dew(() => {
         const { trimDirection, maximumTrimType } = contextConfig;
+        const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
         const provider = getProvider(true, trimDirection);
         // We can re-use the current trimmer.
         if (trimmer.provider === provider) return trimmer;
@@ -122,7 +123,7 @@ const theModule = usModule((require, exports) => {
         return createTrimmer(
           trimmer.origin,
           contextParams,
-          { provider, maximumTrimType, preserveEnds: true },
+          { provider, maximumTrimType, preserveMode },
           false
         );
       });
@@ -202,7 +203,7 @@ const theModule = usModule((require, exports) => {
       const trimmer = createTrimmer(
         assembly.fromSource(text, contextConfig),
         contextParams,
-        { provider, maximumTrimType, preserveEnds: false },
+        { provider, maximumTrimType, preserveMode: "none" },
         // Token reservations are most likely to benefit from replay.
         contextConfig.reservedTokens > 0
       );
@@ -224,16 +225,21 @@ const theModule = usModule((require, exports) => {
       };
 
       const { trimDirection, maximumTrimType } = contextConfig;
+
       const sourceText = dew(() => {
         const ev = new eventModule.PreContextEvent(storyText);
         const handled = storyState.handleEvent(ev);
         return assembly.fromSource(handled.event.contextText, contextConfig);
       });
+
+      // If we're trimming the top, we'll be iterating in reverse, so we must
+      // preserve the leading whitespace instead.
+      const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
       const provider = getProvider(false, trimDirection);
       const trimmer = createTrimmer(
         sourceText,
         contextParams,
-        { provider, maximumTrimType, preserveEnds: false },
+        { provider, maximumTrimType, preserveMode },
         true
       );
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
