@@ -13,6 +13,7 @@ import $FragmentAssembly from "./assemblies/Fragment";
 import $TokenizedAssembly from "./assemblies/Tokenized";
 
 import type { SpyInstance } from "jest-mock";
+import type { UndefOr } from "@utils/utility-types";
 import type { TextFragment } from "./TextSplitterService";
 import type { TrimDirection } from "./TrimmingProviders";
 import type { Trimmer } from "./TrimmingService";
@@ -42,14 +43,16 @@ const mockAssembly = <T extends Assembly.IFragment = Assembly.IFragment>(
 // We'll need the `prefix`, `content`, and `suffix` properties
 // for these tests.
 const mockNewAssembly = (
-  srcContent: string,
+  srcContent: UndefOr<string>,
   srcPrefix?: string,
   srcSuffix?: string
 ): Assembly.AnyFragment => {
   const prefix = mockFragment(srcPrefix ?? "", 0);
-  const content = mockFragment(srcContent, 0, prefix);
+  const content = mockFragment(srcContent ?? "", 0, prefix);
   const suffix = mockFragment(srcSuffix ?? "", 0, content);
-  return mockAssembly(Object.freeze([content]), prefix, suffix);
+
+  const contentArr = srcContent == null ? [] : [content];
+  return mockAssembly(Object.freeze(contentArr), prefix, suffix);
 };
 
 let spyDeriveFragment: SpyInstance<FragmentFromDerived>;
@@ -317,8 +320,8 @@ describe("execTrimTokens", () => {
     });
   });
 
-  describe("the `preserveEnds` option", () => {
-    // The way `preserveEnds` works is it just removes content-less
+  describe("the `preserveMode` option", () => {
+    // The way `preserveMode` works is it just removes content-less
     // fragments produced by the trim-sequencers, but only:
     // - At the START of the FIRST trim-sequencer used.
     // - At the END of the LAST trim-sequencer used.
@@ -331,8 +334,8 @@ describe("execTrimTokens", () => {
     // - `byWord` separates out `"\n"` and whitespace between words.
     // These are all considered content-less.
     
-    // Setting `preserveEnds` to `false` exploits this so these
-    // content-less fragments get skipped so only fragments with
+    // Setting `preserveMode` to anything besides `"none"` exploits this
+    // so these content-less fragments get skipped so only fragments with
     // meaning to a person are ultimately provided for encoding.
 
     // That said, the encoders of the `TokenizerService` use contentful
@@ -352,11 +355,11 @@ describe("execTrimTokens", () => {
     const assembly = mockNewAssembly("\n\n    foo.  bar.    \n\n");
 
     describe("with `byLine` splitting only", () => {
-      it("should preserve ends when `true` (the default)", async () => {
+      it("should preserve ends when `\"both\"` (the default)", async () => {
         const trimmer = trimming.createTrimmer(assembly, mockParams, {
           provider: "trimBottom",
-          maximumTrimType: "token",
-          preserveEnds: true
+          maximumTrimType: "newline",
+          preserveMode: "both"
         });
 
         const result = await trimming.execTrimTokens(trimmer, 100);
@@ -368,11 +371,11 @@ describe("execTrimTokens", () => {
         );
       });
     
-      it("should not preserve ends when `false`", async () => {
+      it("should not preserve ends when `\"none\"`", async () => {
         const trimmer = trimming.createTrimmer(assembly, mockParams, {
           provider: "trimBottom",
-          maximumTrimType: "token",
-          preserveEnds: false
+          maximumTrimType: "newline",
+          preserveMode: "none"
         });
 
         const result = await trimming.execTrimTokens(trimmer, 100);
@@ -384,14 +387,76 @@ describe("execTrimTokens", () => {
           await mockCodec.encode("    foo.  bar.    ")
         );
       });
+
+      it("should preserve the `\"leading\"` end", async () => {
+        const trimmer = trimming.createTrimmer(assembly, mockParams, {
+          provider: "trimBottom",
+          maximumTrimType: "newline",
+          preserveMode: "leading"
+        });
+
+        const result = await trimming.execTrimTokens(trimmer, 100);
+        const tokens = result?.tokens ?? [];
+        expect(tokens).toEqual(
+          await mockCodec.encode("\n\n    foo.  bar.    ")
+        );
+      });
+
+      it("should preserve the `\"trailing\"` end", async () => {
+        const trimmer = trimming.createTrimmer(assembly, mockParams, {
+          provider: "trimBottom",
+          maximumTrimType: "newline",
+          preserveMode: "trailing"
+        });
+
+        const result = await trimming.execTrimTokens(trimmer, 100);
+        const tokens = result?.tokens ?? [];
+        expect(tokens).toEqual(
+          await mockCodec.encode("    foo.  bar.    \n\n")
+        );
+      });
+    });
+
+    describe("with reversed sequencers", () => {
+      // Sequencers that run in reverse order should preserve the
+      // ends in the order of the string, not the order of the fragments
+      // produced.
+
+      it("should preserve the `\"leading\"` end", async () => {
+        const trimmer = trimming.createTrimmer(assembly, mockParams, {
+          provider: "trimTop",
+          maximumTrimType: "token",
+          preserveMode: "leading"
+        });
+
+        const result = await trimming.execTrimTokens(trimmer, 100);
+        const tokens = result?.tokens ?? [];
+        expect(tokens).toEqual(
+          await mockCodec.encode("\n\n    foo.  bar.    ")
+        );
+      });
+
+      it("should preserve the `\"trailing\"` end", async () => {
+        const trimmer = trimming.createTrimmer(assembly, mockParams, {
+          provider: "trimTop",
+          maximumTrimType: "token",
+          preserveMode: "trailing"
+        });
+
+        const result = await trimming.execTrimTokens(trimmer, 100);
+        const tokens = result?.tokens ?? [];
+        expect(tokens).toEqual(
+          await mockCodec.encode("    foo.  bar.    \n\n")
+        );
+      });
     });
 
     describe("with more aggressive splitting", () => {
-      it("should preserve ends when `true` (the default)", async () => {
+      it("should preserve ends when `\"both\"` (the default)", async () => {
         const trimmer = trimming.createTrimmer(assembly, mockParams, {
           provider: "trimBottom",
           maximumTrimType: "token",
-          preserveEnds: true
+          preserveMode: "both"
         });
 
         // With 7 tokens, we could fit up to: `"\n\n    foo.  "`
@@ -410,7 +475,7 @@ describe("execTrimTokens", () => {
         const trimmer = trimming.createTrimmer(assembly, mockParams, {
           provider: "trimBottom",
           maximumTrimType: "token",
-          preserveEnds: false
+          preserveMode: "none"
         });
 
         // With 5 tokens, we could fit up to: `"\n\n    foo"`
@@ -427,6 +492,38 @@ describe("execTrimTokens", () => {
       });
     });
   });
+
+  describe("with a content-less assembly", () => {
+    // Content-less means the assembly's content is an empty array;
+    // the prefix and suffix are disregarded.  We'll also check the
+    // empty-string case, even though that should be an invalid assembly.
+
+    it("should yield a single, empty result for an empty array", async () => {
+      const assembly = mockNewAssembly(undefined, "foo\n", "\nbar");
+      const trimmer = trimming.createTrimmer(assembly, mockParams, {
+        provider: "trimBottom",
+        maximumTrimType: "token",
+        preserveMode: "none"
+      });
+
+      const result = await trimming.execTrimTokens(trimmer, 100);
+      expect(result?.tokens).toEqual([]);
+      expect(result?.text).toBe("");
+    });
+
+    it("should yield a single, empty result for an empty-string", async () => {
+      const assembly = mockNewAssembly("", "foo\n", "\nbar");
+      const trimmer = trimming.createTrimmer(assembly, mockParams, {
+        provider: "trimBottom",
+        maximumTrimType: "token",
+        preserveMode: "none"
+      });
+
+      const result = await trimming.execTrimTokens(trimmer, 100);
+      expect(result?.tokens).toEqual([]);
+      expect(result?.text).toBe("");
+    });
+  })
 });
 
 describe("trimByTokens", () => {

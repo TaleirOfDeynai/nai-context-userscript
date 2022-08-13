@@ -1,4 +1,3 @@
-import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import * as IterOps from "@utils/iterables";
@@ -105,6 +104,19 @@ export default usModule((require, exports) => {
     });
 
     return Object.freeze({ assembly, split: EMPTY });
+  };
+
+  /** Fixes the preserve mode in case of reverse iteration. */
+  const fixPreserveMode = (
+    provider: TrimProvider,
+    preserveMode: TrimOptions["preserveMode"]
+  ) => {
+    if (!provider.reversed) return preserveMode;
+    switch (preserveMode) {
+      case "leading": return "trailing";
+      case "trailing": return "leading";
+      default: return preserveMode;
+    }
   };
 
   /**
@@ -266,7 +278,7 @@ export default usModule((require, exports) => {
     const outerSplit = nextSplit(
       provider.preProcess(assembly),
       sequencers,
-      config.preserveMode
+      fixPreserveMode(provider, config.preserveMode)
     );
 
     return Object.assign(
@@ -425,7 +437,7 @@ export default usModule((require, exports) => {
     const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
     const trimmedFrags = [...execTrimLength(
       sequencers, fragments, maximumLength,
-      preserveMode
+      fixPreserveMode(provider, preserveMode)
     )];
 
     if (trimmedFrags.length === 0) return undefined;

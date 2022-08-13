@@ -115,7 +115,6 @@ const theModule = usModule((require, exports) => {
 
       const innerTrimmer = dew(() => {
         const { trimDirection, maximumTrimType } = contextConfig;
-        const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
         const provider = getProvider(true, trimDirection);
         // We can re-use the current trimmer.
         if (trimmer.provider === provider) return trimmer;
@@ -123,7 +122,7 @@ const theModule = usModule((require, exports) => {
         return createTrimmer(
           trimmer.origin,
           contextParams,
-          { provider, maximumTrimType, preserveMode },
+          { provider, maximumTrimType, preserveMode: "trailing" },
           false
         );
       });
@@ -232,14 +231,11 @@ const theModule = usModule((require, exports) => {
         return assembly.fromSource(handled.event.contextText, contextConfig);
       });
 
-      // If we're trimming the top, we'll be iterating in reverse, so we must
-      // preserve the leading whitespace instead.
-      const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
       const provider = getProvider(false, trimDirection);
       const trimmer = createTrimmer(
         sourceText,
         contextParams,
-        { provider, maximumTrimType, preserveMode },
+        { provider, maximumTrimType, preserveMode: "trailing" },
         true
       );
       const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
