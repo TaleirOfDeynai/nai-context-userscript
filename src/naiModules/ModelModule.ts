@@ -51,7 +51,7 @@ export interface IModelModule {
 };
 
 class ModelModule extends ModuleDef<IModelModule> {
-  moduleId = 81229;
+  moduleId = 81101;
   expectedExports = 9;
   mapping = {
     "vp": ["GetPreamble", "function"]
