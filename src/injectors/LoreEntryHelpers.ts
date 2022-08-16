@@ -7,7 +7,7 @@ export const chunkId = 2888;
 export const moduleId = LoreEntryHelpers.moduleId;
 export const inject = replaceWrapper<ILoreEntryHelpers>({
   "P5": (original, require) => {
-    return original;
+    // return original;
 
     const searchService = SearchService(require);
     return searchService.naiCheckActivation;
