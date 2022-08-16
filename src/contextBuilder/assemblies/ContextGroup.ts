@@ -328,7 +328,7 @@ const theModule = usModule((require, exports) => {
 
       // Here we work on the content.
       let remaining = this.trimmedFrag;
-      let offset = 0;
+      let offset = this.#prefix.text.length;
       for (const so of super.structuredOutput()) {
         // There's probably no reason to yield empty elements.
         if (!so.text) continue;
