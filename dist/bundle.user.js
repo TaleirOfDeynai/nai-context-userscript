@@ -430,7 +430,7 @@ SOFTWARE.
     class ContextBuilder$1 extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 63237;
+            this.moduleId = 47819;
             this.expectedExports = 7;
             this.mapping = {
                 "AB": ["REASONS", "object"],
@@ -5819,7 +5819,7 @@ SOFTWARE.
     class TokenizerHelpers extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 51951;
+            this.moduleId = 89003;
             this.expectedExports = 3;
             this.mapping = {
                 "ID": ["getTokenizerType", "function"]
@@ -6245,7 +6245,7 @@ SOFTWARE.
     class TokenizerCodec extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 53744;
+            this.moduleId = 70613;
             this.expectedExports = 3;
             this.mapping = {
                 "PT": ["GlobalEncoder", "function"]
@@ -6257,7 +6257,7 @@ SOFTWARE.
     class AppConstants extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 68098;
+            this.moduleId = 58050;
             this.expectedExports = 50;
             this.mapping = {
                 "uV": ["contextSize", "number"],
@@ -7294,7 +7294,7 @@ SOFTWARE.
     class ModelModule extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 81229;
+            this.moduleId = 81101;
             this.expectedExports = 9;
             this.mapping = {
                 "vp": ["GetPreamble", "function"]
@@ -7464,7 +7464,7 @@ SOFTWARE.
     class EventModule extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 69485;
+            this.moduleId = 60933;
             this.expectedExports = 4;
             this.mapping = {
                 "bi": ["StoryState", "function"],
@@ -7478,7 +7478,7 @@ SOFTWARE.
     class ContextModule extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 29818;
+            this.moduleId = 58480;
             this.expectedExports = 9;
             this.mapping = {
                 "SI": ["ContextField", "function"],
@@ -9719,6 +9719,16 @@ SOFTWARE.
             });
             return Object.freeze({ assembly, split: EMPTY });
         };
+        /** Fixes the preserve mode in case of reverse iteration. */
+        const fixPreserveMode = (provider, preserveMode) => {
+            if (!provider.reversed)
+                return preserveMode;
+            switch (preserveMode) {
+                case "leading": return "trailing";
+                case "trailing": return "leading";
+                default: return preserveMode;
+            }
+        };
         /**
          * Private function that handles preparations for trimming.  It applies
          * the sequencer with the given ending preservation mode, splitting up
@@ -9792,7 +9802,7 @@ SOFTWARE.
                         yield await makeEmptyResult(assembly, tokenCodec);
                 };
             };
-            const outerSplit = nextSplit(provider.preProcess(assembly), sequencers, config.preserveMode);
+            const outerSplit = nextSplit(provider.preProcess(assembly), sequencers, fixPreserveMode(provider, config.preserveMode));
             return Object.assign(doReplay ? toReplay(outerSplit) : outerSplit, { origin: assembly, provider });
         }
         /**
@@ -9908,7 +9918,7 @@ SOFTWARE.
             }
             // Otherwise, we do our thorough trim.
             const sequencers = providers.getSequencersFrom(provider, maximumTrimType);
-            const trimmedFrags = [...execTrimLength(sequencers, fragments, maximumLength, preserveMode)];
+            const trimmedFrags = [...execTrimLength(sequencers, fragments, maximumLength, fixPreserveMode(provider, preserveMode))];
             if (trimmedFrags.length === 0)
                 return undefined;
             // Un-reverse if the provider runs in reverse.
@@ -9988,13 +9998,12 @@ SOFTWARE.
                 }
                 const innerTrimmer = dew(() => {
                     const { trimDirection, maximumTrimType } = contextConfig;
-                    const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
                     const provider = getProvider(true, trimDirection);
                     // We can re-use the current trimmer.
                     if (trimmer.provider === provider)
                         return trimmer;
                     // We need a different trimmer.
-                    return createTrimmer(trimmer.origin, contextParams, { provider, maximumTrimType, preserveMode }, false);
+                    return createTrimmer(trimmer.origin, contextParams, { provider, maximumTrimType, preserveMode: "trailing" }, false);
                 });
                 const result = await execTrimTokens(innerTrimmer, contextParams.contextSize);
                 if (result)
@@ -10093,11 +10102,8 @@ SOFTWARE.
                     const handled = storyState.handleEvent(ev);
                     return assembly.fromSource(handled.event.contextText, contextConfig);
                 });
-                // If we're trimming the top, we'll be iterating in reverse, so we must
-                // preserve the leading whitespace instead.
-                const preserveMode = trimDirection === "trimTop" ? "leading" : "trailing";
                 const provider = getProvider(false, trimDirection);
-                const trimmer = createTrimmer(sourceText, contextParams, { provider, maximumTrimType, preserveMode }, true);
+                const trimmer = createTrimmer(sourceText, contextParams, { provider, maximumTrimType, preserveMode: "trailing" }, true);
                 const searchText = await getSearchAssembly(true, trimmer, contextConfig, contextParams);
                 const field = new ContextField(contextConfig, searchText.text);
                 return new ContextContent(field, searchText, trimmer, contextParams);
@@ -12208,7 +12214,7 @@ SOFTWARE.
     class LoreEntryHelpers$1 extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 64796;
+            this.moduleId = 33718;
             this.expectedExports = 5;
             this.mapping = {
                 "nn": ["tryParseRegex", "function"],
@@ -13451,7 +13457,7 @@ SOFTWARE.
                     yield { identifier, type, text: __classPrivateFieldGet(this, _ContextGroup_prefix, "f").text };
                 // Here we work on the content.
                 let remaining = this.trimmedFrag;
-                let offset = 0;
+                let offset = __classPrivateFieldGet(this, _ContextGroup_prefix, "f").text.length;
                 for (const so of super.structuredOutput()) {
                     // There's probably no reason to yield empty elements.
                     if (!so.text)
@@ -14764,7 +14770,7 @@ SOFTWARE.
     class EphemeralHelpers extends ModuleDef {
         constructor() {
             super(...arguments);
-            this.moduleId = 72977;
+            this.moduleId = 67325;
             this.expectedExports = 4;
             this.mapping = {
                 "In": ["checkActivation", "function"]
@@ -16129,7 +16135,9 @@ SOFTWARE.
     const moduleId = LoreEntryHelpers$2.moduleId;
     const inject = replaceWrapper({
         "P5": (original, require) => {
-            return original;
+            // return original;
+            const searchService = SearchService(require);
+            return searchService.naiCheckActivation;
         }
     });
 
@@ -16162,6 +16170,8 @@ SOFTWARE.
     // storage so its `push` method can be monkey-patched for injection.
     // We want to manipulate the modules before they get a chance to be
     // destructured into private variables of other modules.
+    // In case Webpack already loaded, store the current value.
+    const initChunk = unsafeWindow.webpackChunk_N_E;
     Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
         get() {
             return _chunkStore;
@@ -16217,6 +16227,13 @@ SOFTWARE.
             _chunkStore = webpackChunk_N_E;
         }
     });
+    // If Webpack beat us to the punch, set the old value back to the property
+    // to perform the bootstrap and hope for the best.  In some soft-refresh
+    // scenarios, Webpack can beat the user-script, but we have so-far managed
+    // to catch all the modules as they load so we can inject.  This feels
+    // a bit like a roll-of-the-dice, though...
+    if (initChunk)
+        unsafeWindow.webpackChunk_N_E = initChunk;
     // NovelAI uses Sentry.  Set a value on `window` that can be detected
     // to disable Sentry or tag telemetry as coming from a modified client.
     Object.defineProperty(unsafeWindow, "__USERSCRIPT_ACTIVE", {
