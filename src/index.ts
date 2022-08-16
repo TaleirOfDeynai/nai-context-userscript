@@ -22,6 +22,9 @@ let lastPushFn: UndefOr<Webpack.ChunkStore["push"]> = undefined;
 // We want to manipulate the modules before they get a chance to be
 // destructured into private variables of other modules.
 
+// In case Webpack already loaded, store the current value.
+const initChunk = unsafeWindow.webpackChunk_N_E as UndefOr<Webpack.ChunkStore>;
+
 Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
   get() {
     return _chunkStore;
@@ -93,6 +96,13 @@ Object.defineProperty(unsafeWindow, "webpackChunk_N_E", {
     _chunkStore = webpackChunk_N_E;
   }
 });
+
+// If Webpack beat us to the punch, set the old value back to the property
+// to perform the bootstrap and hope for the best.  In some soft-refresh
+// scenarios, Webpack can beat the user-script, but we have so-far managed
+// to catch all the modules as they load so we can inject.  This feels
+// a bit like a roll-of-the-dice, though...
+if (initChunk) unsafeWindow.webpackChunk_N_E = initChunk;
 
 // NovelAI uses Sentry.  Set a value on `window` that can be detected
 // to disable Sentry or tag telemetry as coming from a modified client.
