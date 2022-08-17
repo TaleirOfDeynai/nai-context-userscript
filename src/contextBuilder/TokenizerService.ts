@@ -1,3 +1,23 @@
+/**
+ * This massive module provides services for tokenizing the content.
+ * 
+ * It is responsible for setting up an augmented token codec, using
+ * either a specific codec that was provided by NovelAI or one of
+ * the codecs in its global tokenizer.
+ * 
+ * The augmented codec provides a few extra services besides `encode`
+ * and `decode`:
+ * - `mendTokens` for joining any combination of strings or
+ *   token-arrays into a single token-array.
+ * - `findOffset` for locating a character offset in the decoded
+ *   string of an encoded token-array in a decently efficient way.
+ * 
+ * It also provides `prependEncoder` and `appendEncoder, the generator
+ * functions responsible for lazily tokenizing fragments one at a time.
+ * It ended up rather convoluted, but the goal was to minimize the
+ * total length of the strings tokenized since the process is expensive.
+ */
+
 import _hasIn from "lodash/hasIn";
 import usConfig from "@config";
 import * as rx from "@utils/rx";

@@ -1,3 +1,16 @@
+/**
+ * A service that handles the parsing of NovelAI's lorebook keys.
+ * 
+ * It provides a short-lived caching layer to reduce parsing overhead
+ * between individual context requests.  By short-lived, I mean that
+ * if it wasn't used during the latest context request, it will be
+ * discarded afterward.
+ * 
+ * Currently supports:
+ * - Simple keys (e.g. `king` `kingdom`)
+ * - Regular expression keys (e.g. `/\bking(dom)?\b/i`)
+ */
+
 import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";

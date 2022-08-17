@@ -1,3 +1,25 @@
+/**
+ * This module provides abstractions to support the trimming process.
+ * 
+ * The `TrimProvider` provides functions on how to fragment the text
+ * for each trim-type.  It's its own abstraction so the process can
+ * potentially be customized, like with comment removal.
+ * 
+ * It is important to note that the providers are setup so the output
+ * of the previous trim-level is fed to the next as its input.
+ * 
+ * IE: the `token` level will receive the fragments yielded from
+ * the `sentence` level which receives the fragments yielded from
+ * the `newline` level which receives the fragments yielded by
+ * the `preProcess` function.
+ * 
+ * The `TextSequencer` is mostly just lubricant for the trimming
+ * service, representing a single trim-type and hiding the provider
+ * behind a standardized interface.  The `getSequencersFrom` function
+ * figures out which providers to apply for the configured maximum
+ * trim-type for an entry.
+ */
+
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
@@ -226,7 +248,7 @@ export default usModule((require, exports) => {
   );
 
   /**
-   * A sequencer is an abstraction that yields longer and longer arrays
+   * A sequencer is an abstraction that yields longer and longer iterables
    * of a string split up using some kind of strategy.  The idea is that
    * we'll keep adding fragments until we either yield the whole string
    * or we bust the token budget.
@@ -277,9 +299,12 @@ export default usModule((require, exports) => {
   };
 
   /**
-   * Converts a {@link TrimProvider} or {@link TrimDirection} into a
-   * {@link TextSequencer} that provides a standard set of methods to aid
-   * the trimming process.
+   * Converts a {@link TrimProvider} or {@link TrimDirection} into one
+   * or more {@link TextSequencer}, each representing one trim-level,
+   * in the order that they should be applied.
+   * 
+   * The `maximumTrimType` indicates the coarsest trim-level that we can
+   * use and will influence how many sequencers are returned.
    */
   const getSequencersFrom = (
     provider: TrimDirection | TrimProvider,

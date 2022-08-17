@@ -1,4 +1,14 @@
-import usConfig from "@config";
+/**
+ * In order to reduce complexity of passing data around, this module
+ * provides an abstraction to ferry generally important parameters
+ * influencing the generation of the context around.
+ * 
+ * The function exported here sets up the root context parameters
+ * from data provided from NovelAI.  Sub-contexts will use
+ * object-spread to copy most properties from the root context's
+ * parameter, replacing only those relevant to that sub-context.
+ */
+
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import TokenizerHelpers from "@nai/TokenizerHelpers";

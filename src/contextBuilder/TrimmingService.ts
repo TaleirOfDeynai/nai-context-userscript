@@ -1,3 +1,10 @@
+/**
+ * Provides services for trimming content to fit a budget.
+ * 
+ * The functions provided here act as the "small, simple" entry-point into
+ * this "big, dumb" trimming process.
+ */
+
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
 import * as IterOps from "@utils/iterables";

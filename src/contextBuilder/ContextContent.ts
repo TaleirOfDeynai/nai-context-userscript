@@ -1,3 +1,9 @@
+/**
+ * This module has the abstraction for any kind of content for a
+ * context.  Notably, this is where the methods that setup the
+ * story and lorebook content live.
+ */
+
 import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
@@ -13,7 +19,7 @@ import $QueryOps from "./assemblies/queryOps";
 
 import type { UndefOr } from "@utils/utility-types";
 import type { IContextField } from "@nai/ContextModule";
-import type { ContextConfig, LoreEntryConfig } from "@nai/Lorebook";
+import type { ContextConfig } from "@nai/Lorebook";
 import type { Trimmer, ReplayTrimmer } from "./TrimmingService";
 import type { ContextParams } from "./ParamsService";
 import type { Cursor } from "./cursors";

@@ -1,3 +1,23 @@
+/**
+ * Provides services that handle the splitting of text into fragments.
+ * Each fragment retains information on where that fragment came from,
+ * at least relative to the original string.
+ * 
+ * These methods are the main splitters:
+ * - `byLine` splits on newlines for the `newline` trim-type.
+ * - `byLineFromEnd` is optimized for reverse iteration; the story
+ *   can get huge and we don't want to have to process thousands of
+ *   lines, just to discard all but the last dozen or so.
+ * - `bySentence` splits on sentences for the `sentence` trim-type.
+ * - `byWord` splits on words for the `token` trim-type.  Yeah, that
+ *   definitely isn't splitting on tokens, but NovelAI would need to
+ *   give the global tokenizer `encodeKvp` and `decodeKvp` tasks
+ *   to do that with relative efficiency.
+ * 
+ * Additionally, the basic tools for inspecting and manipulating the
+ * `TextFragment` type live here.
+ */
+
 import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { assert, assertExists } from "@utils/assert";

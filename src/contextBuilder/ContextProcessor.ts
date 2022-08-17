@@ -1,6 +1,13 @@
-import * as rx from "@utils/rx";
-import * as rxop from "@utils/rxop";
-import { dew } from "@utils/dew";
+/**
+ * This module is essentially the entry-point of the whole context-builder.
+ * 
+ * It sets up the main processing pipeline which is built up of the
+ * RxJS streams found in the `./rx` folder.  It makes sure that the
+ * "phase runner" functions get all the data they need to set
+ * themselves up.
+ */
+
+import { firstValueFrom } from "@utils/rx";
 import { usModule } from "@utils/usModule";
 import { createLogger } from "@utils/logging";
 import $ParamsService from "./ParamsService";
@@ -88,7 +95,7 @@ export default usModule((require, exports) => {
       assemblyResults.assembly
     );
 
-    return await rx.firstValueFrom(exportResults.contextRecorder);
+    return await firstValueFrom(exportResults.contextRecorder);
   }
 
   return Object.assign(exports, {

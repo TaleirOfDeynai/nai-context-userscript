@@ -1,7 +1,7 @@
 /**
  * This handles the creation of empty context-groups, which the
  * assembler will recognize and use as insertion targets for entries
- * that belong to those categories.
+ * that belong to those groups.
  * 
  * Configuration that affects this module:
  * - Becomes a noop when `subContext.groupedInsertion` is `false`.

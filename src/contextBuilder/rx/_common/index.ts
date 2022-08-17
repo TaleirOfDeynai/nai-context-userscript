@@ -1,4 +1,12 @@
-import _conforms from "lodash/conforms";
+/**
+ * This module provides types and helpers used internally by the
+ * phase runners.  It was getting tedious finding the one helper
+ * or type that I needed, so I decided to centralize them...
+ * 
+ * Then it got too big, so I broke them into individual modules
+ * provided by this index.
+ */
+
 import { usModule } from "@utils/usModule";
 import $Activation from "./activation";
 import $BiasGroups from "./biasGroups";

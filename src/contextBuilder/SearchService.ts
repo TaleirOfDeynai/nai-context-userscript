@@ -45,6 +45,8 @@ export type EntryResultMap<T extends KeyedContent> = Map<T, AssemblyResultMap>;
 
 const logger = createLogger("Search Service");
 
+const RETENTION_RATE = 1.1;
+
 export default usModule((require, exports) => {
   const matcherService = $MatcherService(require);
   const splitterService = $TextSplitterService(require);
@@ -62,7 +64,7 @@ export default usModule((require, exports) => {
     const curSize = resultsCache.size;
 
     // Maintain an overflow of 110% the demand placed on the service.
-    const desiredOverflow = ((totalUnique * 1.1) - totalUnique) | 0;
+    const desiredOverflow = ((totalUnique * RETENTION_RATE) - totalUnique) | 0;
     // But we'll keep a minimum size of 50 entries.  That's actually
     // NAI's vanilla retainment for their memoization.
     const idealSize = Math.max(50, totalUnique + desiredOverflow);
@@ -82,11 +84,12 @@ export default usModule((require, exports) => {
     const retainedEntries = [...resultsCache].slice(-nextSize);
     resultsCache = new Map(retainedEntries);
 
-    // Report the current cache only if logging is on.  Since this map is
-    // mutated, I want to make sure the console gets an isolated instance.
-    if (usConfig.debugLogging)
+    if (usConfig.debugLogging) {
+      // Because this map is mutated, I want to make sure the console gets
+      // an isolated instance.
       logger.info("Cache state:", new Map(retainedEntries));
-    logger.info({ curSize, idealSize, nextSize });
+      logger.info({ curSize, idealSize, nextSize });
+    }
   }
 
   /** Discards results for keys that were not seen since last cycle. */

@@ -6,6 +6,11 @@
  * does what it can to trim entries down to fit the budget.  It
  * will produce the staged report for the Last Model Input feature
  * with each entry that comes down the pipe.
+ * 
+ * TODO: This is the only phase that doesn't mutate the source.
+ * Because of `SourceLike`, it is possible that they are not true
+ * `ContextSource` objects; is it worth changing all that for
+ * consistency with the other phases...? thinking_face_emoji
  */
 
 import * as rx from "@utils/rx";

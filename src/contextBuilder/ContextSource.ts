@@ -1,3 +1,10 @@
+/**
+ * The abstraction here is basically just a scratch-pad used during the
+ * builder pipeline.  Yeah, mutating an object in an RxJS stream is bad
+ * mojo, but mutation is fast and types can guard programmers from
+ * themselves.
+ */
+
 import { usModule } from "@utils/usModule";
 import { isObject, isString } from "@utils/is";
 import { assertAs } from "@utils/assert";
