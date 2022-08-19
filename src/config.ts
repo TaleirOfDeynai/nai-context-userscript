@@ -213,8 +213,7 @@ const assembly = {
    * One of these options determines how that shunting happens:
    * - `"inDirection"` - If the entry to insert had a positive insertion
    *   position, it will place it after the entry.  If it was negative,
-   *   it will be placed before it.  If it was 0, it will be shunted
-   *   to the nearest end.
+   *   it will be placed before it.
    * - `"nearest"` - Always shunts the entry to the nearest end.
    */
   shuntingMode: "inDirection" as ShuntingMode

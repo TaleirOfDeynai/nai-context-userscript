@@ -1,6 +1,6 @@
 {
     "name": "nai-context-userscript",
-    "version": "0.0.1",
+    "version": "1.0.0",
     "description": "Userscript to inject a custom context builder into NovelAI.",
     "keywords": [
         "userscript",
