@@ -39,6 +39,15 @@ export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];
 export type SplitterFn = (text: TextFragment) => Iterable<TextFragment>;
 
+// TODO: Replace the `removeComments` sequencer with a function
+// that augments another provider with comment removal abilities.
+// This way, we can do composition, which is more powerful.
+
+// TODO: While you're doing that, replace that nightmarish comment
+// removal method.  What were you thinking?  I have an idea for
+// a simpler method, but it'll add a touch more overhead to the
+// parsing; probably not enough to be a concern, though.
+
 /**
  * Managing fragments is a little tricky, so this interface provides
  * methods to perform the different kinds of trimming.  Create your

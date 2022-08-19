@@ -25,6 +25,18 @@ import type { ContextParams } from "./ParamsService";
 import type { Cursor } from "./cursors";
 import type { Assembly } from "./assemblies";
 
+// TODO: It is probably best not to assume that the comment
+// removal provider's `preProcess` method will always return
+// the same instance, even if it adds overhead.
+
+// TODO: The `story.standardizeHandling` config currently
+// standardizes on the behavior of the lorebook entries,
+// changing how the story works.  I feel like this should
+// do the opposite.  When doing comment searching, I was
+// caught off-guard by an appended prefix breaking a
+// matcher like `/^## SOME COMMENT$/m` because it was
+// adding a `"• "` before the comment.
+
 type InFlightTrimming = Promise<UndefOr<Assembly.Tokenized>>;
 
 export interface StoryContent extends IContextField {

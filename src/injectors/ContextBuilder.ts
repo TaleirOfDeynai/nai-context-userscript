@@ -71,7 +71,7 @@ export const inject = replaceWrapper<IContextBuilder>({
       const naiResult = await original.apply(this, arguments);
       onEndContext.next(naiResult);
       return naiResult;
-    };
+    }
 
     return usConfig.debugTimeTrial ? timeTrialBuilder : failSafeBuilder;
   }
