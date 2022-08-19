@@ -2,8 +2,17 @@ import type { LorebookConfig as LC } from "@nai/Lorebook";
 import type { SorterKey } from "./contextBuilder/rx/_common/sorting";
 import type { ShuntingMode } from "./contextBuilder/assemblies/Compound";
 
-/** Configuration options affecting comment removal. */
-const comments = {
+/** Configuration options affecting activation. */
+const activation = {
+  /**
+   * The vanilla activation checker can be replaced with one that
+   * uses the same cache as the custom context-builder.  In cases
+   * where NovelAI does its own checks outside of the context-builder,
+   * this can be used to avoid the overhead of re-parsing the matcher
+   * and can even use the cached results from previous runs when
+   * possible.
+   */
+  vanillaIntegration: true,
   /**
    * Vanilla NovelAI removes comments before keyword searching is
    * performed.  If lorebook keywords could match text in comments,
@@ -259,8 +268,8 @@ const config = {
    * branches.
    */
   inTestEnv: false,
-  /** Configuration options affecting comment removal. */
-  comments,
+  /** Configuration options affecting activation. */
+  activation,
   /** Configuration options affecting the story entry. */
   story,
   /** Configuration options affecting lorebook features. */

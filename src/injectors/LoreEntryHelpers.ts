@@ -1,16 +1,44 @@
-import LoreEntryHelpers, { ILoreEntryHelpers } from "@nai/LoreEntryHelpers";
+import usConfig from "@config";
+import LoreEntryHelpers from "@nai/LoreEntryHelpers";
 import SearchService from "../contextBuilder/SearchService";
+import { notifyOfProblem } from "../require";
 import { replaceWrapper } from "./_helpers";
+
+import type { ILoreEntryHelpers } from "@nai/LoreEntryHelpers";
 
 export const name = LoreEntryHelpers.name;
 export const chunkId = 2888;
 export const moduleId = LoreEntryHelpers.moduleId;
 export const inject = replaceWrapper<ILoreEntryHelpers>({
   "P5": (original, require) => {
-    // return original;
+    if (!usConfig.activation.vanillaIntegration) return original;
 
     const searchService = SearchService(require);
-    return searchService.naiCheckActivation;
+
+    let checkerFailed = false;
+
+    function failSafeChecker() {
+      if (!checkerFailed) {
+        try {
+          return searchService.naiCheckActivation.apply(this, arguments);
+        }
+        catch (err) {
+          notifyOfProblem({
+            message: [
+              "Search service integration failed.",
+              "Falling back to the vanilla `checkActivation` function for the remainder of this session.",
+            ].join("  "),
+            logToConsole: err
+          });
+          checkerFailed = true;
+        }
+      }
+
+      // Invoke the original if the replacement fails.
+      return original.apply(this, arguments);
+    }
+
+    return failSafeChecker;
 
     // Comment out the return above to get reports on oddities from the
     // different implementations.

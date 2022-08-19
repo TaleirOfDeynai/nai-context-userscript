@@ -91,7 +91,7 @@ const theModule = usModule((require, exports) => {
     forSearch: boolean,
     trimDirection: ContextConfig["trimDirection"]
   ) => {
-    if (forSearch && usConfig.comments.searchComments)
+    if (forSearch && usConfig.activation.searchComments)
       return providers.basic[trimDirection];
     return providers.removeComments[trimDirection];
   };
