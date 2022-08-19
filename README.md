@@ -40,6 +40,23 @@ I was surprised to learn that Apple actually allows a few extensions for the Saf
 
 ## FAQ
 
+#### How does this work compared to vanilla NovelAI?
+
+It should be generally compatible except with lorebooks that rely on *very* specific behaviors to do some kind of crazy meta-programming.
+
+In particular:
+
+- Comment removal is normalized for all entries, including ephemeral entries.
+  - A comment is any line that starts with `##`, btw.
+- The text of an entry used for keyword searching is normalized.
+  - NovelAI includes the prefix/suffix for lorebook entries but not the story.  It was normalized to apply the lorebook behavior to the story as well.
+  - I'm considering changing this to do the opposite instead, because a regular expression like `/^## .+$/m` can fail to match because of the prefix adding more before the line.  It *felt* like bad UX, seeing my comment in the lorebook editor right at the beginning of the entry but the matcher says "no" ...but this is also a much bigger, *breakier* change.
+- Trimming should never leave behind dangling whitespace that would create inconsistency with the prefix/suffix.  If it ever does, let me know.
+- The "token" trimming level currently just separates by words in a Eurocentric way.  That trim-level won't work all that well with Japanese (sorry Genji!) or other languages that lack space-separation between words.
+- Entries can never be inserted into the prefix or suffix of other entries; the entry will be shunted to before/after the prefix/suffix instead.
+- In the case of multiple entries with the same insertion priority, it can use extra information gathered from cascade activations to break those ties a little more intelligently.  It will try to place cascade activations after the entry that triggered them.
+  - But again, **only where the insertion priority is equal to other entries**.
+
 #### How do I configure this thing?
 
 There is currently no way to configure it in NovelAI.  The configuration is static and set in stone when the script is built (TypeScript does some code removal based off it, so even modifying the values in the release code may not get it to do what you want).
