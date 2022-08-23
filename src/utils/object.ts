@@ -35,7 +35,7 @@ export function protoExtend(proto: any, extensions: any): any {
       };
       return [k, descriptor] as const;
     })
-    .value((iter) => fromPairs(iter));
+    .value((iter) => fromPairs(iter) as PropertyDescriptorMap);
 
   return Object.freeze(Object.create(proto, propMap));
 };

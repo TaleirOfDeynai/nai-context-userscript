@@ -16,6 +16,7 @@ import { usModule } from "@utils/usModule";
 import { lazyObject } from "@utils/object";
 import { createLogger } from "@utils/logging";
 import $Vanilla from "./vanilla";
+import $WeightedRandom from "./weightedRandom";
 import $Configured from "./configured";
 
 import type { ContextParams } from "../../ParamsService";
@@ -38,6 +39,7 @@ export interface SelectionPhaseResult {
 export default usModule((require, exports) => {
   const selectors = {
     vanilla: $Vanilla(require).createStream,
+    weightedRandom: $WeightedRandom(require).createStream,
     configured: $Configured(require).createStream
   } as const;
 

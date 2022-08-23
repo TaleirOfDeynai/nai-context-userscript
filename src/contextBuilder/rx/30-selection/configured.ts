@@ -6,11 +6,16 @@
 
 import usConfig from "@config";
 import { usModule } from "@utils/usModule";
-import $VanillaSelector from "./vanilla";
+import $Vanilla from "./vanilla";
+import $WeightedRandom from "./weightedRandom";
 
 export default usModule((require, exports) => {
-  // TODO: when the weighted-random selector exists, add it here.
-  const { createStream } = $VanillaSelector(require);
-
-  return Object.assign(exports, { createStream });
+  if (usConfig.weightedRandom.enabled) {
+    const { createStream } = $WeightedRandom(require);
+    return Object.assign(exports, { createStream });
+  }
+  else {
+    const { createStream } = $Vanilla(require);
+    return Object.assign(exports, { createStream });
+  }
 });

@@ -194,7 +194,7 @@ export const countBy = <T>(iter: Iterable<T>, predicateFn: PredicateFn<T>): numb
  */
 export const fromPairs = <T extends KVP<string | number | symbol>>(
   kvps: Iterable<T>
-): UnionToIntersection<FromPairsResult<T>> => {
+): Partial<UnionToIntersection<FromPairsResult<T>>> => {
   const result: any = {};
   for (const [k, v] of kvps) result[k] = v;
   return result;

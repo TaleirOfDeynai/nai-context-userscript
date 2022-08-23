@@ -1,6 +1,7 @@
 import _conforms from "lodash/conforms";
 import { usModule } from "@utils/usModule";
-import { isInstance } from "@utils/is";
+import { dew } from "@utils/dew";
+import { isInstance, isNumber } from "@utils/is";
 
 import type { Observable } from "@utils/rx";
 import type { TypePredicate } from "@utils/is";
@@ -10,6 +11,10 @@ import type { SourceOf, SomeContextSource } from "./index";
 
 export interface BudgetedSource extends ActivatedSource {
   budgetStats: NormalizedBudgetStats;
+};
+
+export interface WeightedSource extends BudgetedSource {
+  selectionIndex: number;
 };
 
 export type InsertableSource = SourceOf<BudgetedSource>;
@@ -26,6 +31,16 @@ export default usModule((_require, exports) => {
     activated: (v: any) => v === true
   }) as TypePredicate<BudgetedSource, SomeContextSource>;
 
+  const isWeightedSource = dew(() => {
+    const _check = _conforms<any>({
+      selectionIndex: isNumber
+    }) as TypePredicate<WeightedSource, BudgetedSource>;
+
+    const _impl = (source: any) => isBudgetedSource(source) && _check(source);
+
+    return _impl as TypePredicate<WeightedSource, SomeContextSource>;
+  });
+
   /** Gets some budget stats from an insertable source. */
   const getBudgetStats = async (source: InsertableSource) => {
     if (isBudgetedSource(source)) return source.budgetStats;
@@ -38,6 +53,7 @@ export default usModule((_require, exports) => {
   return Object.assign(exports, {
     asBudgeted,
     isBudgetedSource,
+    isWeightedSource,
     getBudgetStats
   });
 });

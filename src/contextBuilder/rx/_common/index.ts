@@ -14,6 +14,7 @@ import $Categories from "./categories";
 import $Selection from "./selection";
 import $Sorting from "./sorting";
 import $SubContexts from "./subContexts";
+import $Weights from "./weights";
 
 import type { ContextSource } from "../../ContextSource";
 import type { SourceLike } from "../../assemblies/Compound";
@@ -28,6 +29,7 @@ export default usModule((require, exports) => {
     categories: $Categories(require),
     selection: $Selection(require),
     sorting: $Sorting(require),
-    subContexts: $SubContexts(require)
+    subContexts: $SubContexts(require),
+    weights: $Weights(require)
   });
 });

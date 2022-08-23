@@ -22,7 +22,7 @@ type CascadingSource = ExtendField<EnabledSource, {
 
 type CascadingState = ActivationState<CascadingSource>;
 
-const logger = createLogger("Cascade Activation");
+export type CascadingResult = AssemblyResultMap & { matchDegree: number };
 
 export interface CascadeActivation {
   /**
@@ -51,8 +51,10 @@ export interface CascadeActivation {
    * A record of the matches from each activated entry that this entry
    * found a keyword match within.
    */
-  matches: Map<SomeContextSource, AssemblyResultMap>;
+  matches: Map<SomeContextSource, CascadingResult>;
 }
+
+const logger = createLogger("Cascade Activation");
 
 /**
  * Checks each {@link ContextSource} for cascade activation.
@@ -118,7 +120,7 @@ export default usModule((require, exports) => {
               finalDegree: curDegree,
               matches: new Map()
             } as CascadeActivation;
-            data.matches.set(activated, results);
+            data.matches.set(activated, Object.assign(results, { matchDegree: curDegree }));
             state.activations.set("cascade", data);
 
             // Update the final degree based on the current degree.

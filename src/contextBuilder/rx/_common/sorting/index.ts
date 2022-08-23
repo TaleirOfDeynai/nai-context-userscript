@@ -5,6 +5,7 @@ import { chain } from "@utils/iterables";
 
 // All the sorting functions available for use.
 import budgetPriority from "./budgetPriority";
+import $SelectionIndex from "./selectionIndex";
 import $ContextGroup from "./contextGroup";
 import $Reservation from "./reservation";
 import activationEphemeral from "./activationEphemeral";
@@ -29,6 +30,7 @@ export type EntrySorter =
 const theModule = usModule((require, exports) => {
   const sorters = Object.freeze({
     budgetPriority,
+    ...$SelectionIndex(require),
     ...$ContextGroup(require),
     ...$Reservation(require),
     activationEphemeral,
@@ -42,13 +44,40 @@ const theModule = usModule((require, exports) => {
     ...$NaturalByPosition(require)
   } as const);
 
+  const assertConfig = (name: string) => (k: string) =>
+    assert(`Unknown sorter "${k}" for \`${name}\` config!`, k in sorters);
+
+  /**
+   * Creates a master insertion sorter based on the functions specified
+   * in the `selection.insertionOrdering` config.
+   */
   const forInsertion = (contextParams: ContextParams) => {
     const chosenSorters = chain(usConfig.selection.insertionOrdering)
       // Force the natural sorters to be the last ones.
       .filter((k) => k !== "naturalByPosition" && k !== "naturalByType")
       .appendVal<SorterKey>("naturalByType", "naturalByPosition")
       // Check to make sure there's a sorter for each key.
-      .tap((k) => assert(`Unknown sorter "${k}" for \`selection.ordering\` config!`, k in sorters))
+      .tap(assertConfig("selection.insertionOrdering"))
+      .map((k) => sorters[k](contextParams))
+      .toArray();
+    
+    return (a: SourceOf<BudgetedSource>, b: SourceOf<BudgetedSource>) => {
+      for (let i = 0, len = chosenSorters.length; i < len; i++) {
+        const result = chosenSorters[i](a, b);
+        if (result !== 0) return result;
+      }
+      return 0;
+    };
+  };
+
+  /**
+   * Creates a master weighted selection sorter based on the functions
+   * specified in the `weightedRandom.selectionOrdering` config.
+   */
+  const forWeightedSelection = (contextParams: ContextParams) => {
+    const chosenSorters = chain(usConfig.weightedRandom.selectionOrdering)
+      // Check to make sure there's a sorter for each key.
+      .tap(assertConfig("weightedRandom.selectionOrdering"))
       .map((k) => sorters[k](contextParams))
       .toArray();
     
@@ -63,7 +92,8 @@ const theModule = usModule((require, exports) => {
 
   return Object.assign(exports, {
     sorters,
-    forInsertion
+    forInsertion,
+    forWeightedSelection
   });
 });
 

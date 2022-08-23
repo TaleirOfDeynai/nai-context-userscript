@@ -1,5 +1,6 @@
 import type { LorebookConfig as LC } from "@nai/Lorebook";
 import type { SorterKey } from "./contextBuilder/rx/_common/sorting";
+import type { WeigherKey, WeightingConfig } from "./contextBuilder/rx/_common/weights";
 import type { ShuntingMode } from "./contextBuilder/assemblies/Compound";
 
 /** Configuration options affecting activation. */
@@ -100,6 +101,7 @@ const selection = {
    */
   insertionOrdering: [
     "budgetPriority",
+    "selectionIndex",
     "contextGroup",
     "reservation",
     "activationEphemeral",
@@ -186,7 +188,29 @@ const weightedRandom = {
   /**
    * Enables the weighted-random selection strategy.
    */
-  enabled: false,
+  enabled: true,
+  /**
+   * The weighting function to use in scoring each entry.
+   * 
+   * The weighting functions are applied in order, so multipliers will
+   * affect only the score up to that point.  You can group weighting
+   * functions together in sub-arrays:
+   * 
+   * ```json
+   * [
+   *   ["storyCount", "searchRange"],
+   *   "cascadeCount"
+   * ]
+   * ```
+   * 
+   * The result of the group will be added to any previous score.
+   * 
+   * The allowed weighers are found {@link WeigherKey here}.
+   */
+  weighting: [
+    ["storyCount", "searchRange"],
+    "cascadeCount"
+  ] as WeightingConfig,
   /**
    * Defines the the criteria for ordering and grouping entries into
    * selection groups.  All entries that are found to be equal to one
@@ -199,7 +223,7 @@ const weightedRandom = {
    */
   selectionOrdering: [
     "budgetPriority"
-  ]
+  ] as SorterKey[]
 } as const;
 
 /** Configuration options relating to context assembly. */
