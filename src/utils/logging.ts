@@ -205,15 +205,22 @@ class Logger implements ILogger {
         };
 
         stopWatch.start();
-        const retVal = fn.apply(this, arguments);
+        try {
+          const retVal = fn.apply(this, arguments);
 
-        // For async functions, we want to wait for it to resolve.
-        if (isThenable(retVal)) {
-          return Promise.resolve(retVal).finally(doStop);
+          // For async functions, we want to wait for it to resolve.
+          if (isThenable(retVal)) {
+            return Promise.resolve(retVal).finally(doStop);
+          }
+          else {
+            doStop();
+            return retVal;
+          }
         }
-        else {
+        catch (err) {
+          // This was not an async error; we NEED to stop and rethrow.
           doStop();
-          return retVal;
+          throw err;
         }
       }
     };

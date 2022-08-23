@@ -11,13 +11,13 @@ export type DeferredOf<T>
 
 /**
  * A sort of stack buffer.  It emit elements only when something has called
- * {@link StackSubject.pop pop()}, allowing you to rate limit but also
- * prioritize the latest values.
+ * {@link pop}, allowing you to rate limit but also prioritize the latest
+ * values.
  * 
  * Even though this will multicast by nature of being a {@link Subject},
- * anything can call {@link StackSubject.pop pop()} to trigger the next
- * emission.  It is recommended to limit ownership of this method to
- * properly implement rate-limiting.
+ * anything can call {@link pop} to trigger the next emission.  It is
+ * recommended to limit ownership of this method to properly implement
+ * rate-limiting.
  */
 export class StackSubject<T> extends Subject<T> {
   /** When `true`, the stack should emit its next value. */
