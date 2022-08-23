@@ -127,6 +127,8 @@ declare global {
   }
 }
 
+export { default as castArray } from "lodash/castArray";
+
 /**
  * Converts the given iterable into a readonly array, if needed.
  */
