@@ -5,7 +5,7 @@
 // @include     https://novelai.net
 // @include     https://novelai.net/*
 // @run-at      document-start
-// @version     0.0.1
+// @version     1.0.0
 // @homepage    https://github.com/TaleirOfDeynai/nai-context-userscript
 // @author      TaleirOfDeynai
 // @license     MIT
@@ -160,8 +160,17 @@ SOFTWARE.
         notifyOfProblem({ logToConsole });
     }
 
-    /** Configuration options affecting comment removal. */
-    const comments = {
+    /** Configuration options affecting activation. */
+    const activation = {
+        /**
+         * The vanilla activation checker can be replaced with one that
+         * uses the same cache as the custom context-builder.  In cases
+         * where NovelAI does its own checks outside of the context-builder,
+         * this can be used to avoid the overhead of re-parsing the matcher
+         * and can even use the cached results from previous runs when
+         * possible.
+         */
+        vanillaIntegration: true,
         /**
          * Vanilla NovelAI removes comments before keyword searching is
          * performed.  If lorebook keywords could match text in comments,
@@ -246,6 +255,7 @@ SOFTWARE.
          */
         insertionOrdering: [
             "budgetPriority",
+            "selectionIndex",
             "contextGroup",
             "reservation",
             "activationEphemeral",
@@ -330,7 +340,29 @@ SOFTWARE.
         /**
          * Enables the weighted-random selection strategy.
          */
-        enabled: false,
+        enabled: true,
+        /**
+         * The weighting function to use in scoring each entry.
+         *
+         * The weighting functions are applied in order, so multipliers will
+         * affect only the score up to that point.  You can group weighting
+         * functions together in sub-arrays:
+         *
+         * ```json
+         * [
+         *   ["storyCount", "searchRange"],
+         *   "cascadeCount"
+         * ]
+         * ```
+         *
+         * The result of the group will be added to any previous score.
+         *
+         * The allowed weighers are found {@link WeigherKey here}.
+         */
+        weighting: [
+            ["storyCount", "searchRange"],
+            "cascadeCount"
+        ],
         /**
          * Defines the the criteria for ordering and grouping entries into
          * selection groups.  All entries that are found to be equal to one
@@ -356,8 +388,7 @@ SOFTWARE.
          * One of these options determines how that shunting happens:
          * - `"inDirection"` - If the entry to insert had a positive insertion
          *   position, it will place it after the entry.  If it was negative,
-         *   it will be placed before it.  If it was 0, it will be shunted
-         *   to the nearest end.
+         *   it will be placed before it.
          * - `"nearest"` - Always shunts the entry to the nearest end.
          */
         shuntingMode: "inDirection"
@@ -389,7 +420,7 @@ SOFTWARE.
     };
     const config$1 = {
         /** Enables debug logging for the user-script. */
-        debugLogging: false,
+        debugLogging: true,
         /**
          * When `true`, both the new and vanilla context builder will run,
          * measuring the performance of both for comparison.  This will
@@ -399,7 +430,7 @@ SOFTWARE.
          * When `false`, the vanilla context builder will only be invoked if
          * the new one fails.
          */
-        debugTimeTrial: false,
+        debugTimeTrial: true,
         /**
          * Whether we're in a test environment.
          *
@@ -409,8 +440,8 @@ SOFTWARE.
          * branches.
          */
         inTestEnv: false,
-        /** Configuration options affecting comment removal. */
-        comments,
+        /** Configuration options affecting activation. */
+        activation,
         /** Configuration options affecting the story entry. */
         story,
         /** Configuration options affecting lorebook features. */
@@ -2339,7 +2370,7 @@ SOFTWARE.
 
     new AsapScheduler(AsapAction);
 
-    new AsyncScheduler(AsyncAction);
+    var asyncScheduler = new AsyncScheduler(AsyncAction);
 
     var QueueAction = function (_super) {
       __extends(QueueAction, _super);
@@ -3449,6 +3480,92 @@ SOFTWARE.
       return [filter(predicate, thisArg)(innerFrom(source)), filter(not(predicate, thisArg))(innerFrom(source))];
     }
 
+    function bufferTime(bufferTimeSpan) {
+      var _a, _b;
+
+      var otherArgs = [];
+
+      for (var _i = 1; _i < arguments.length; _i++) {
+        otherArgs[_i - 1] = arguments[_i];
+      }
+
+      var scheduler = (_a = popScheduler(otherArgs)) !== null && _a !== void 0 ? _a : asyncScheduler;
+      var bufferCreationInterval = (_b = otherArgs[0]) !== null && _b !== void 0 ? _b : null;
+      var maxBufferSize = otherArgs[1] || Infinity;
+      return operate(function (source, subscriber) {
+        var bufferRecords = [];
+        var restartOnEmit = false;
+
+        var emit = function (record) {
+          var buffer = record.buffer,
+              subs = record.subs;
+          subs.unsubscribe();
+          arrRemove(bufferRecords, record);
+          subscriber.next(buffer);
+          restartOnEmit && startBuffer();
+        };
+
+        var startBuffer = function () {
+          if (bufferRecords) {
+            var subs = new Subscription();
+            subscriber.add(subs);
+            var buffer = [];
+            var record_1 = {
+              buffer: buffer,
+              subs: subs
+            };
+            bufferRecords.push(record_1);
+            executeSchedule(subs, scheduler, function () {
+              return emit(record_1);
+            }, bufferTimeSpan);
+          }
+        };
+
+        if (bufferCreationInterval !== null && bufferCreationInterval >= 0) {
+          executeSchedule(subscriber, scheduler, startBuffer, bufferCreationInterval, true);
+        } else {
+          restartOnEmit = true;
+        }
+
+        startBuffer();
+        var bufferTimeSubscriber = createOperatorSubscriber(subscriber, function (value) {
+          var e_1, _a;
+
+          var recordsCopy = bufferRecords.slice();
+
+          try {
+            for (var recordsCopy_1 = __values(recordsCopy), recordsCopy_1_1 = recordsCopy_1.next(); !recordsCopy_1_1.done; recordsCopy_1_1 = recordsCopy_1.next()) {
+              var record = recordsCopy_1_1.value;
+              var buffer = record.buffer;
+              buffer.push(value);
+              maxBufferSize <= buffer.length && emit(record);
+            }
+          } catch (e_1_1) {
+            e_1 = {
+              error: e_1_1
+            };
+          } finally {
+            try {
+              if (recordsCopy_1_1 && !recordsCopy_1_1.done && (_a = recordsCopy_1.return)) _a.call(recordsCopy_1);
+            } finally {
+              if (e_1) throw e_1.error;
+            }
+          }
+        }, function () {
+          while (bufferRecords === null || bufferRecords === void 0 ? void 0 : bufferRecords.length) {
+            subscriber.next(bufferRecords.shift().buffer);
+          }
+
+          bufferTimeSubscriber === null || bufferTimeSubscriber === void 0 ? void 0 : bufferTimeSubscriber.unsubscribe();
+          subscriber.complete();
+          subscriber.unsubscribe();
+        }, undefined, function () {
+          return bufferRecords = null;
+        });
+        source.subscribe(bufferTimeSubscriber);
+      });
+    }
+
     function scanInternals(accumulator, seed, hasSeed, emitOnNext, emitBeforeComplete) {
       return function (source, subscriber) {
         var hasState = hasSeed;
@@ -3905,6 +4022,47 @@ SOFTWARE.
       }) : identity;
     }
 
+    function withLatestFrom() {
+      var inputs = [];
+
+      for (var _i = 0; _i < arguments.length; _i++) {
+        inputs[_i] = arguments[_i];
+      }
+
+      var project = popResultSelector(inputs);
+      return operate(function (source, subscriber) {
+        var len = inputs.length;
+        var otherValues = new Array(len);
+        var hasValue = inputs.map(function () {
+          return false;
+        });
+        var ready = false;
+
+        var _loop_1 = function (i) {
+          innerFrom(inputs[i]).subscribe(createOperatorSubscriber(subscriber, function (value) {
+            otherValues[i] = value;
+
+            if (!ready && !hasValue[i]) {
+              hasValue[i] = true;
+              (ready = hasValue.every(identity)) && (hasValue = null);
+            }
+          }, noop));
+        };
+
+        for (var i = 0; i < len; i++) {
+          _loop_1(i);
+        }
+
+        source.subscribe(createOperatorSubscriber(subscriber, function (value) {
+          if (ready) {
+            var values = __spreadArray([value], __read(otherValues));
+
+            subscriber.next(project ? project.apply(void 0, __spreadArray([], __read(values))) : values);
+          }
+        }));
+      });
+    }
+
     class Deferred {
       constructor() {
         this.resolve = null;
@@ -4277,14 +4435,14 @@ SOFTWARE.
      * // => false
      */
 
-    function isSymbol$3(value) {
+    function isSymbol$4(value) {
       return typeof value == 'symbol' || isObjectLike$6(value) && baseGetTag$4(value) == symbolTag$3;
     }
 
-    var isSymbol_1 = isSymbol$3;
+    var isSymbol_1 = isSymbol$4;
 
     var isArray$8 = isArray_1,
-        isSymbol$2 = isSymbol_1;
+        isSymbol$3 = isSymbol_1;
     /** Used to match property names within property paths. */
 
     var reIsDeepProp = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
@@ -4305,7 +4463,7 @@ SOFTWARE.
 
       var type = typeof value;
 
-      if (type == 'number' || type == 'symbol' || type == 'boolean' || value == null || isSymbol$2(value)) {
+      if (type == 'number' || type == 'symbol' || type == 'boolean' || value == null || isSymbol$3(value)) {
         return true;
       }
 
@@ -4340,15 +4498,15 @@ SOFTWARE.
      * // => false
      */
 
-    function isObject$7(value) {
+    function isObject$8(value) {
       var type = typeof value;
       return value != null && (type == 'object' || type == 'function');
     }
 
-    var isObject_1 = isObject$7;
+    var isObject_1 = isObject$8;
 
     var baseGetTag$3 = _baseGetTag,
-        isObject$6 = isObject_1;
+        isObject$7 = isObject_1;
     /** `Object#toString` result references. */
 
     var asyncTag = '[object AsyncFunction]',
@@ -4374,7 +4532,7 @@ SOFTWARE.
      */
 
     function isFunction$3(value) {
-      if (!isObject$6(value)) {
+      if (!isObject$7(value)) {
         return false;
       } // The use of `Object#toString` avoids issues with the `typeof` operator
       // in Safari 9 which returns 'object' for typed arrays and other constructors.
@@ -4445,7 +4603,7 @@ SOFTWARE.
 
     var isFunction$2 = isFunction_1,
         isMasked = _isMasked,
-        isObject$5 = isObject_1,
+        isObject$6 = isObject_1,
         toSource$1 = _toSource;
     /**
      * Used to match `RegExp`
@@ -4479,7 +4637,7 @@ SOFTWARE.
      */
 
     function baseIsNative$1(value) {
-      if (!isObject$5(value) || isMasked(value)) {
+      if (!isObject$6(value) || isMasked(value)) {
         return false;
       }
 
@@ -5218,7 +5376,7 @@ SOFTWARE.
     var Symbol$3 = _Symbol,
         arrayMap = _arrayMap,
         isArray$7 = isArray_1,
-        isSymbol$1 = isSymbol_1;
+        isSymbol$2 = isSymbol_1;
     /** Used as references for various `Number` constants. */
 
     var INFINITY$1 = 1 / 0;
@@ -5246,7 +5404,7 @@ SOFTWARE.
         return arrayMap(value, baseToString$1) + '';
       }
 
-      if (isSymbol$1(value)) {
+      if (isSymbol$2(value)) {
         return symbolToString ? symbolToString.call(value) : '';
       }
 
@@ -5421,7 +5579,7 @@ SOFTWARE.
 
     var isLength_1 = isLength$3;
 
-    var isSymbol = isSymbol_1;
+    var isSymbol$1 = isSymbol_1;
     /** Used as references for various `Number` constants. */
 
     var INFINITY = 1 / 0;
@@ -5434,7 +5592,7 @@ SOFTWARE.
      */
 
     function toKey$1(value) {
-      if (typeof value == 'string' || isSymbol(value)) {
+      if (typeof value == 'string' || isSymbol$1(value)) {
         return value;
       }
 
@@ -5524,7 +5682,7 @@ SOFTWARE.
     const isUndefined = (value) => typeof value === "undefined";
     const isInstance = (value) => value != null;
     const isFunction$1 = (value) => typeof value === "function";
-    const isObject$4 = (value) => value && typeof value === "object";
+    const isObject$5 = (value) => value && typeof value === "object";
     const isArray$4 = Array.isArray;
     /**
      * Tests if something is an iterable collection.
@@ -5532,18 +5690,23 @@ SOFTWARE.
      * Even though strings are in-fact iterable, this function will return
      * `false` for them, as too often I would do something terrible with them.
      */
-    const isIterable = (value) => isObject$4(value) && isFunction$1(value[Symbol.iterator]);
+    const isIterable = (value) => isObject$5(value) && isFunction$1(value[Symbol.iterator]);
     const isString = (value) => typeof value === "string";
     const isNumber = (value) => typeof value === "number";
     const isBoolean = (value) => typeof value === "boolean";
     const isPojo = dew(() => {
         const POJO_PROTOS = Object.freeze([Object.prototype, null]);
         return (value) => {
-            if (!isObject$4(value))
+            if (!isObject$5(value))
                 return false;
             return POJO_PROTOS.includes(Object.getPrototypeOf(value));
         };
     });
+    const isThenable = (value) => {
+        if (value instanceof Promise)
+            return true;
+        return isObject$5(value) && isFunction$1(value.then);
+    };
 
     /**
      * Validates a basic assertion.  If it fails, an error with `msg` is thrown.
@@ -5743,6 +5906,7 @@ SOFTWARE.
         };
     }
 
+    var _Logger_origin, _Logger_stream;
     const omegaLogger = new Subject();
     omegaLogger.forEach(({ origin, type, data }) => {
         switch (type) {
@@ -5757,36 +5921,149 @@ SOFTWARE.
             }
         }
     });
-    class NullLogger {
-        constructor() {
-            this.info = noop;
-            this.warn = noop;
-            this.error = noop;
-            this.dir = noop;
-            this.mark = noop;
+    class Logger {
+        constructor(origin) {
+            _Logger_origin.set(this, void 0);
+            _Logger_stream.set(this, void 0);
+            this.info = (...data) => __classPrivateFieldGet(this, _Logger_stream, "f").next({ origin: __classPrivateFieldGet(this, _Logger_origin, "f"), type: "info", data });
+            this.warn = (...data) => __classPrivateFieldGet(this, _Logger_stream, "f").next({ origin: __classPrivateFieldGet(this, _Logger_origin, "f"), type: "info", data });
+            this.error = (...data) => __classPrivateFieldGet(this, _Logger_stream, "f").next({ origin: __classPrivateFieldGet(this, _Logger_origin, "f"), type: "info", data });
+            this.dir = (...data) => __classPrivateFieldGet(this, _Logger_stream, "f").next({ origin: __classPrivateFieldGet(this, _Logger_origin, "f"), type: "info", data });
+            this.mark = (name) => performance.mark(`[${__classPrivateFieldGet(this, _Logger_origin, "f")}] ${name}`);
+            __classPrivateFieldSet(this, _Logger_origin, origin, "f");
+            __classPrivateFieldSet(this, _Logger_stream, new Subject(), "f");
+            __classPrivateFieldGet(this, _Logger_stream, "f").subscribe(omegaLogger);
         }
-        stopWatch() {
-            return {
-                start: noop,
-                stop: noop,
-                stopAndReport: noop
+        stopWatch(name) {
+            const NAME = `[${__classPrivateFieldGet(this, _Logger_origin, "f")}] ${name}`;
+            const START = `[${__classPrivateFieldGet(this, _Logger_origin, "f")}] START ${name}`;
+            const STOP = `[${__classPrivateFieldGet(this, _Logger_origin, "f")}] STOP ${name}`;
+            let started = false;
+            const start = () => {
+                if (!started) {
+                    started = true;
+                    performance.mark(START);
+                    return;
+                }
+                this.warn(`Measurement \`${name}\` already started.`);
             };
+            const stopAndReport = () => {
+                if (started) {
+                    started = false;
+                    performance.mark(STOP);
+                    return performance.measure(NAME, START, STOP);
+                }
+                this.warn(`Measurement \`${name}\` not yet started.`);
+            };
+            const stop = (logMeasurement = true) => {
+                const measurement = stopAndReport();
+                if (measurement && logMeasurement)
+                    this.info(measurement);
+            };
+            return { start, stop, stopAndReport };
         }
-        measureFn(fn) {
-            return fn;
+        measureFn(fn, givenName) {
+            const self = this;
+            const name = givenName || fn.name || "<anonymous>";
+            const wrappedName = `measured ${name}`;
+            const aggregator = new Subject();
+            aggregator.pipe(bufferTime(1000), filter((measurements) => measurements.length > 0), map((measurements) => measurements.reduce((acc, m) => {
+                const initCount = acc.count;
+                const dur = m.duration;
+                acc.count = initCount + 1;
+                acc.total = acc.total + dur;
+                acc.min = initCount > 0 ? Math.min(acc.min, dur) : dur;
+                acc.avg = acc.total / acc.count;
+                acc.max = Math.max(acc.max, dur);
+                return acc;
+            }, {
+                name: wrappedName,
+                count: 0,
+                total: 0,
+                min: 0,
+                avg: 0,
+                max: 0
+            }))).subscribe((m) => this.info(m));
+            // An old trick to give a dynamic name to a function.
+            const wrapping = {
+                [wrappedName]() {
+                    const stopWatch = self.stopWatch(name);
+                    const doStop = () => {
+                        const measurement = stopWatch.stopAndReport();
+                        if (!measurement)
+                            return;
+                        aggregator.next(measurement);
+                    };
+                    stopWatch.start();
+                    const retVal = fn.apply(this, arguments);
+                    // For async functions, we want to wait for it to resolve.
+                    if (isThenable(retVal)) {
+                        return Promise.resolve(retVal).finally(doStop);
+                    }
+                    else {
+                        doStop();
+                        return retVal;
+                    }
+                }
+            };
+            return wrapping[wrappedName];
         }
-        async measureAsync(_name, task) {
-            return await task();
+        async measureAsync(name, task) {
+            const stopWatch = this.stopWatch(name);
+            stopWatch.start();
+            const result = await task();
+            stopWatch.stop();
+            return result;
         }
-        measureStream() {
-            return Object.assign((source) => source, {
-                markItems: () => (source) => source
+        measureStream(name) {
+            const forCold = this.stopWatch(`${name} (Cold)`);
+            const forHot = this.stopWatch(`${name} (Hot)`);
+            const operatorFn = (source) => {
+                const observable = from(source);
+                let state = "cold";
+                const onFinished = () => {
+                    switch (state) {
+                        case "cold":
+                            forCold.stop();
+                            break;
+                        case "hot":
+                            forHot.stop();
+                            break;
+                    }
+                    state = "done";
+                };
+                forCold.start();
+                return observable.pipe(connect((shared) => {
+                    if (state === "cold") {
+                        forCold.stop();
+                        state = "hot";
+                        forHot.start();
+                    }
+                    shared.subscribe({
+                        complete: onFinished,
+                        error: (err) => {
+                            onFinished();
+                            this.error(err);
+                        }
+                    });
+                    return shared;
+                }));
+            };
+            return Object.assign(operatorFn, {
+                markItems: (labeler) => (source) => {
+                    let index = 0;
+                    return operatorFn(source).pipe(tap((item) => {
+                        const label = labeler?.(item, index) ?? String(index);
+                        this.mark(`${name} - ${label}`);
+                        index += 1;
+                    }));
+                }
             });
         }
     }
+    _Logger_origin = new WeakMap(), _Logger_stream = new WeakMap();
     const createLogger = (origin) => {
-        // Can be disabled via config.
-        return new NullLogger();
+        return new Logger(origin);
     };
 
     /**
@@ -5839,7 +6116,7 @@ SOFTWARE.
         return Object.freeze(iterable.slice());
     };
     const hasSize = (value) => {
-        if (!isObject$4(value))
+        if (!isObject$5(value))
             return false;
         if (value instanceof Map)
             return true;
@@ -6267,6 +6544,25 @@ SOFTWARE.
     }
     var AppConstants$1 = new AppConstants();
 
+    /**
+     * Provides services that handle the splitting of text into fragments.
+     * Each fragment retains information on where that fragment came from,
+     * at least relative to the original string.
+     *
+     * These methods are the main splitters:
+     * - `byLine` splits on newlines for the `newline` trim-type.
+     * - `byLineFromEnd` is optimized for reverse iteration; the story
+     *   can get huge and we don't want to have to process thousands of
+     *   lines, just to discard all but the last dozen or so.
+     * - `bySentence` splits on sentences for the `sentence` trim-type.
+     * - `byWord` splits on words for the `token` trim-type.  Yeah, that
+     *   definitely isn't splitting on tokens, but NovelAI would need to
+     *   give the global tokenizer `encodeKvp` and `decodeKvp` tasks
+     *   to do that with relative efficiency.
+     *
+     * Additionally, the basic tools for inspecting and manipulating the
+     * `TextFragment` type live here.
+     */
     const { raw } = String;
     /**
      * A raw string with all the punctuation characters we care about.
@@ -6716,6 +7012,25 @@ SOFTWARE.
         });
     });
 
+    /**
+     * This massive module provides services for tokenizing the content.
+     *
+     * It is responsible for setting up an augmented token codec, using
+     * either a specific codec that was provided by NovelAI or one of
+     * the codecs in its global tokenizer.
+     *
+     * The augmented codec provides a few extra services besides `encode`
+     * and `decode`:
+     * - `mendTokens` for joining any combination of strings or
+     *   token-arrays into a single token-array.
+     * - `findOffset` for locating a character offset in the decoded
+     *   string of an encoded token-array in a decently efficient way.
+     *
+     * It also provides `prependEncoder` and `appendEncoder, the generator
+     * functions responsible for lazily tokenizing fragments one at a time.
+     * It ended up rather convoluted, but the goal was to minimize the
+     * total length of the strings tokenized since the process is expensive.
+     */
     const UNSAFE_TOKEN_BUFFER = 10;
     const $$MarkOfAugmentation = Symbol("TokenizerService.tokenCodec");
     var $TokenizerService = usModule((require, exports) => {
@@ -6973,6 +7288,7 @@ SOFTWARE.
                 // We only need one of these; we can infer the other.
                 const leftText = await decode(leftTokens);
                 const rightText = fragment.content.slice(leftText.length);
+                assert("Expected `leftText` to be the start of `fragment`.", fragment.content.startsWith(leftText));
                 return [
                     toPart(givenPart, leftTokens, 0, leftText, 0),
                     toPart(givenPart, rightTokens, leftTokens.length, rightText, leftText.length)
@@ -7186,7 +7502,7 @@ SOFTWARE.
         }
         /** Checks if `value` satisfies the {@link SomeTokenCodec} interface. */
         const isCodec = (value) => {
-            if (!isObject$4(value))
+            if (!isObject$5(value))
                 return false;
             if (!hasIn_1(value, "encode"))
                 return false;
@@ -7328,6 +7644,16 @@ SOFTWARE.
         });
     });
 
+    /**
+     * In order to reduce complexity of passing data around, this module
+     * provides an abstraction to ferry generally important parameters
+     * influencing the generation of the context around.
+     *
+     * The function exported here sets up the root context parameters
+     * from data provided from NovelAI.  Sub-contexts will use
+     * object-spread to copy most properties from the root context's
+     * parameter, replacing only those relevant to that sub-context.
+     */
     var $ParamsService = usModule((require, exports) => {
         const tokenizerHelpers = require(TokenizerHelpers$1);
         const tokenizer = $TokenizerService(require);
@@ -7424,9 +7750,15 @@ SOFTWARE.
         return Object.freeze(obj);
     };
 
+    /**
+     * The abstraction here is basically just a scratch-pad used during the
+     * builder pipeline.  Yeah, mutating an object in an RxJS stream is bad
+     * mojo, but mutation is fast and types can guard programmers from
+     * themselves.
+     */
     var $ContextSource = usModule((require, exports) => {
         const toIdentifier = (entry, type) => {
-            assertAs("Expected an object.", isObject$4, entry);
+            assertAs("Expected an object.", isObject$5, entry);
             ephemeral: {
                 if (type !== "ephemeral")
                     break ephemeral;
@@ -7500,6 +7832,27 @@ SOFTWARE.
     }
     var UUID$1 = new UUID();
 
+    /**
+     * This module provides abstractions to support the trimming process.
+     *
+     * The `TrimProvider` provides functions on how to fragment the text
+     * for each trim-type.  It's its own abstraction so the process can
+     * potentially be customized, like with comment removal.
+     *
+     * It is important to note that the providers are setup so the output
+     * of the previous trim-level is fed to the next as its input.
+     *
+     * IE: the `token` level will receive the fragments yielded from
+     * the `sentence` level which receives the fragments yielded from
+     * the `newline` level which receives the fragments yielded by
+     * the `preProcess` function.
+     *
+     * The `TextSequencer` is mostly just lubricant for the trimming
+     * service, representing a single trim-type and hiding the provider
+     * behind a standardized interface.  The `getSequencersFrom` function
+     * figures out which providers to apply for the configured maximum
+     * trim-type for an entry.
+     */
     /** The natural order for sequencers. */
     const TRIM_ORDER = Object.freeze(["newline", "sentence", "token"]);
     /** Sequencer token encoder buffer size configurations. */
@@ -7655,7 +8008,7 @@ SOFTWARE.
         /** Ensures `srcProvider` is a {@link TrimProvider}. */
         const asProvider = (srcProvider) => assertExists(`Expected \`${srcProvider}\` to be mappable to a provider.`, isString(srcProvider) ? basic[srcProvider] : srcProvider);
         /**
-         * A sequencer is an abstraction that yields longer and longer arrays
+         * A sequencer is an abstraction that yields longer and longer iterables
          * of a string split up using some kind of strategy.  The idea is that
          * we'll keep adding fragments until we either yield the whole string
          * or we bust the token budget.
@@ -7705,9 +8058,12 @@ SOFTWARE.
             };
         };
         /**
-         * Converts a {@link TrimProvider} or {@link TrimDirection} into a
-         * {@link TextSequencer} that provides a standard set of methods to aid
-         * the trimming process.
+         * Converts a {@link TrimProvider} or {@link TrimDirection} into one
+         * or more {@link TextSequencer}, each representing one trim-level,
+         * in the order that they should be applied.
+         *
+         * The `maximumTrimType` indicates the coarsest trim-level that we can
+         * use and will influence how many sequencers are returned.
          */
         const getSequencersFrom = (provider, maximumTrimType) => {
             const p = asProvider(provider);
@@ -8137,6 +8493,17 @@ SOFTWARE.
         });
     });
 
+    /**
+     * Cursors represent a position relative to the source string for
+     * an `IFragmentAssembly`.
+     *
+     * Because a `TextFragment` knows where it was once positioned in
+     * the source text, we have a means to map an offset from the source
+     * string to one of its fragments, even as we tear that string apart
+     * and throw parts of it into the trash.
+     *
+     * This module provides utilities for working with these offsets.
+     */
     var $Cursors = usModule((require, exports) => {
         return Object.assign(exports, {
             fullText,
@@ -8457,6 +8824,12 @@ SOFTWARE.
         // We make assumptions that the prefix fragment is always at offset 0.
         assert("Expected prefix's offset to be 0.", assembly.prefix.offset === 0);
         const content = toImmutable(assembly.content);
+        {
+            // Because I'm tired of coding around this possibility.
+            // Note: this does allow `content` to be empty, but if it contains
+            // fragments, they must all be non-empty.
+            assert("Expected content to contain only non-empty fragments.", content.every((f) => Boolean(f.content)));
+        }
         checks: {
             // This may be a wrapped assembly; we'll want to recompose it.
             if (!isPojo(assembly))
@@ -8664,7 +9037,7 @@ SOFTWARE.
         });
     });
 
-    const theModule$6 = usModule((require, exports) => {
+    const theModule$7 = usModule((require, exports) => {
         var _BaseAssembly_wrapped, _BaseAssembly_text, _BaseAssembly_contentText, _BaseAssembly_assemblyStats, _BaseAssembly_contentStats, _BaseAssembly_isContiguous;
         const manipOps = $ManipOps(require);
         const queryOps = $QueryOps(require);
@@ -8752,12 +9125,12 @@ SOFTWARE.
         suffix: "",
         assumeContinuity: false
     };
-    const theModule$5 = usModule((require, exports) => {
+    const theModule$6 = usModule((require, exports) => {
         const ss = $TextSplitterService(require);
         const cursorOps = $CursorOps(require);
         const manipOps = $ManipOps(require);
         const queryOps = $QueryOps(require);
-        const { BaseAssembly } = theModule$6(require);
+        const { BaseAssembly } = theModule$7(require);
         /**
          * A class fitting {@link IFragmentAssembly} that provides caching facilities
          * and convenient access to the limited set of operators used for context
@@ -8919,6 +9292,13 @@ SOFTWARE.
             // We'll assume the derived assembly has the same continuity as
             // its origin assembly.
             assumeContinuity ? queryOps.isContiguous(originAssembly) : ss.isContiguous(localFrags));
+            // Also sanity check the content if thorough logging is enabled.
+            {
+                const oldStats = queryOps.getContentStats(source);
+                const newStats = assembly.contentStats;
+                assert("Expected minimum offset to be in range of source.", newStats.minOffset >= oldStats.minOffset);
+                assert("Expected maximum offset to be in range of source.", newStats.maxOffset <= oldStats.maxOffset);
+            }
             return assembly;
         }
         return Object.assign(exports, {
@@ -9496,7 +9876,7 @@ SOFTWARE.
         });
     });
 
-    const theModule$4 = usModule((require, exports) => {
+    const theModule$5 = usModule((require, exports) => {
         var _TokenizedAssembly_tokens, _TokenizedAssembly_codec;
         const ss = $TextSplitterService(require);
         const cursorOps = $CursorOps(require);
@@ -9504,8 +9884,8 @@ SOFTWARE.
         const posOps = $PositionOps(require);
         const queryOps = $QueryOps(require);
         const tokenOps = $TokenOps(require);
-        const { BaseAssembly } = theModule$6(require);
-        const fragAssembly = theModule$5(require);
+        const { BaseAssembly } = theModule$7(require);
+        const fragAssembly = theModule$6(require);
         /**
          * A class fitting {@link IFragmentAssembly} that provides caching facilities
          * and convenient access to the limited set of operators used for context
@@ -9689,13 +10069,19 @@ SOFTWARE.
         });
     });
 
+    /**
+     * Provides services for trimming content to fit a budget.
+     *
+     * The functions provided here act as the "small, simple" entry-point into
+     * this "big, dumb" trimming process.
+     */
     const EMPTY = async function* () { };
     var $TrimmingService = usModule((require, exports) => {
         const providers = $TrimmingProviders(require);
         const { hasWords, asEmptyFragment } = $TextSplitterService(require);
         const { appendEncoder } = $TokenizerService(require);
-        const fragAssembly = theModule$5(require);
-        const tokenAssembly = theModule$4(require);
+        const fragAssembly = theModule$6(require);
+        const tokenAssembly = theModule$5(require);
         const optionDefaults = {
             provider: "doNotTrim",
             maximumTrimType: "token",
@@ -9934,8 +10320,13 @@ SOFTWARE.
         });
     });
 
+    /**
+     * This module has the abstraction for any kind of content for a
+     * context.  Notably, this is where the methods that setup the
+     * story and lorebook content live.
+     */
     const reComment = /^##/m;
-    const theModule$3 = usModule((require, exports) => {
+    const theModule$4 = usModule((require, exports) => {
         var _ContextContent_instances, _ContextContent_uniqueId, _ContextContent_field, _ContextContent_fieldConfig, _ContextContent_contextConfig, _ContextContent_trimmer, _ContextContent_searchText, _ContextContent_maxTokenCount, _ContextContent_budgetStats, _ContextContent_initialBudget, _ContextContent_reservedTokens, _ContextContent_currentBudget, _ContextContent_otherWorkers, _ContextContent_currentResult, _ContextContent_doWork;
         const uuid = require(UUID$1);
         const eventModule = require(EventModule$1);
@@ -9944,7 +10335,7 @@ SOFTWARE.
         const cursorOps = $CursorOps(require);
         const queryOps = $QueryOps(require);
         const { createTrimmer, execTrimTokens, trimByLength } = $TrimmingService(require);
-        const assembly = theModule$5(require);
+        const assembly = theModule$6(require);
         const getBudget = ({ tokenBudget }, contextParams) => {
             // Invalid values default to `contextSize`.
             if (!isNumber(tokenBudget))
@@ -9973,7 +10364,7 @@ SOFTWARE.
          * Gets the provider, given the needs of the provider and the configuration.
          */
         const getProvider = (forSearch, trimDirection) => {
-            if (forSearch && config$1.comments.searchComments)
+            if (forSearch && config$1.activation.searchComments)
                 return providers.basic[trimDirection];
             return providers.removeComments[trimDirection];
         };
@@ -10281,7 +10672,7 @@ SOFTWARE.
      * Handles the conversion of content blocks into an observable.
      */
     var $SourceContent = usModule((require, exports) => {
-        const { ContextContent } = theModule$3(require);
+        const { ContextContent } = theModule$4(require);
         const contextSource = $ContextSource(require);
         const toContextSource = (content, index) => {
             // THese are expected to come in an assumed order.
@@ -10312,7 +10703,7 @@ SOFTWARE.
      * Handles the conversion of ephemeral entries into an observable.
      */
     var $SourceEphemeral = usModule((require, exports) => {
-        const { ContextContent } = theModule$3(require);
+        const { ContextContent } = theModule$4(require);
         const contextSource = $ContextSource(require);
         const createStream = (contextParams) => {
             const ephemeralContent = contextParams.storyContent.ephemeralContext
@@ -10328,7 +10719,7 @@ SOFTWARE.
      * Handles the conversion of lorebook entries into an observable.
      */
     var $SourceLore = usModule((require, exports) => {
-        const { ContextContent } = theModule$3(require);
+        const { ContextContent } = theModule$4(require);
         const contextSource = $ContextSource(require);
         const createStream = (contextParams) => {
             const loreContent = contextParams.storyContent.lorebook.entries
@@ -11049,7 +11440,7 @@ SOFTWARE.
 
     var _nativeKeysIn = nativeKeysIn$1;
 
-    var isObject$3 = isObject_1,
+    var isObject$4 = isObject_1,
         isPrototype$1 = _isPrototype,
         nativeKeysIn = _nativeKeysIn;
     /** Used for built-in method references. */
@@ -11067,7 +11458,7 @@ SOFTWARE.
      */
 
     function baseKeysIn$1(object) {
-      if (!isObject$3(object)) {
+      if (!isObject$4(object)) {
         return nativeKeysIn(object);
       }
 
@@ -11726,7 +12117,7 @@ SOFTWARE.
 
     var _initCloneByTag = initCloneByTag$1;
 
-    var isObject$2 = isObject_1;
+    var isObject$3 = isObject_1;
     /** Built-in value references. */
 
     var objectCreate = Object.create;
@@ -11743,7 +12134,7 @@ SOFTWARE.
       function object() {}
 
       return function (proto) {
-        if (!isObject$2(proto)) {
+        if (!isObject$3(proto)) {
           return {};
         }
 
@@ -11887,7 +12278,7 @@ SOFTWARE.
         isArray$1 = isArray_1,
         isBuffer$1 = isBuffer$3.exports,
         isMap = isMap_1,
-        isObject$1 = isObject_1,
+        isObject$2 = isObject_1,
         isSet = isSet_1,
         keys$2 = keys_1,
         keysIn = keysIn_1;
@@ -11960,7 +12351,7 @@ SOFTWARE.
         return result;
       }
 
-      if (!isObject$1(value)) {
+      if (!isObject$2(value)) {
         return value;
       }
 
@@ -12188,6 +12579,13 @@ SOFTWARE.
             budgetStats: isInstance,
             activated: (v) => v === true
         });
+        const isWeightedSource = dew(() => {
+            const _check = conforms_1({
+                selectionIndex: isNumber
+            });
+            const _impl = (source) => isBudgetedSource(source) && _check(source);
+            return _impl;
+        });
         /** Gets some budget stats from an insertable source. */
         const getBudgetStats = async (source) => {
             if (isBudgetedSource(source))
@@ -12200,6 +12598,7 @@ SOFTWARE.
         return Object.assign(exports, {
             asBudgeted,
             isBudgetedSource,
+            isWeightedSource,
             getBudgetStats
         });
     });
@@ -12210,6 +12609,25 @@ SOFTWARE.
         const { budgetPriority: bp } = b.entry.contextConfig;
         return bp - ap;
     };
+
+    var $SelectionIndex = usModule((require, exports) => {
+        const { isWeightedSource } = $Selection$1(require);
+        /**
+         * Sorts sources by their `selectionIndex`, if they have one.
+         *
+         * If any source lacks a `selectionIndex`, they are treated equally.
+         */
+        const selectionIndex = () => {
+            return (a, b) => {
+                if (!isWeightedSource(a))
+                    return 0;
+                if (!isWeightedSource(b))
+                    return 0;
+                return a.selectionIndex - b.selectionIndex;
+            };
+        };
+        return Object.assign(exports, { selectionIndex });
+    });
 
     class LoreEntryHelpers$1 extends ModuleDef {
         constructor() {
@@ -12229,7 +12647,19 @@ SOFTWARE.
     /** A {@link Subject} that signals the end of context construction. */
     const onEndContext = new Subject();
 
-    const logger$3 = createLogger();
+    /**
+     * A service that handles the parsing of NovelAI's lorebook keys.
+     *
+     * It provides a short-lived caching layer to reduce parsing overhead
+     * between individual context requests.  By short-lived, I mean that
+     * if it wasn't used during the latest context request, it will be
+     * discarded afterward.
+     *
+     * Currently supports:
+     * - Simple keys (e.g. `king` `kingdom`)
+     * - Regular expression keys (e.g. `/\bking(dom)?\b/i`)
+     */
+    const logger$3 = createLogger("Matcher Service");
     const RE_ESCAPE = /[$()*+.?[\\\]^{|}]/g;
     const RE_UNSAFE_LEADING = /^\W/;
     const RE_UNSAFE_TRAILING = /\W$/;
@@ -12347,7 +12777,8 @@ SOFTWARE.
      * It will discard match data for the oldest text that had not
      * been provided for matching.
      */
-    const logger$2 = createLogger();
+    const logger$2 = createLogger("Search Service");
+    const RETENTION_RATE = 1.1;
     var SearchService = usModule((require, exports) => {
         const matcherService = $MatcherService(require);
         const splitterService = $TextSplitterService(require);
@@ -12362,7 +12793,7 @@ SOFTWARE.
             const totalUnique = textsSearched.size;
             const curSize = resultsCache.size;
             // Maintain an overflow of 110% the demand placed on the service.
-            const desiredOverflow = ((totalUnique * 1.1) - totalUnique) | 0;
+            const desiredOverflow = ((totalUnique * RETENTION_RATE) - totalUnique) | 0;
             // But we'll keep a minimum size of 50 entries.  That's actually
             // NAI's vanilla retainment for their memoization.
             const idealSize = Math.max(50, totalUnique + desiredOverflow);
@@ -12380,7 +12811,12 @@ SOFTWARE.
             // to discard an amount of least-recently-seen entries.
             const retainedEntries = [...resultsCache].slice(-nextSize);
             resultsCache = new Map(retainedEntries);
-            logger$2.info({ curSize, idealSize, nextSize });
+            {
+                // Because this map is mutated, I want to make sure the console gets
+                // an isolated instance.
+                logger$2.info("Cache state:", new Map(retainedEntries));
+                logger$2.info({ curSize, idealSize, nextSize });
+            }
         }
         /** Discards results for keys that were not seen since last cycle. */
         function discardUnusedResults(keysUsed) {
@@ -12744,12 +13180,12 @@ SOFTWARE.
             return Object.freeze({ ...data, isKeyRelative: false });
         return Object.freeze({ ...data, isKeyRelative: true, matchedKey });
     }
-    const theModule$2 = usModule((require, exports) => {
+    const theModule$3 = usModule((require, exports) => {
         var _CompoundAssembly_instances, _CompoundAssembly_groups, _CompoundAssembly_knownSources, _CompoundAssembly_textToSource, _CompoundAssembly_codec, _CompoundAssembly_assemblies, _CompoundAssembly_tokens, _CompoundAssembly_tokenBudget, _CompoundAssembly_getActivator, _CompoundAssembly_handleSelection, _CompoundAssembly_findStart, _CompoundAssembly_getAssembly, _CompoundAssembly_makeTarget, _CompoundAssembly_doInsertInitial, _CompoundAssembly_doInsertAdjacent, _CompoundAssembly_doShuntOut, _CompoundAssembly_doInsertInside, _CompoundAssembly_iterateInsertion;
         const { REASONS } = require(ContextBuilder$2);
         const { findHighestIndex } = SearchService(require);
         const ss = $TextSplitterService(require);
-        const tokenized = theModule$4(require);
+        const tokenized = theModule$5(require);
         const baseReject = { type: "rejected", tokensUsed: 0, shunted: 0 };
         const NO_TEXT = Object.freeze({ ...baseReject, reason: REASONS.NoText });
         const NO_SPACE = Object.freeze({ ...baseReject, reason: REASONS.NoSpace });
@@ -13113,13 +13549,15 @@ SOFTWARE.
                 assembly: await toAssembly(__classPrivateFieldGet(this, _CompoundAssembly_codec, "f"), inserted)
             };
         }, _CompoundAssembly_doShuntOut = async function _CompoundAssembly_doShuntOut(iterResult, source, inserted, shuntRef) {
-            const { target } = iterResult;
+            const { assembly } = iterResult.target;
             const result = dew(() => {
                 if (shuntRef.type !== "fragment")
                     return shuntRef;
                 const { shuntingMode } = config$1.assembly;
-                const direction = shuntingMode === "inDirection" ? iterResult.direction : "nearest";
-                return target.assembly.shuntOut(shuntRef, direction);
+                const direction = shuntingMode === "inDirection" ? iterResult.direction
+                    : assembly.isEmpty ? iterResult.direction
+                        : "nearest";
+                return assembly.shuntOut(shuntRef, direction);
             });
             // This should not be possible unless the implementation of `shuntOut`
             // changes to allow it...  In which case, this error will hopefully
@@ -13172,13 +13610,24 @@ SOFTWARE.
         }, _CompoundAssembly_iterateInsertion = function* _CompoundAssembly_iterateInsertion(initState) {
             let state = initState;
             const { insertionType } = initState.source.entry.contextConfig;
+            // Until we find a non-empty assembly or the insertion offset is `0`,
+            // we must use the arity-1 version of `entryPosition`.
+            let foundNonEmpty = false;
             // We'll allow only one reversal to avoid infinite loops.
             let didReversal = false;
+            const nextPosition = (target) => {
+                if (!foundNonEmpty)
+                    return target.entryPosition(state.direction);
+                return target.entryPosition(state.direction, insertionType);
+            };
             while (true) {
                 const curAsm = state.target.assembly;
+                const asmIsEmpty = curAsm.isEmpty;
+                foundNonEmpty || (foundNonEmpty = !asmIsEmpty);
                 // Check for emptiness; `ContextGroup` will report empty when it
-                // has no assemblies inside it, in which case we should skip it.
-                if (!curAsm.isEmpty) {
+                // has no assemblies inside it, in which case we should skip it,
+                // unless this position is actually our target.
+                if (!asmIsEmpty || state.offset === 0) {
                     const result = curAsm.locateInsertion(insertionType, state);
                     switch (result.type) {
                         case "toTop":
@@ -13206,7 +13655,7 @@ SOFTWARE.
                     return;
                 }
                 state.target = nextTarget;
-                state.cursor = nextTarget.assembly.entryPosition(state.direction, insertionType);
+                state.cursor = nextPosition(nextTarget.assembly);
             }
         };
         return Object.assign(exports, {
@@ -13215,14 +13664,14 @@ SOFTWARE.
     });
 
     const EMPTY_TOKENS = Object.freeze([]);
-    const theModule$1 = usModule((require, exports) => {
+    const theModule$2 = usModule((require, exports) => {
         var _ContextGroup_instances, _ContextGroup_trimmedFrag, _ContextGroup_identifier, _ContextGroup_uniqueId, _ContextGroup_type, _ContextGroup_contextConfig, _ContextGroup_prefix, _ContextGroup_suffix, _ContextGroup_trimEnds, _ContextGroup_dropLeft, _ContextGroup_dropRight;
         const uuid = require(UUID$1);
         const ss = $TextSplitterService(require);
-        const tokenized = theModule$4(require);
+        const tokenized = theModule$5(require);
         const cursorOps = $CursorOps(require);
         const posOps = $PositionOps(require);
-        const { CompoundAssembly } = theModule$2(require);
+        const { CompoundAssembly } = theModule$3(require);
         /**
          * A class that represents a group within a context; these are used as
          * an alternative to the pre-assembled sub-context.
@@ -13406,7 +13855,11 @@ SOFTWARE.
             /** An object describing how to locate the insertion. */
             positionData) {
                 assert("Expected cursor to related to this assembly.", this.isRelatedTo(positionData.cursor.origin));
-                assert("Expected to not be an empty compound assembly.", !this.isEmpty);
+                const { cursor, direction } = positionData;
+                // Just shunt in the current direction when we're empty.  There is no
+                // "nearest" edge in an empty assembly.
+                if (this.isEmpty)
+                    return this.shuntOut(cursor, direction);
                 // Context-groups cannot be inserted into using the same method as normal
                 // fragment assemblies.  So, if the insertion point is within this assembly,
                 // it's getting shunted out, period.
@@ -13417,8 +13870,8 @@ SOFTWARE.
                         return result;
                     default: {
                         const { shuntingMode } = config$1.assembly;
-                        const direction = shuntingMode === "inDirection" ? positionData.direction : "nearest";
-                        return this.shuntOut(positionData.cursor, direction);
+                        const newDirection = shuntingMode === "inDirection" ? direction : "nearest";
+                        return this.shuntOut(cursor, newDirection);
                     }
                 }
             }
@@ -13428,7 +13881,14 @@ SOFTWARE.
             cursor, 
             /** The shunt mode to use. */
             mode) {
-                return posOps.shuntOut(this, cursor, mode);
+                if (!this.isEmpty)
+                    return posOps.shuntOut(this, cursor, mode);
+                // `"insertAfter"` will be used for the `"nearest"` mode as well.
+                // However, `locateInsertion`, which calls this, will always supply
+                // the direction when we're empty.  This is more a safe value for
+                // other odd calls.
+                const type = mode === "toTop" ? "insertBefore" : "insertAfter";
+                return { type, shunted: 0 };
             }
             /**
              * Converts this context-group into a into a static {@link TokenizedAssembly}.
@@ -13594,7 +14054,7 @@ SOFTWARE.
     });
 
     var $ContextGroup = usModule((require, exports) => {
-        const { ContextGroup } = theModule$1(require);
+        const { ContextGroup } = theModule$2(require);
         /** Sorts sources that are context-groups first. */
         const contextGroup = () => {
             return (a, b) => {
@@ -13808,9 +14268,10 @@ SOFTWARE.
         return Object.assign(exports, { naturalByPosition });
     });
 
-    const theModule = usModule((require, exports) => {
+    const theModule$1 = usModule((require, exports) => {
         const sorters = Object.freeze({
             budgetPriority,
+            ...$SelectionIndex(require),
             ...$ContextGroup(require),
             ...$Reservation(require),
             activationEphemeral,
@@ -13823,13 +14284,37 @@ SOFTWARE.
             naturalByType,
             ...$NaturalByPosition(require)
         });
+        const assertConfig = (name) => (k) => assert(`Unknown sorter "${k}" for \`${name}\` config!`, k in sorters);
+        /**
+         * Creates a master insertion sorter based on the functions specified
+         * in the `selection.insertionOrdering` config.
+         */
         const forInsertion = (contextParams) => {
             const chosenSorters = chain(config$1.selection.insertionOrdering)
                 // Force the natural sorters to be the last ones.
                 .filter((k) => k !== "naturalByPosition" && k !== "naturalByType")
                 .appendVal("naturalByType", "naturalByPosition")
                 // Check to make sure there's a sorter for each key.
-                .tap((k) => assert(`Unknown sorter "${k}" for \`selection.ordering\` config!`, k in sorters))
+                .tap(assertConfig("selection.insertionOrdering"))
+                .map((k) => sorters[k](contextParams))
+                .toArray();
+            return (a, b) => {
+                for (let i = 0, len = chosenSorters.length; i < len; i++) {
+                    const result = chosenSorters[i](a, b);
+                    if (result !== 0)
+                        return result;
+                }
+                return 0;
+            };
+        };
+        /**
+         * Creates a master weighted selection sorter based on the functions
+         * specified in the `weightedRandom.selectionOrdering` config.
+         */
+        const forWeightedSelection = (contextParams) => {
+            const chosenSorters = chain(config$1.weightedRandom.selectionOrdering)
+                // Check to make sure there's a sorter for each key.
+                .tap(assertConfig("weightedRandom.selectionOrdering"))
                 .map((k) => sorters[k](contextParams))
                 .toArray();
             return (a, b) => {
@@ -13843,7 +14328,8 @@ SOFTWARE.
         };
         return Object.assign(exports, {
             sorters,
-            forInsertion
+            forInsertion,
+            forWeightedSelection
         });
     });
 
@@ -13858,14 +14344,405 @@ SOFTWARE.
         });
     });
 
+    /**
+     * The base implementation of `_.clamp` which doesn't coerce arguments.
+     *
+     * @private
+     * @param {number} number The number to clamp.
+     * @param {number} [lower] The lower bound.
+     * @param {number} upper The upper bound.
+     * @returns {number} Returns the clamped number.
+     */
+
+    function baseClamp$1(number, lower, upper) {
+      if (number === number) {
+        if (upper !== undefined) {
+          number = number <= upper ? number : upper;
+        }
+
+        if (lower !== undefined) {
+          number = number >= lower ? number : lower;
+        }
+      }
+
+      return number;
+    }
+
+    var _baseClamp = baseClamp$1;
+
+    /** Used to match a single whitespace character. */
+    var reWhitespace = /\s/;
+    /**
+     * Used by `_.trim` and `_.trimEnd` to get the index of the last non-whitespace
+     * character of `string`.
+     *
+     * @private
+     * @param {string} string The string to inspect.
+     * @returns {number} Returns the index of the last non-whitespace character.
+     */
+
+    function trimmedEndIndex$1(string) {
+      var index = string.length;
+
+      while (index-- && reWhitespace.test(string.charAt(index))) {}
+
+      return index;
+    }
+
+    var _trimmedEndIndex = trimmedEndIndex$1;
+
+    var trimmedEndIndex = _trimmedEndIndex;
+    /** Used to match leading whitespace. */
+
+    var reTrimStart = /^\s+/;
+    /**
+     * The base implementation of `_.trim`.
+     *
+     * @private
+     * @param {string} string The string to trim.
+     * @returns {string} Returns the trimmed string.
+     */
+
+    function baseTrim$1(string) {
+      return string ? string.slice(0, trimmedEndIndex(string) + 1).replace(reTrimStart, '') : string;
+    }
+
+    var _baseTrim = baseTrim$1;
+
+    var baseTrim = _baseTrim,
+        isObject$1 = isObject_1,
+        isSymbol = isSymbol_1;
+    /** Used as references for various `Number` constants. */
+
+    var NAN = 0 / 0;
+    /** Used to detect bad signed hexadecimal string values. */
+
+    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+    /** Used to detect binary string values. */
+
+    var reIsBinary = /^0b[01]+$/i;
+    /** Used to detect octal string values. */
+
+    var reIsOctal = /^0o[0-7]+$/i;
+    /** Built-in method references without a dependency on `root`. */
+
+    var freeParseInt = parseInt;
+    /**
+     * Converts `value` to a number.
+     *
+     * @static
+     * @memberOf _
+     * @since 4.0.0
+     * @category Lang
+     * @param {*} value The value to process.
+     * @returns {number} Returns the number.
+     * @example
+     *
+     * _.toNumber(3.2);
+     * // => 3.2
+     *
+     * _.toNumber(Number.MIN_VALUE);
+     * // => 5e-324
+     *
+     * _.toNumber(Infinity);
+     * // => Infinity
+     *
+     * _.toNumber('3.2');
+     * // => 3.2
+     */
+
+    function toNumber$1(value) {
+      if (typeof value == 'number') {
+        return value;
+      }
+
+      if (isSymbol(value)) {
+        return NAN;
+      }
+
+      if (isObject$1(value)) {
+        var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
+        value = isObject$1(other) ? other + '' : other;
+      }
+
+      if (typeof value != 'string') {
+        return value === 0 ? value : +value;
+      }
+
+      value = baseTrim(value);
+      var isBinary = reIsBinary.test(value);
+      return isBinary || reIsOctal.test(value) ? freeParseInt(value.slice(2), isBinary ? 2 : 8) : reIsBadHex.test(value) ? NAN : +value;
+    }
+
+    var toNumber_1 = toNumber$1;
+
+    var baseClamp = _baseClamp,
+        toNumber = toNumber_1;
+    /**
+     * Clamps `number` within the inclusive `lower` and `upper` bounds.
+     *
+     * @static
+     * @memberOf _
+     * @since 4.0.0
+     * @category Number
+     * @param {number} number The number to clamp.
+     * @param {number} [lower] The lower bound.
+     * @param {number} upper The upper bound.
+     * @returns {number} Returns the clamped number.
+     * @example
+     *
+     * _.clamp(-10, -5, 5);
+     * // => -5
+     *
+     * _.clamp(10, -5, 5);
+     * // => 5
+     */
+
+    function clamp(number, lower, upper) {
+      if (upper === undefined) {
+        upper = lower;
+        lower = undefined;
+      }
+
+      if (upper !== undefined) {
+        upper = toNumber(upper);
+        upper = upper === upper ? upper : 0;
+      }
+
+      if (lower !== undefined) {
+        lower = toNumber(lower);
+        lower = lower === lower ? lower : 0;
+      }
+
+      return baseClamp(toNumber(number), lower, upper);
+    }
+
+    var clamp_1 = clamp;
+
+    /**
+     * Remaps a number from one range to another.  The result is not
+     * clamped to that range.
+     */
+    const remap = (value, inMin, inMax, outMin, outMax) => (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+
+    const DEFAULT_RANGE = Object.freeze({ min: 0, max: 1 });
+    /** Creates an additive weight. */
+    function add(value) {
+        assert("Expected value to be greater than or equal to 0.", value >= 0);
+        return Object.freeze({ type: "additive", value });
+    }
+    /** Creates an multiplicative weight. */
+    function scalar(value, options) {
+        if (options) {
+            const { input = DEFAULT_RANGE, output = DEFAULT_RANGE, clamp: doClamp } = options;
+            value = remap(value, input.min, input.max, output.min, output.max);
+            if (doClamp === true)
+                value = clamp_1(value, output.min, output.max);
+        }
+        assert("Expected value to be greater than or equal to 0.", value >= 0);
+        return Object.freeze({ type: "scalar", value });
+    }
+    /** A weight that applies no change. */
+    const nil = scalar(1);
+
+    /** A value used to bump the point values up. */
+    const ADJUSTMENT = 1.8;
+    var $CascadeCount = usModule((require, exports) => {
+        const { isActivated } = $Activation$1(require);
+        /**
+         * Weight function that adds points for each match in another entry.
+         * The points provided are reduced the higher the degree of the match.
+         */
+        const cascadeCount = () => (source) => {
+            // Can't score if the entry has no activation data.
+            if (!isActivated(source))
+                return nil;
+            // We only score it if the source has a cascade activation.
+            const cascade = source.activations.get("cascade");
+            if (!cascade)
+                return nil;
+            let totalScore = 0;
+            for (const result of cascade.matches.values()) {
+                const baseScalar = 1 / (1 + result.matchDegree);
+                totalScore += baseScalar * ADJUSTMENT * result.size;
+            }
+            return add(totalScore);
+        };
+        return Object.assign(exports, { cascadeCount });
+    });
+
+    /** The maximum penalty for this weighting function. */
+    const PENALTY = 0.1;
+    var $SearchRange = usModule((require, exports) => {
+        const queryOps = $QueryOps(require);
+        const cursorOps = $CursorOps(require);
+        const cursors = $Cursors(require);
+        const { ContextContent } = theModule$4(require);
+        const { findHighestIndex } = SearchService(require);
+        const { isActivated } = $Activation$1(require);
+        const hasSearchRange = (source) => {
+            if (!source.entry.fieldConfig)
+                return false;
+            return "searchRange" in source.entry.fieldConfig;
+        };
+        /** Remaps a full-text offset to a fragment offset. */
+        const remapOffset = (searchedText, ftOffset) => {
+            const text = queryOps.getText(searchedText);
+            ftOffset = clamp_1(ftOffset, 0, text.length);
+            const ftCursor = cursors.fullText(searchedText, ftOffset);
+            return cursorOps.fromFullText(searchedText, ftCursor).offset;
+        };
+        /**
+         * Weight function that penalizes sources that are outside their
+         * configured search range.  A scaling penalty is applied the farther
+         * the source is from the search range, reaching the minimum multiplier
+         * at twice the search range.
+         *
+         * @see PENALTY for the maximum penalty.
+         */
+        const searchRange = (_params, allSources) => {
+            const searchedText = dew(() => {
+                const theStory = allSources.find((source) => source.type === "story");
+                if (!theStory)
+                    return undefined;
+                if (!(theStory.entry instanceof ContextContent))
+                    return undefined;
+                return theStory.entry.searchedText;
+            });
+            const ftLength = !searchedText ? 0 : queryOps.getText(searchedText).length;
+            return (source) => {
+                // Can't score when the story is empty or missing.
+                if (!searchedText || ftLength === 0)
+                    return nil;
+                // Can't score without a search range.
+                if (!hasSearchRange(source))
+                    return nil;
+                // Can't score if the entry has no activation data.
+                if (!isActivated(source))
+                    return nil;
+                // We only score it if the source has a story activation.
+                const keyed = source.activations.get("keyed");
+                if (!keyed)
+                    return nil;
+                const { searchRange } = source.entry.fieldConfig;
+                const ftOffset = ftLength - searchRange;
+                // It can only be inside the search range.
+                if (ftOffset <= 0)
+                    return nil;
+                // Perform the cursor re-mapping to get the penalty range.
+                const maxRange = remapOffset(searchedText, ftOffset);
+                const minRange = remapOffset(searchedText, ftOffset - searchRange);
+                // If we activated by a keyword, we definitely have a result.
+                const result = assertExists("Expected to have at least one match result.", findHighestIndex(keyed));
+                const best = result[1].selection[1].offset;
+                if (best >= maxRange)
+                    return nil;
+                if (best <= minRange)
+                    return scalar(PENALTY);
+                return scalar(best, {
+                    input: { min: minRange, max: maxRange },
+                    output: { min: PENALTY, max: 1 },
+                    clamp: true
+                });
+            };
+        };
+        return Object.assign(exports, { searchRange });
+    });
+
+    var $StoryCount = usModule((require, exports) => {
+        const { isActivated } = $Activation$1(require);
+        /**
+         * Weight function that simply provides one point for each match in
+         * the story.
+         */
+        const storyCount = () => (source) => {
+            // Can't score if the entry has no activation data.
+            if (!isActivated(source))
+                return nil;
+            // We only score it if the source has a story activation.
+            const keyed = source.activations.get("keyed");
+            if (!keyed)
+                return nil;
+            return add(keyed.size);
+        };
+        return Object.assign(exports, { storyCount });
+    });
+
+    const theModule = usModule((require, exports) => {
+        const weighers = {
+            ...$CascadeCount(require),
+            ...$SearchRange(require),
+            ...$StoryCount(require)
+        };
+        const assertConfig = (name) => (k) => assert(`Unknown weigher "${k}" for \`${name}\` config!`, k in weighers);
+        const fromConfigValue = (keys) => {
+            if (!isArray$4(keys))
+                return weighers[keys];
+            return keys.map((k) => weighers[k]);
+        };
+        const toWeigher = (fns) => {
+            if (!isArray$4(fns))
+                return fns;
+            // Create a composite weigher that yields an additive value.
+            return (params, allSources) => {
+                const chosenWeights = fns.map((fn) => fn(params, allSources));
+                return (source) => {
+                    const score = chosenWeights
+                        .map((fn) => fn(source))
+                        .reduce((acc, weight) => {
+                        switch (weight.type) {
+                            case "additive": return acc + weight.value;
+                            case "scalar": return acc * weight.value;
+                        }
+                    }, 0);
+                    return add(score);
+                };
+            };
+        };
+        /**
+         * Creates a master weighting function based on the weighting functions
+         * specified in the `weightedRandom.weighting` config.
+         */
+        const forScoring = (contextParams, allSources) => {
+            const compositeWeigher = chain(config$1.weightedRandom.weighting)
+                // Check to make sure there's a weigher for each key.
+                .tap((v) => {
+                if (!isArray$4(v))
+                    assertConfig("weightedRandom.weighting")(v);
+                else
+                    v.forEach(assertConfig("weightedRandom.weighting"));
+            })
+                // Convert to weighing functions.
+                .map(fromConfigValue)
+                .map(toWeigher)
+                // And apply our arguments.
+                .value((iter) => toWeigher([...iter])(contextParams, allSources));
+            // It will always be an additive weighting function.
+            return (source) => compositeWeigher(source).value;
+        };
+        return Object.assign(exports, {
+            weighers,
+            forScoring
+        });
+    });
+
+    /**
+     * This module provides types and helpers used internally by the
+     * phase runners.  It was getting tedious finding the one helper
+     * or type that I needed, so I decided to centralize them...
+     *
+     * Then it got too big, so I broke them into individual modules
+     * provided by this index.
+     */
     var $Common = usModule((require, exports) => {
         return Object.assign(exports, {
             activation: $Activation$1(require),
             biasGroups: $BiasGroups$1(require),
             categories: $Categories(require),
             selection: $Selection$1(require),
-            sorting: theModule(require),
-            subContexts: $SubContexts$1(require)
+            sorting: theModule$1(require),
+            subContexts: $SubContexts$1(require),
+            weights: theModule(require)
         });
     });
 
@@ -14791,7 +15668,7 @@ SOFTWARE.
         return Object.assign(exports, { checkActivation });
     });
 
-    const logger$1 = createLogger();
+    const logger$1 = createLogger("Cascade Activation");
     /**
      * Checks each {@link ContextSource} for cascade activation.
      */
@@ -14843,7 +15720,7 @@ SOFTWARE.
                         finalDegree: curDegree,
                         matches: new Map()
                     };
-                    data.matches.set(activated, results);
+                    data.matches.set(activated, Object.assign(results, { matchDegree: curDegree }));
                     state.activations.set("cascade", data);
                     // Update the final degree based on the current degree.
                     data.finalDegree = Math.max(curDegree, data.finalDegree);
@@ -14932,119 +15809,6 @@ SOFTWARE.
     });
 
     /**
-     * Checks each {@link ContextSource} for lore bias group inclusions.
-     */
-    var $BiasLore = usModule((require, exports) => {
-        const { biasGroups } = $Common(require);
-        const createStream = (
-        /** The stream of activation results. */
-        activating) => activating.pipe(connect((shared) => merge(
-        // Look for "when not inactive" bias groups by searching the activated entries.
-        shared.pipe(collect((source) => {
-            if (!source.activated)
-                return undefined;
-            if (!biasGroups.isBiased(source))
-                return undefined;
-            const groups = chain(source.entry.fieldConfig.loreBiasGroups)
-                .filter(biasGroups.whenActive)
-                .filter(biasGroups.hasValidPhrase)
-                .toArray();
-            if (!groups.length)
-                return undefined;
-            return { identifier: source.identifier, groups };
-        })), 
-        // Look for "when inactive" bias groups by searching the rejections.
-        // This intentionally does not include disabled sources; those are disabled!
-        shared.pipe(collect((source) => {
-            if (source.activated)
-                return undefined;
-            if (!biasGroups.isBiased(source))
-                return undefined;
-            const groups = chain(source.entry.fieldConfig.loreBiasGroups)
-                .filter(biasGroups.whenInactive)
-                .filter(biasGroups.hasValidPhrase)
-                .toArray();
-            if (!groups.length)
-                return undefined;
-            return { identifier: source.identifier, groups };
-        })))), shareReplay());
-        return Object.assign(exports, { createStream });
-    });
-
-    /**
-     * Checks each source for lore bias group inclusions.
-     */
-    var $BiasCategory = usModule((require, exports) => {
-        const { categories, biasGroups } = $Common(require);
-        const createStream = (
-        /** The story contents, to source the categories from. */
-        storyContent, 
-        /** The stream of activation results. */
-        activating) => {
-            return activating.pipe(
-            // We only want activated entries with categories.
-            collect((source) => {
-                if (!source.activated)
-                    return undefined;
-                if (!categories.isCategorized(source))
-                    return undefined;
-                return source;
-            }), connect((shared) => {
-                // Create a map of the categories for look up.
-                const categoryMap = new Map(storyContent.lorebook.categories
-                    .filter(categories.isBiasedCategory)
-                    .map((cat) => [cat.name, cat]));
-                return merge(
-                // Activated categories: use the `categoryMap` to filter out and
-                // map to known/existing category instance.
-                shared.pipe(collect((source) => categoryMap.get(source.entry.fieldConfig.category)), map(({ name, categoryBiasGroups }) => ({
-                    identifier: `C:${name}`,
-                    groups: chain(categoryBiasGroups)
-                        .filter(biasGroups.whenActive)
-                        .filter(biasGroups.hasValidPhrase)
-                        .toArray()
-                }))), 
-                // Inactive categories: clone `categoryMap` and then remove
-                // any categories that are associated with an activated source.
-                // What is left are our inactive categories.
-                shared.pipe(reduce((a, c) => (a.delete(c.entry.fieldConfig.category), a), new Map(categoryMap)), mergeMap((catMap) => catMap.values()), map(({ name, categoryBiasGroups }) => ({
-                    identifier: `C:${name}`,
-                    groups: chain(categoryBiasGroups)
-                        .filter(biasGroups.whenInactive)
-                        .filter(biasGroups.hasValidPhrase)
-                        .toArray()
-                }))));
-            }), filter((biasGroup) => biasGroup.groups.length > 0), shareReplay());
-        };
-        return Object.assign(exports, { createStream });
-    });
-
-    /**
-     * The Bias-Groups Phase takes the activated and rejected entries
-     * and determines which bias-groups should be activated to service
-     * that feature.
-     */
-    var $BiasGroups = usModule((require, exports) => {
-        const biasGroups = {
-            lore: $BiasLore(require).createStream,
-            category: $BiasCategory(require).createStream
-        };
-        function biasGroupPhase(
-        /** The context builder parameters. */
-        contextParams, 
-        /** The currently in-flight activations. */
-        inFlightActivations) {
-            const logger = createLogger(`Bias Groups Phase: ${contextParams.contextName}`);
-            const inFlight = merge(biasGroups.lore(inFlightActivations), biasGroups.category(contextParams.storyContent, inFlightActivations)).pipe(logger.measureStream("In-flight Bias Groups"), shareReplay());
-            return lazyObject({
-                biasGroups: () => inFlight.pipe(toArray(), shareReplay(1)),
-                inFlight: () => inFlight
-            });
-        }
-        return Object.assign(exports, biasGroups, { phaseRunner: biasGroupPhase });
-    });
-
-    /**
      * A selector with no bells-and-whistles.
      * - It drops any entries that activated by keyword against the story,
      *   but that keyword was outside of the configured search range.
@@ -15124,15 +15888,160 @@ SOFTWARE.
         return Object.assign(exports, { createStream });
     });
 
+    var _Roulette_instances, _Roulette_entries, _Roulette_totalWeight, _Roulette_count, _Roulette_spin;
+    /**
+     * Class that can randomly select an item from a weighted selection.
+     */
+    class Roulette {
+        constructor() {
+            _Roulette_instances.add(this);
+            _Roulette_entries.set(this, void 0);
+            _Roulette_totalWeight.set(this, void 0);
+            _Roulette_count.set(this, void 0);
+            __classPrivateFieldSet(this, _Roulette_entries, [], "f");
+            __classPrivateFieldSet(this, _Roulette_totalWeight, 0, "f");
+            __classPrivateFieldSet(this, _Roulette_count, 0, "f");
+        }
+        get count() { return __classPrivateFieldGet(this, _Roulette_count, "f"); }
+        /**
+         * Adds a value to the pool.
+         */
+        push(weight, data) {
+            __classPrivateFieldGet(this, _Roulette_entries, "f").push({ weight, data });
+            __classPrivateFieldSet(this, _Roulette_totalWeight, __classPrivateFieldGet(this, _Roulette_totalWeight, "f") + weight, "f");
+            __classPrivateFieldSet(this, _Roulette_count, __classPrivateFieldGet(this, _Roulette_count, "f") + 1, "f");
+        }
+        /**
+         * Selects a value from the pool.
+         */
+        pick() {
+            const thePick = __classPrivateFieldGet(this, _Roulette_instances, "m", _Roulette_spin).call(this);
+            if (thePick === -1)
+                return undefined;
+            const { weight, data } = assertExists("Expected picked entry to exist.", __classPrivateFieldGet(this, _Roulette_entries, "f")[thePick]);
+            return [data, weight];
+        }
+        /**
+         * Selects and removes a value from the pool.
+         */
+        pickAndPop() {
+            const thePick = __classPrivateFieldGet(this, _Roulette_instances, "m", _Roulette_spin).call(this);
+            if (thePick === -1)
+                return undefined;
+            const { weight, data } = assertExists("Expected picked entry to exist.", __classPrivateFieldGet(this, _Roulette_entries, "f")[thePick]);
+            __classPrivateFieldGet(this, _Roulette_entries, "f")[thePick] = undefined;
+            __classPrivateFieldSet(this, _Roulette_totalWeight, __classPrivateFieldGet(this, _Roulette_totalWeight, "f") - weight, "f");
+            __classPrivateFieldSet(this, _Roulette_count, __classPrivateFieldGet(this, _Roulette_count, "f") - 1, "f");
+            return [data, weight];
+        }
+        /**
+         * Creates an iterable that picks values from the pool, removing them
+         * as it goes.
+         */
+        *pickToExhaustion() {
+            while (__classPrivateFieldGet(this, _Roulette_count, "f") > 0)
+                yield this.pickAndPop();
+        }
+    }
+    _Roulette_entries = new WeakMap(), _Roulette_totalWeight = new WeakMap(), _Roulette_count = new WeakMap(), _Roulette_instances = new WeakSet(), _Roulette_spin = function _Roulette_spin() {
+        if (__classPrivateFieldGet(this, _Roulette_count, "f") === 0)
+            return -1;
+        const limit = __classPrivateFieldGet(this, _Roulette_entries, "f").length;
+        const ball = Math.random() * __classPrivateFieldGet(this, _Roulette_totalWeight, "f");
+        let curWeight = 0;
+        for (let i = 0; i < limit; i++) {
+            const curEntry = __classPrivateFieldGet(this, _Roulette_entries, "f")[i];
+            if (!curEntry)
+                continue;
+            curWeight += curEntry.weight;
+            if (ball <= curWeight)
+                return i;
+        }
+        return limit - 1;
+    };
+
+    /**
+     * A selector using weighted-random selection.  Uses various information
+     * to score and select entries, where those with a higher score are more
+     * likely to be selected.
+     * - Groups entries into selection pools.  This is affected by the
+     *   `selectionOrdering` config, but the intended gist is that only
+     *   entries that share the same `budgetPriority` will be grouped.
+     * - The force activated and ephemeral activated entries are always
+     *   selected first and before any random selections.
+     * - Only keyed and cascading entries are randomly selected.
+     * - Sorts all entries into the final insertion order.  In order for
+     *   the selection to work correctly, ensure the `selectionIndex` sorter
+     *   is added to the `selection.insertionOrdering` config.
+     *
+     * Configuration that affects this module:
+     * - Enabled by `weightedRandom.enabled`.
+     * - Grouping criteria affected by `weightedRandom.selectionOrdering`.
+     * - Output ordering affected by `selection.insertionOrdering`.
+     */
+    var $WeightedRandom = usModule((require, exports) => {
+        const { sorting, selection, weights } = $Common(require);
+        /**
+        * Sorts all inputs and emits them in order of their formalized insertion
+        * priority.  This will also calculate each emitted element's budget stats.
+        */
+        const createStream = (contextParams) => {
+            const logger = createLogger(`Weighted Selection: ${contextParams.contextName}`);
+            const selectionSort = sorting.forWeightedSelection(contextParams);
+            const insertionSort = sorting.forInsertion(contextParams);
+            const determineEligible = (source) => {
+                const { activations } = source;
+                if (activations.has("forced"))
+                    return "ineligible";
+                if (activations.has("ephemeral"))
+                    return "ineligible";
+                return "eligible";
+            };
+            function* doWeighting(selectionGroup, weightingFn) {
+                const { ineligible = [], eligible = [] } = chain(selectionGroup)
+                    .thru((sources) => groupBy(sources, determineEligible))
+                    .value(fromPairs);
+                // Ineligible entries are always selected.
+                for (const source of ineligible) {
+                    logger.info(`Selected "${source.identifier}" implicitly.`);
+                    yield source;
+                }
+                // Fast-path: if there are no eligible entries, we're done.
+                if (eligible.length === 0)
+                    return;
+                const roulette = new Roulette();
+                for (const source of eligible) {
+                    const score = weightingFn(source);
+                    if (score <= 0)
+                        continue;
+                    roulette.push(score, source);
+                }
+                let selectionIndex = 0;
+                for (const [source, weight] of roulette.pickToExhaustion()) {
+                    logger.info(`Selected "${source.identifier}" with score ${weight.toFixed(2)}.`);
+                    yield Object.assign(source, { selectionIndex });
+                    selectionIndex += 1;
+                }
+            }
+            return (sources) => {
+                const weightingFn = sources.pipe(toArray(), map((allSources) => weights.forScoring(contextParams, allSources)));
+                const selectionGroups = sources.pipe(toArray(), map((arr) => arr.sort(selectionSort)), mergeMap((arr) => batch(arr, selectionSort)), tap((group) => logger.info("Selection Group", group)));
+                return selectionGroups.pipe(withLatestFrom(weightingFn), mergeMap((args) => doWeighting(...args)), mergeMap(selection.asBudgeted), toArray(), mergeMap((arr) => arr.sort(insertionSort)));
+            };
+        };
+        return Object.assign(exports, { createStream });
+    });
+
     /**
      * Since the selection mechanism is based on the config, this module
      * just re-exports the configured one so the category sub-context
      * can make use of it.
      */
     var $Configured = usModule((require, exports) => {
-        // TODO: when the weighted-random selector exists, add it here.
-        const { createStream } = $Vanilla(require);
-        return Object.assign(exports, { createStream });
+        {
+            const { createStream } = $WeightedRandom(require);
+            return Object.assign(exports, { createStream });
+        }
     });
 
     /**
@@ -15149,6 +16058,7 @@ SOFTWARE.
     var $Selection = usModule((require, exports) => {
         const selectors = {
             vanilla: $Vanilla(require).createStream,
+            weightedRandom: $WeightedRandom(require).createStream,
             configured: $Configured(require).createStream
         };
         /**
@@ -15179,8 +16089,8 @@ SOFTWARE.
     var $ContextAssembler = usModule((require, exports) => {
         var _ContextAssembler_instances, _ContextAssembler_reportSubject, _ContextAssembler_reportObs, _ContextAssembler_insertions, _ContextAssembler_rejections, _ContextAssembler_finalAssembly, _ContextAssembler_waitingGroups_get, _ContextAssembler_categoryGroups, _ContextAssembler_logger, _ContextAssembler_assembly, _ContextAssembler_reservedTokens, _ContextAssembler_consumedTokens_get, _ContextAssembler_availableTokens_get, _ContextAssembler_currentBudget_get, _ContextAssembler_determineType, _ContextAssembler_updateReservations, _ContextAssembler_determineBudget, _ContextAssembler_doReport, _ContextAssembler_doInsertEntry, _ContextAssembler_doInsertCategoryEntry, _ContextAssembler_doInsertGroup, _ContextAssembler_doInsert;
         const { REASONS } = require(ContextBuilder$2);
-        const { CompoundAssembly } = theModule$2(require);
-        const { isContextGroup, isCategoryGroup } = theModule$1(require);
+        const { CompoundAssembly } = theModule$3(require);
+        const { isContextGroup, isCategoryGroup } = theModule$2(require);
         const { selection, categories } = $Common(require);
         const NO_SPACE = Object.freeze({
             type: "rejected",
@@ -15253,7 +16163,7 @@ SOFTWARE.
                 _ContextAssembler_reservedTokens.set(this, void 0);
                 const { tokenCodec, contextSize, contextName } = contextParams;
                 __classPrivateFieldSet(this, _ContextAssembler_reservedTokens, reservedTokens, "f");
-                __classPrivateFieldSet(this, _ContextAssembler_logger, createLogger(), "f");
+                __classPrivateFieldSet(this, _ContextAssembler_logger, createLogger(`ContextAssembler: ${contextName}`), "f");
                 __classPrivateFieldSet(this, _ContextAssembler_assembly, new CompoundAssembly(tokenCodec, contextSize), "f");
                 __classPrivateFieldSet(this, _ContextAssembler_reportSubject, new Subject(), "f");
                 __classPrivateFieldSet(this, _ContextAssembler_reportObs, __classPrivateFieldGet(this, _ContextAssembler_reportSubject, "f").pipe(__classPrivateFieldGet(this, _ContextAssembler_logger, "f").measureStream("In-Flight Assembly Reports").markItems((item) => {
@@ -15370,15 +16280,29 @@ SOFTWARE.
             }
             else {
                 const structuredOutput = [...__classPrivateFieldGet(this, _ContextAssembler_assembly, "f").structuredOutput()];
-                const description = [
-                    `"${source.identifier}"`,
+                const descriptionBody = [
                     getInsertionText(result),
                     getStartText(result),
                     getGroupText(group, group ? __classPrivateFieldGet(this, _ContextAssembler_assembly, "f").hasAssembly(group) : false),
                     getRelativeText(result),
-                    getShuntingText(result),
+                    getShuntingText(result)
                 ].filter(Boolean).join(" ");
-                __classPrivateFieldGet(this, _ContextAssembler_logger, "f").info(`Inserted ${description}; ${prevTokens} => ${availableTokens}`);
+                // NovelAI breaks the identifier away from the description...
+                // ...and then removes it when it displays it to the user.
+                // I suspect this is HTML doing HTML things, though.  They may
+                // just not be setting the `white-space` CSS to display it.
+                // We'll just do the same in case that's a bug they plan to fix.
+                const description = [
+                    "\"", source.identifier, "\"",
+                    "\n                ",
+                    descriptionBody
+                ].join("");
+                // Save some extra concatenation cost if we're not logging.
+                {
+                    const descPart = `Inserted "${source.identifier}" ${descriptionBody}`;
+                    const tokensPart = `${prevTokens} => ${availableTokens}`;
+                    __classPrivateFieldGet(this, _ContextAssembler_logger, "f").info(`${descPart}; ${tokensPart}`);
+                }
                 __classPrivateFieldGet(this, _ContextAssembler_reportSubject, "f").next(Object.freeze({
                     source, result,
                     reservedTokens,
@@ -15449,6 +16373,11 @@ SOFTWARE.
      * does what it can to trim entries down to fit the budget.  It
      * will produce the staged report for the Last Model Input feature
      * with each entry that comes down the pipe.
+     *
+     * TODO: This is the only phase that doesn't mutate the source.
+     * Because of `SourceLike`, it is possible that they are not true
+     * `ContextSource` objects; is it worth changing all that for
+     * consistency with the other phases...? thinking_face_emoji
      */
     var $Assembly = usModule((require, exports) => {
         const { contextAssembler } = $ContextAssembler(require);
@@ -15620,7 +16549,7 @@ SOFTWARE.
     var $ForInserted = usModule((require, exports) => {
         const { ContextStatus, REASONS } = require(ContextBuilder$2);
         const queryOps = $QueryOps(require);
-        const { isContextGroup } = theModule$1(require);
+        const { isContextGroup } = theModule$2(require);
         const { selection } = $Common(require);
         const { checkThis, getSubContextPart } = $Shared(require);
         const toReason = (inserted) => {
@@ -15790,8 +16719,9 @@ SOFTWARE.
     /**
      * Takes the user-script data and converts it into NovelAI's containers.
      *
-     * Hopefully, this is one of the few places where we're directly interacting
-     * with NovelAI's interfaces, just to minimize the problem space.
+     * Hopefully, this remains one of the very few places where we're
+     * directly interacting with NovelAI's interfaces, just to minimize
+     * the problem surface.
      */
     var $Export = usModule((require, exports) => {
         const { ContextRecorder } = require(ContextBuilder$2);
@@ -15853,7 +16783,7 @@ SOFTWARE.
     var $Category$1 = usModule((require, exports) => {
         const { REASONS } = require(ContextBuilder$2);
         const { categories } = $Common(require);
-        const { ContextContent } = theModule$3(require);
+        const { ContextContent } = theModule$4(require);
         const contextSource = $ContextSource(require);
         const createSource = (contextParams, storySource, categoryMap) => {
             // We will need to reproduce the selection and assembly process,
@@ -15956,9 +16886,122 @@ SOFTWARE.
         return Object.assign(exports, subContexts, { phaseRunner: subContextPhase });
     });
 
+    /**
+     * Checks each {@link ContextSource} for lore bias group inclusions.
+     */
+    var $BiasLore = usModule((require, exports) => {
+        const { biasGroups } = $Common(require);
+        const createStream = (
+        /** The stream of activation results. */
+        activating) => activating.pipe(connect((shared) => merge(
+        // Look for "when not inactive" bias groups by searching the activated entries.
+        shared.pipe(collect((source) => {
+            if (!source.activated)
+                return undefined;
+            if (!biasGroups.isBiased(source))
+                return undefined;
+            const groups = chain(source.entry.fieldConfig.loreBiasGroups)
+                .filter(biasGroups.whenActive)
+                .filter(biasGroups.hasValidPhrase)
+                .toArray();
+            if (!groups.length)
+                return undefined;
+            return { identifier: source.identifier, groups };
+        })), 
+        // Look for "when inactive" bias groups by searching the rejections.
+        // This intentionally does not include disabled sources; those are disabled!
+        shared.pipe(collect((source) => {
+            if (source.activated)
+                return undefined;
+            if (!biasGroups.isBiased(source))
+                return undefined;
+            const groups = chain(source.entry.fieldConfig.loreBiasGroups)
+                .filter(biasGroups.whenInactive)
+                .filter(biasGroups.hasValidPhrase)
+                .toArray();
+            if (!groups.length)
+                return undefined;
+            return { identifier: source.identifier, groups };
+        })))), shareReplay());
+        return Object.assign(exports, { createStream });
+    });
+
+    /**
+     * Checks each source for lore bias group inclusions.
+     */
+    var $BiasCategory = usModule((require, exports) => {
+        const { categories, biasGroups } = $Common(require);
+        const createStream = (
+        /** The story contents, to source the categories from. */
+        storyContent, 
+        /** The stream of activation results. */
+        activating) => {
+            return activating.pipe(
+            // We only want activated entries with categories.
+            collect((source) => {
+                if (!source.activated)
+                    return undefined;
+                if (!categories.isCategorized(source))
+                    return undefined;
+                return source;
+            }), connect((shared) => {
+                // Create a map of the categories for look up.
+                const categoryMap = new Map(storyContent.lorebook.categories
+                    .filter(categories.isBiasedCategory)
+                    .map((cat) => [cat.name, cat]));
+                return merge(
+                // Activated categories: use the `categoryMap` to filter out and
+                // map to known/existing category instance.
+                shared.pipe(collect((source) => categoryMap.get(source.entry.fieldConfig.category)), map(({ name, categoryBiasGroups }) => ({
+                    identifier: `C:${name}`,
+                    groups: chain(categoryBiasGroups)
+                        .filter(biasGroups.whenActive)
+                        .filter(biasGroups.hasValidPhrase)
+                        .toArray()
+                }))), 
+                // Inactive categories: clone `categoryMap` and then remove
+                // any categories that are associated with an activated source.
+                // What is left are our inactive categories.
+                shared.pipe(reduce((a, c) => (a.delete(c.entry.fieldConfig.category), a), new Map(categoryMap)), mergeMap((catMap) => catMap.values()), map(({ name, categoryBiasGroups }) => ({
+                    identifier: `C:${name}`,
+                    groups: chain(categoryBiasGroups)
+                        .filter(biasGroups.whenInactive)
+                        .filter(biasGroups.hasValidPhrase)
+                        .toArray()
+                }))));
+            }), filter((biasGroup) => biasGroup.groups.length > 0), shareReplay());
+        };
+        return Object.assign(exports, { createStream });
+    });
+
+    /**
+     * The Bias-Groups Phase takes the activated and rejected entries
+     * and determines which bias-groups should be activated to service
+     * that feature.
+     */
+    var $BiasGroups = usModule((require, exports) => {
+        const biasGroups = {
+            lore: $BiasLore(require).createStream,
+            category: $BiasCategory(require).createStream
+        };
+        function biasGroupPhase(
+        /** The context builder parameters. */
+        contextParams, 
+        /** The currently in-flight activations. */
+        inFlightActivations) {
+            const logger = createLogger(`Bias Groups Phase: ${contextParams.contextName}`);
+            const inFlight = merge(biasGroups.lore(inFlightActivations), biasGroups.category(contextParams.storyContent, inFlightActivations)).pipe(logger.measureStream("In-flight Bias Groups"), shareReplay());
+            return lazyObject({
+                biasGroups: () => inFlight.pipe(toArray(), shareReplay(1)),
+                inFlight: () => inFlight
+            });
+        }
+        return Object.assign(exports, biasGroups, { phaseRunner: biasGroupPhase });
+    });
+
     var $Category = usModule((require, exports) => {
         const { categories } = $Common(require);
-        const { forCategory } = theModule$1(require);
+        const { forCategory } = theModule$2(require);
         const createStream = (
         /** The context params. */
         contextParams) => {
@@ -15974,7 +17017,7 @@ SOFTWARE.
     /**
      * This handles the creation of empty context-groups, which the
      * assembler will recognize and use as insertion targets for entries
-     * that belong to those categories.
+     * that belong to those groups.
      *
      * Configuration that affects this module:
      * - Becomes a noop when `subContext.groupedInsertion` is `false`.
@@ -16012,6 +17055,20 @@ SOFTWARE.
         return Object.assign(exports, subContexts, { phaseRunner: contextGroupPhase });
     });
 
+    /**
+     * This module provides the individual phases of the context building
+     * process.  These will be arranged into a pipeline which eventually
+     * leads to a fully assembled context.
+     *
+     * Each phase is numbered to indicate the general order of the data
+     * flowing through the process.  Some data from a lower-numbered phase
+     * may be needed by a higher-numbered phase.
+     *
+     * If two phases have the same number, that is an explicit indication
+     * that they can safely execute as concurrent phases.  Since the
+     * global tokenizer is a background worker, there is opportunity for
+     * true concurrency here.
+     */
     var $ReactiveProcessing = usModule((require, exports) => {
         return Object.assign(exports, {
             source: $Source(require),
@@ -16025,7 +17082,15 @@ SOFTWARE.
         });
     });
 
-    createLogger();
+    /**
+     * This module is essentially the entry-point of the whole context-builder.
+     *
+     * It sets up the main processing pipeline which is built up of the
+     * RxJS streams found in the `./rx` folder.  It makes sure that the
+     * "phase runner" functions get all the data they need to set
+     * themselves up.
+     */
+    createLogger("ContextProcessor");
     var ContextProcessor = usModule((require, exports) => {
         const { makeParams } = $ParamsService(require);
         const processing = $ReactiveProcessing(require);
@@ -16085,40 +17150,36 @@ SOFTWARE.
         return wrappedModule;
     };
 
-    const logger = createLogger();
+    const logger = createLogger("ContextBuilder Injector");
     const name$1 = ContextBuilder$2.name;
     const chunkId$1 = 2888;
     const moduleId$1 = ContextBuilder$2.moduleId;
     const inject$1 = replaceWrapper({
         "rJ": (original, require) => {
             const processor = ContextProcessor(require);
-            let builderFailed = false;
-            async function failSafeBuilder() {
-                if (!builderFailed) {
-                    try {
-                        const [sc, ss, tl, pp, sl, codec] = arguments;
-                        const usResult = await processor.processContext(sc, ss, tl, sl, pp, codec);
-                        logger.info("User-Script Result:", usResult);
-                        onEndContext.next(usResult);
-                        return usResult;
-                    }
-                    catch (err) {
-                        notifyOfProblem({
-                            message: [
-                                "The custom context builder failed.",
-                                "Falling back to the vanilla context builder for the remainder of this session.",
-                            ].join("  "),
-                            logToConsole: err
-                        });
-                        builderFailed = true;
-                    }
-                }
-                // Invoke the original if the new builder fails.
+            const ogMark = "build original context";
+            const usMark = "build userscript context";
+            async function timeTrialBuilder() {
+                performance.mark(`${ogMark}:start`);
                 const naiResult = await original.apply(this, arguments);
-                onEndContext.next(naiResult);
-                return naiResult;
+                performance.mark(`${ogMark}:end`);
+                const [sc, ss, tl, pp, sl, codec] = arguments;
+                performance.mark(`${usMark}:start`);
+                const usResult = await processor.processContext(sc, ss, tl, sl, pp, codec);
+                performance.mark(`${usMark}:end`);
+                // Log the different results out.  Helpful for comparing.
+                logger.info("Vanilla Result:", naiResult);
+                logger.info("User-Script Result:", usResult);
+                // Use the vanilla `console.log` to print the results.
+                // I will sometimes want to measure without the expensive log spam.
+                console.log(performance.measure(ogMark, `${ogMark}:start`, `${ogMark}:end`));
+                console.log(performance.measure(usMark, `${usMark}:start`, `${usMark}:end`));
+                performance.clearMarks();
+                performance.clearMeasures();
+                onEndContext.next(usResult);
+                return usResult;
             }
-            return failSafeBuilder;
+            return timeTrialBuilder ;
         }
     });
 
@@ -16135,9 +17196,28 @@ SOFTWARE.
     const moduleId = LoreEntryHelpers$2.moduleId;
     const inject = replaceWrapper({
         "P5": (original, require) => {
-            // return original;
             const searchService = SearchService(require);
-            return searchService.naiCheckActivation;
+            let checkerFailed = false;
+            function failSafeChecker() {
+                if (!checkerFailed) {
+                    try {
+                        return searchService.naiCheckActivation.apply(this, arguments);
+                    }
+                    catch (err) {
+                        notifyOfProblem({
+                            message: [
+                                "Search service integration failed.",
+                                "Falling back to the vanilla `checkActivation` function for the remainder of this session.",
+                            ].join("  "),
+                            logToConsole: err
+                        });
+                        checkerFailed = true;
+                    }
+                }
+                // Invoke the original if the replacement fails.
+                return original.apply(this, arguments);
+            }
+            return failSafeChecker;
         }
     });
 
