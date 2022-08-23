@@ -198,18 +198,31 @@ const weightedRandom = {
    * 
    * ```json
    * [
-   *   ["storyCount", "searchRange"],
-   *   "cascadeCount"
+   *   ["fooScorer", "barPenalizer"],
+   *   ["bazScorer", "bazAdjustment"],
+   *   "barPenalizer"
    * ]
    * ```
    * 
-   * The result of the group will be added to any previous score.
+   * Each group will run in isolation and its result will add to the
+   * current score; a group result is **always** added.
+   * 
+   * So in the example:
+   * - The score starts at 0.
+   * - `"fooScorer"` and `"barPenalizer"` will run and add their result to
+   *   the score.
+   * - `"bazScorer"` and `"bazAdjustment"` will run and add their result to
+   *   the score.
+   * - The current score is then run through `"barPenalizer"`, which will
+   *   likely apply a multiplier to the result of the two groups.
    * 
    * The allowed weighers are found {@link WeigherKey here}.
+   * 
+   * Can't wait to design a UI around this configuration value.
    */
   weighting: [
     ["storyCount", "searchRange"],
-    "cascadeCount"
+    ["cascadeCount", "cascadeRatio"]
   ] as WeightingConfig,
   /**
    * Defines the the criteria for ordering and grouping entries into

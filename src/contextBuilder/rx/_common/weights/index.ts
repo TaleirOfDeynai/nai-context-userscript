@@ -2,11 +2,12 @@ import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { isArray } from "@utils/is";
 import { assert } from "@utils/assert";
-import { chain, groupBy, fromPairs } from "@utils/iterables";
+import { chain } from "@utils/iterables";
 import { add } from "./_helpers";
 
 // All the weight functions available for use.
 import $CascadeCount from "./cascadeCount";
+import $CascadeRatio from "./cascadeRatio";
 import $SearchRange from "./searchRange";
 import $StoryCount from "./storyCount";
 
@@ -27,6 +28,7 @@ export type EntryWeigher =
 const theModule =  usModule((require, exports) => {
   const weighers = {
     ...$CascadeCount(require),
+    ...$CascadeRatio(require),
     ...$SearchRange(require),
     ...$StoryCount(require)
   };
