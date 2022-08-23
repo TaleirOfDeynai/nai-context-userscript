@@ -222,7 +222,7 @@ export default usModule((require, exports) => {
 
     /** Amount of tokens available for entries without reservations. */
     get #currentBudget() {
-      return Math.max(0, this.#assembly.availableTokens - this.#reservedTokens);
+      return Math.max(0, this.#availableTokens - this.#reservedTokens);
     }
 
     /** Subscribes to `selected` and makes this instance's observables hot. */
