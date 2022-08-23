@@ -1,3 +1,4 @@
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { dew } from "@utils/dew";
@@ -305,16 +306,31 @@ export default usModule((require, exports) => {
       else {
         const structuredOutput = [...this.#assembly.structuredOutput()];
 
-        const description = [
-          `"${source.identifier}"`,
+        const descriptionBody = [
           getInsertionText(result),
           getStartText(result),
           getGroupText(group, group ? this.#assembly.hasAssembly(group) : false),
           getRelativeText(result),
-          getShuntingText(result),
+          getShuntingText(result)
         ].filter(Boolean).join(" ");
 
-        this.#logger.info(`Inserted ${description}; ${prevTokens} => ${availableTokens}`);
+        // NovelAI breaks the identifier away from the description...
+        // ...and then removes it when it displays it to the user.
+        // I suspect this is HTML doing HTML things, though.  They may
+        // just not be setting the `white-space` CSS to display it.
+        // We'll just do the same in case that's a bug they plan to fix.
+        const description = [
+          "\"", source.identifier, "\"",
+          "\n                ",
+          descriptionBody
+        ].join("");
+
+        // Save some extra concatenation cost if we're not logging.
+        if (usConfig.debugLogging) {
+          const descPart = `Inserted "${source.identifier}" ${descriptionBody}`;
+          const tokensPart = `${prevTokens} => ${availableTokens}`
+          this.#logger.info(`${descPart}; ${tokensPart}`);
+        }
 
         this.#reportSubject.next(Object.freeze({
           source, result,
