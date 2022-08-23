@@ -696,13 +696,16 @@ const theModule = usModule((require, exports) => {
       inserted: AssemblyLike,
       shuntRef: Cursor.Fragment | ActionableResult
     ): Promise<Insertion.SuccessResult> {
-      const { target } = iterResult;
+      const { assembly } = iterResult.target;
 
       const result = dew(() => {
         if (shuntRef.type !== "fragment") return shuntRef;
         const { shuntingMode } = usConfig.assembly;
-        const direction = shuntingMode === "inDirection" ? iterResult.direction : "nearest";
-        return target.assembly.shuntOut(shuntRef, direction);
+        const direction
+          = shuntingMode === "inDirection" ? iterResult.direction
+          : assembly.isEmpty ? iterResult.direction
+          : "nearest";
+        return assembly.shuntOut(shuntRef, direction);
       });
 
       // This should not be possible unless the implementation of `shuntOut`
@@ -774,15 +777,26 @@ const theModule = usModule((require, exports) => {
 
       const { insertionType } = initState.source.entry.contextConfig;
 
+      // Until we find a non-empty assembly or the insertion offset is `0`,
+      // we must use the arity-1 version of `entryPosition`.
+      let foundNonEmpty = false;
       // We'll allow only one reversal to avoid infinite loops.
       let didReversal = false;
 
+      const nextPosition = (target: AssemblyLike) => {
+        if (!foundNonEmpty) return target.entryPosition(state.direction);
+        return target.entryPosition(state.direction, insertionType);
+      };
+
       while (true) {
         const curAsm = state.target.assembly;
+        const asmIsEmpty = curAsm.isEmpty;
+        foundNonEmpty ||= !asmIsEmpty;
 
         // Check for emptiness; `ContextGroup` will report empty when it
-        // has no assemblies inside it, in which case we should skip it.
-        if (!curAsm.isEmpty) {
+        // has no assemblies inside it, in which case we should skip it,
+        // unless this position is actually our target.
+        if (!asmIsEmpty || state.offset === 0) {
           const result = curAsm.locateInsertion(insertionType, state);
 
           switch (result.type) {
@@ -813,10 +827,7 @@ const theModule = usModule((require, exports) => {
         }
 
         state.target = nextTarget;
-        state.cursor = nextTarget.assembly.entryPosition(
-          state.direction,
-          insertionType
-        );
+        state.cursor = nextPosition(nextTarget.assembly);
       }
     }
   }

@@ -266,24 +266,26 @@ const theModule = usModule((require, exports) => {
         "Expected cursor to related to this assembly.",
         this.isRelatedTo(positionData.cursor.origin)
       );
-      assert(
-        "Expected to not be an empty compound assembly.",
-        !this.isEmpty
-      );
+
+      const { cursor, direction } = positionData;
+
+      // Just shunt in the current direction when we're empty.  There is no
+      // "nearest" edge in an empty assembly.
+      if (this.isEmpty) return this.shuntOut(cursor, direction);
 
       // Context-groups cannot be inserted into using the same method as normal
       // fragment assemblies.  So, if the insertion point is within this assembly,
       // it's getting shunted out, period.
       const result = posOps.locateInsertion(this, insertionType, positionData);
-      
+
       switch (result.type) {
         case "insertAfter":
         case "insertBefore":
           return result;
         default: {
           const { shuntingMode } = usConfig.assembly;
-          const direction = shuntingMode === "inDirection" ? positionData.direction : "nearest";
-          return this.shuntOut(positionData.cursor, direction);
+          const newDirection = shuntingMode === "inDirection" ? direction : "nearest";
+          return this.shuntOut(cursor, newDirection);
         }
       }
     }
@@ -295,7 +297,14 @@ const theModule = usModule((require, exports) => {
       /** The shunt mode to use. */
       mode?: IterDirection | "nearest"
     ): Position.InsertResult {
-      return posOps.shuntOut(this, cursor, mode);
+      if (!this.isEmpty) return posOps.shuntOut(this, cursor, mode);
+
+      // `"insertAfter"` will be used for the `"nearest"` mode as well.
+      // However, `locateInsertion`, which calls this, will always supply
+      // the direction when we're empty.  This is more a safe value for
+      // other odd calls.
+      const type = mode === "toTop" ? "insertBefore" : "insertAfter";
+      return { type, shunted: 0 };
     }
 
     /**
