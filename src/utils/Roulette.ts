@@ -6,12 +6,14 @@ import type { UndefOr } from "./utility-types";
  * Class that can randomly select an item from a weighted selection.
  */
 class Roulette<T> {
-  constructor() {
+  constructor(rng?: () => number) {
+    this.#rng = rng ?? Math.random.bind(this);
     this.#entries = [];
     this.#totalWeight = 0;
     this.#count = 0;
   }
 
+  readonly #rng: () => number;
   readonly #entries: Array<UndefOr<{ weight: number, data: T }>>;
   #totalWeight: number;
 
@@ -22,7 +24,7 @@ class Roulette<T> {
     if (this.#count === 0) return -1;
     
     const limit = this.#entries.length;
-    const ball = Math.random() * this.#totalWeight;
+    const ball = this.#rng() * this.#totalWeight;
     let curWeight = 0;
     
     for (let i = 0; i < limit; i++) {

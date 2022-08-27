@@ -190,6 +190,12 @@ const weightedRandom = {
    */
   enabled: true,
   /**
+   * When `true`, randomness will be seeded from the current story text
+   * which should, assuming no other changes that would affect the weights,
+   * cause the same context to generate on retries.
+   */
+  seedWithStory: true,
+  /**
    * The weighting function to use in scoring each entry.
    * 
    * The weighting functions are applied in order, so multipliers will

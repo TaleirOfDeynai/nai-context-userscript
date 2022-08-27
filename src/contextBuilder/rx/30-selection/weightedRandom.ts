@@ -14,23 +14,35 @@
  * 
  * Configuration that affects this module:
  * - Enabled by `weightedRandom.enabled`.
+ * - Randomness is affected by `weightedRandom.seedWithStory`.
  * - Grouping criteria affected by `weightedRandom.selectionOrdering`.
  * - Output ordering affected by `selection.insertionOrdering`.
  */
 
+import usConfig from "@config";
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
 import { chain } from "@utils/iterables";
 import * as IterOps from "@utils/iterables";
 import { createLogger } from "@utils/logging";
+import { createSeededRng } from "@utils/rng";
 import Roulette from "@utils/Roulette";
+import $QueryOps from "../../assemblies/queryOps";
 import $Common from "../_common";
 
 import type { ContextParams } from "../../ParamsService";
 import type { ActivatedSource } from "../_common/activation";
+import type { StorySource } from "../10-source";
+
+const createRng = (seed: string): () => number => {
+  if (!usConfig.weightedRandom.seedWithStory)
+    return Math.random.bind(Math);
+  return createSeededRng(seed);
+};
 
 export default usModule((require, exports) => {
+  const queryOps = $QueryOps(require);
   const { sorting, selection, weights } = $Common(require);
 
   /**
@@ -38,7 +50,8 @@ export default usModule((require, exports) => {
   * priority.  This will also calculate each emitted element's budget stats.
   */
   const createStream = (
-    contextParams: ContextParams
+    contextParams: ContextParams,
+    storySource: rx.Observable<StorySource>
   ) => {
     const logger = createLogger(`Weighted Selection: ${contextParams.contextName}`);
 
@@ -50,11 +63,12 @@ export default usModule((require, exports) => {
       if (activations.has("forced")) return "ineligible";
       if (activations.has("ephemeral")) return "ineligible";
       return "eligible";
-    }
+    };
     
     function* doWeighting(
       selectionGroup: ActivatedSource[],
-      weightingFn: (source: ActivatedSource) => number
+      weightingFn: (source: ActivatedSource) => number,
+      rngFn: () => number
     ): Iterable<ActivatedSource> {
       const { ineligible = [], eligible = [] } = chain(selectionGroup)
         .thru((sources) => IterOps.groupBy(sources, determineEligible))
@@ -69,7 +83,7 @@ export default usModule((require, exports) => {
       // Fast-path: if there are no eligible entries, we're done.
       if (eligible.length === 0) return; 
 
-      const roulette = new Roulette<ActivatedSource>();
+      const roulette = new Roulette<ActivatedSource>(rngFn);
       for (const source of eligible) {
         const score = weightingFn(source);
         if (score <= 0) continue;
@@ -90,6 +104,11 @@ export default usModule((require, exports) => {
         rxop.map((allSources) => weights.forScoring(contextParams, allSources))
       );
 
+      const rngFn = storySource.pipe(
+        rxop.map((s) => queryOps.getText(s.entry.searchedText)),
+        rxop.map(createRng)
+      );
+
       const selectionGroups = sources.pipe(
         rxop.toArray(),
         rxop.map((arr) => arr.sort(selectionSort)),
@@ -98,7 +117,7 @@ export default usModule((require, exports) => {
       );
 
       return selectionGroups.pipe(
-        rxop.withLatestFrom(weightingFn),
+        rxop.withLatestFrom(weightingFn, rngFn),
         rxop.mergeMap((args) => doWeighting(...args)),
         rxop.mergeMap(selection.asBudgeted),
         rxop.toArray(),
