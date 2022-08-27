@@ -261,17 +261,23 @@ const theModule = usModule((require, exports) => {
       insertionType: TrimType,
       /** An object describing how to locate the insertion. */
       positionData: Readonly<InsertionPosition>
-    ): Position.InsertResult {
+    ): Position.Result {
       assert(
         "Expected cursor to related to this assembly.",
         this.isRelatedTo(positionData.cursor.origin)
       );
 
-      const { cursor, direction } = positionData;
-
-      // Just shunt in the current direction when we're empty.  There is no
-      // "nearest" edge in an empty assembly.
-      if (this.isEmpty) return this.shuntOut(cursor, direction);
+      const { cursor, direction, offset } = positionData;
+      
+      if (this.isEmpty) {
+        // Continue as if this group were never even here.
+        if (offset > 0) return { type: direction, remainder: offset };
+        // For the offset `0` case, just shunt such that the entry does not
+        // vault over this group when it is empty.  This retains the current
+        // ordering and relative positions.
+        const deflection = direction === "toBottom" ? "toTop" : "toBottom";
+        return this.shuntOut(cursor, deflection);
+      }
 
       // Context-groups cannot be inserted into using the same method as normal
       // fragment assemblies.  So, if the insertion point is within this assembly,

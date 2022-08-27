@@ -777,8 +777,8 @@ const theModule = usModule((require, exports) => {
 
       const { insertionType } = initState.source.entry.contextConfig;
 
-      // Until we find a non-empty assembly or the insertion offset is `0`,
-      // we must use the arity-1 version of `entryPosition`.
+      // Until we find a non-empty assembly we must use the arity-1 version
+      // of `entryPosition`.
       let foundNonEmpty = false;
       // We'll allow only one reversal to avoid infinite loops.
       let didReversal = false;
@@ -790,29 +790,23 @@ const theModule = usModule((require, exports) => {
 
       while (true) {
         const curAsm = state.target.assembly;
-        const asmIsEmpty = curAsm.isEmpty;
-        foundNonEmpty ||= !asmIsEmpty;
+        foundNonEmpty ||= !curAsm.isEmpty;
 
-        // Check for emptiness; `ContextGroup` will report empty when it
-        // has no assemblies inside it, in which case we should skip it,
-        // unless this position is actually our target.
-        if (!asmIsEmpty || state.offset === 0) {
-          const result = curAsm.locateInsertion(insertionType, state);
+        const result = curAsm.locateInsertion(insertionType, state);
 
-          switch (result.type) {
-            case "toTop":
-            case "toBottom":
-              state.offset = result.remainder;
+        switch (result.type) {
+          case "toTop":
+          case "toBottom":
+            state.offset = result.remainder;
 
-              if (state.direction === result.type) break;
-              if (didReversal) return;
-              state.direction = result.type;
-              didReversal = true;
-              break;
-            default:
-              yield Object.freeze({ ...state, result });
-              break;
-          }
+            if (state.direction === result.type) break;
+            if (didReversal) return;
+            state.direction = result.type;
+            didReversal = true;
+            break;
+          default:
+            yield Object.freeze({ ...state, result });
+            break;
         }
 
         const idxOffset = state.direction === "toTop" ? -1 : 1;
