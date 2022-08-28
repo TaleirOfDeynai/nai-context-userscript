@@ -1,104 +1,92 @@
-/// <reference path="@src/../../node_modules/gm-config/types/index.d.ts" />
-
-import GM_config from "gm-config/gm_config";
+import { GM_config } from "../../vendor/gm-config/gm_config";
+import * as fields from "./fields";
 
 import type { LorebookConfig as LC } from "@nai/Lorebook";
-import type { SorterKey } from "./contextBuilder/rx/_common/sorting";
-import type { WeigherKey, WeightingConfig } from "./contextBuilder/rx/_common/weights";
-import type { ShuntingMode } from "./contextBuilder/assemblies/Compound";
+import type { SorterKey } from "../contextBuilder/rx/_common/sorting";
+import type { WeigherKey, WeightingConfig } from "../contextBuilder/rx/_common/weights";
+import type { ShuntingMode } from "../contextBuilder/assemblies/Compound";
 
-(GM_config as GM_configStruct).init({
+GM_config.init({
   id: "nai-context-userscript",
   title: "NovelAI Custom Context",
-  fields: {
-    "activation_vanillaIntegration": {
-      section: "Activation",
-      label: "Integrate with Vanilla Searches",
-      type: "checkbox",
-      default: true
-    },
-    "activation_searchComments": {
-      label: "Search Comments",
-      type: "checkbox",
-      default: true
-    },
-    "story_standardizeHandling": {
-      section: "Story",
-      label: "Standardize Prefix/Suffix Handling",
-      type: "checkbox",
-      default: true
-    },
-    // TODO: Make a UI for this.
-    "selection_insertionOrdering": {
-      section: "Selection",
-      label: "Insertion Ordering",
-      type: "hidden",
-      default: JSON.stringify([
-        "budgetPriority",
-        "selectionIndex",
-        "contextGroup",
-        "reservation",
-        "activationEphemeral",
-        "activationForced",
-        "activationStory",
-        "storyKeyOrder",
-        "cascadeFinalDegree",
-        "cascadeInitDegree"
-      ] as SorterKey[], undefined, 2)
-    },
-    "subContext_groupedInsertion": {
-      section: "Sub-Context",
-      label: "Use Context Groups",
-      type: "checkbox",
-      default: true
-    },
-    "weightedRandom_enabled": {
-      section: "Weighted-Random Selection",
-      label: "Enable",
-      type: "checkbox",
-      default: true
-    },
-    "weightedRandom_seedWithStory": {
-      label: "Use Story-Seeded Randomness",
-      type: "checkbox",
-      default: true
-    },
-    // TODO: Make a UI for this.
-    "weightedRandom_weighting": {
-      label: "Weighting Functions",
-      type: "hidden",
-      default: JSON.stringify([
-        ["storyCount", "searchRange"],
-        ["cascadeCount", "cascadeRatio"]
-      ] as WeightingConfig, undefined, 2)
-    },
-    // TODO: Make a UI for this.
-    "weightedRandom_selectionOrdering": {
-      label: "Selection Ordering",
-      type: "hidden",
-      default: JSON.stringify([
-        "budgetPriority"
-      ] as SorterKey[], undefined, 2)
-    },
-    "assembly_shuntingMode": {
-      section: "Assembly",
-      label: "Shunting Mode",
-      type: "select",
-      options: ["In Same Direction", "Nearest"],
-      default: "In Direction"
-    },
-    "debug_logging": {
-      section: ["Debugging", "These options will require refreshing the page."],
-      label: "Enable Logging",
-      type: "checkbox",
-      default: false
-    },
-    "debug_timeTrial": {
-      label: "Enable Performance Comparison",
-      type: "checkbox",
-      default: false
-    }
-  }
+  fields: Object.assign({}, 
+    fields.section("Story", [
+      fields.checkBox("story_standardizeHandling", {
+        label: "Standardize Prefix/Suffix Handling"
+      })
+    ]),
+    fields.section("Activation", [
+      fields.checkBox("activation_vanillaIntegration", {
+        label: "Integrate with Vanilla Searches"
+      }),
+      fields.checkBox("activation_searchComments", {
+        label: "Search Comments"
+      })
+    ]),
+    fields.section("Sub-Context", [
+      fields.checkBox("subContext_groupedInsertion", {
+        label: "Use Context-Groups"
+      })
+    ]),
+    fields.section("Selection", [
+      // TODO: Make a UI for this.
+      fields.hidden("selection_insertionOrdering", {
+        label: "Insertion Ordering",
+        default: JSON.stringify([
+          "budgetPriority",
+          "selectionIndex",
+          "contextGroup",
+          "reservation",
+          "activationEphemeral",
+          "activationForced",
+          "activationStory",
+          "storyKeyOrder",
+          "cascadeFinalDegree",
+          "cascadeInitDegree"
+        ] as SorterKey[], undefined, 2)
+      }),
+      fields.subSection("Weighted-Random Selection", [
+        fields.checkBox("weightedRandom_enabled", {
+          label: "Enable"
+        }),
+        fields.checkBox("weightedRandom_seedWithStory", {
+          label: "Use Story-Seeded Randomness"
+        }),
+        // TODO: Make a UI for this.
+        fields.hidden("weightedRandom_weighting", {
+          label: "Weighting Functions",
+          default: JSON.stringify([
+            ["storyCount", "searchRange"],
+            ["cascadeCount", "cascadeRatio"]
+          ] as WeightingConfig, undefined, 2)
+        }),
+        // TODO: Make a UI for this.
+        fields.hidden("weightedRandom_selectionOrdering", {
+          label: "Selection Ordering",
+          default: JSON.stringify([
+            "budgetPriority"
+          ] as SorterKey[], undefined, 2)
+        })
+      ])
+    ]),
+    fields.section("Assembly", [
+      fields.select("assembly_shuntingMode", {
+        label: "Shunting Mode",
+        options: ["In Same Direction", "Nearest"],
+        default: "In Same Direction"
+      })
+    ]),
+    fields.section(["Debugging", "These options will require refreshing the page."], [
+      fields.checkBox("debug_logging", {
+        label: "Enable Logging",
+        default: false
+      }),
+      fields.checkBox("debug_timeTrial", {
+        label: "Enable Performance Comparison",
+        default: false
+      })
+    ])
+  )
 });
 
 /** Configuration options affecting activation. */

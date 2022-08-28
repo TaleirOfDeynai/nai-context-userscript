@@ -21,7 +21,6 @@
     "author": "TaleirOfDeynai",
     "license": "MIT",
     "scripts": {
-        "postinstall": "napa",
         "test": "jest",
         "build": "npx rollup --config rollup.config.mjs",
         "watch": "npx rollup --config rollup.config.mjs --watch",
@@ -45,7 +44,6 @@
         "@babel/preset-react": "^7.17.12",
         "@rollup/plugin-babel": "^5.3.1",
         "@rollup/plugin-commonjs": "^22.0.0",
-        "@rollup/plugin-legacy": "^2.2.0",
         "@rollup/plugin-node-resolve": "^13.3.0",
         "@rollup/plugin-replace": "^4.0.0",
         "@rollup/plugin-typescript": "^8.3.3",
@@ -56,7 +54,6 @@
         "fast-levenshtein": "^3.0.0",
         "gpt-3-encoder": "1.1.3",
         "jest": "^28.1.1",
-        "napa": "3.0.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "rollup": "^2.75.7",
@@ -67,12 +64,6 @@
         "tsconfig-paths": "4.0.0",
         "tslib": "^2.4.0",
         "typescript": "4.7.4"
-    },
-    "napa": {
-        "gm-config": "sizzlemctwizzle/GM_config#2207c5c1322ebb56e401f03c2e581719f909762a"
-    },
-    "napa-config": {
-        "cache": false
     },
     "config": {
         "port": "8124"

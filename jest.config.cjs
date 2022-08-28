@@ -8,5 +8,5 @@ module.exports = {
   moduleNameMapper: pathsToModuleNameMapper(compilerOptions.paths, {
     prefix: `<rootDir>/${compilerOptions.baseUrl}`
   }),
-  setupFilesAfterEnv: ["<rootDir>/spec-resources/_setup.cts"],
+  setupFilesAfterEnv: ["<rootDir>/spec-resources/_setup.cts"]
 };
