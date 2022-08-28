@@ -1,5 +1,6 @@
 import { babel } from '@rollup/plugin-babel'
 import commonjs from '@rollup/plugin-commonjs'
+import legacy from '@rollup/plugin-legacy'
 import nodeResolve from '@rollup/plugin-node-resolve'
 import replace from '@rollup/plugin-replace'
 import typescriptPlugin from '@rollup/plugin-typescript'
@@ -32,6 +33,9 @@ const rollupConfig = {
       preventAssignment: true
     }),
     nodeResolve({ extensions: ['.js', '.ts', '.tsx'] }),
+    legacy({
+      'node_modules/gm-config/gm_config.js': 'GM_config'
+    }),
     typescriptPlugin({
       typescript,
       exclude: /\.spec\.[tj]s$/i
@@ -41,7 +45,8 @@ const rollupConfig = {
         'node_modules/**'
       ],
       exclude: [
-        'node_modules/process-es6/**'
+        'node_modules/process-es6/**',
+        'node_modules/gm-config/**'
       ]
     }),
     babel({ babelHelpers: 'bundled' }),

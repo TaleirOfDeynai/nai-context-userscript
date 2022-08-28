@@ -1,3 +1,4 @@
+import usConfig from "@config";
 import { dew } from "@utils/dew";
 import { makeWrappedRequire, notifyToConsole } from "./require";
 import injectors, { Injector } from "./injectors";
@@ -110,4 +111,8 @@ Object.defineProperty(unsafeWindow, "__USERSCRIPT_ACTIVE", {
   value: true,
   writable: true,
   configurable: true
+});
+
+GM.registerMenuCommand("Configuration", () => {
+  usConfig.open();
 });

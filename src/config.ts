@@ -1,7 +1,105 @@
+/// <reference path="@src/../../node_modules/gm-config/types/index.d.ts" />
+
+import GM_config from "gm-config/gm_config";
+
 import type { LorebookConfig as LC } from "@nai/Lorebook";
 import type { SorterKey } from "./contextBuilder/rx/_common/sorting";
 import type { WeigherKey, WeightingConfig } from "./contextBuilder/rx/_common/weights";
 import type { ShuntingMode } from "./contextBuilder/assemblies/Compound";
+
+(GM_config as GM_configStruct).init({
+  id: "nai-context-userscript",
+  title: "NovelAI Custom Context",
+  fields: {
+    "activation_vanillaIntegration": {
+      section: "Activation",
+      label: "Integrate with Vanilla Searches",
+      type: "checkbox",
+      default: true
+    },
+    "activation_searchComments": {
+      label: "Search Comments",
+      type: "checkbox",
+      default: true
+    },
+    "story_standardizeHandling": {
+      section: "Story",
+      label: "Standardize Prefix/Suffix Handling",
+      type: "checkbox",
+      default: true
+    },
+    // TODO: Make a UI for this.
+    "selection_insertionOrdering": {
+      section: "Selection",
+      label: "Insertion Ordering",
+      type: "hidden",
+      default: JSON.stringify([
+        "budgetPriority",
+        "selectionIndex",
+        "contextGroup",
+        "reservation",
+        "activationEphemeral",
+        "activationForced",
+        "activationStory",
+        "storyKeyOrder",
+        "cascadeFinalDegree",
+        "cascadeInitDegree"
+      ] as SorterKey[], undefined, 2)
+    },
+    "subContext_groupedInsertion": {
+      section: "Sub-Context",
+      label: "Use Context Groups",
+      type: "checkbox",
+      default: true
+    },
+    "weightedRandom_enabled": {
+      section: "Weighted-Random Selection",
+      label: "Enable",
+      type: "checkbox",
+      default: true
+    },
+    "weightedRandom_seedWithStory": {
+      label: "Use Story-Seeded Randomness",
+      type: "checkbox",
+      default: true
+    },
+    // TODO: Make a UI for this.
+    "weightedRandom_weighting": {
+      label: "Weighting Functions",
+      type: "hidden",
+      default: JSON.stringify([
+        ["storyCount", "searchRange"],
+        ["cascadeCount", "cascadeRatio"]
+      ] as WeightingConfig, undefined, 2)
+    },
+    // TODO: Make a UI for this.
+    "weightedRandom_selectionOrdering": {
+      label: "Selection Ordering",
+      type: "hidden",
+      default: JSON.stringify([
+        "budgetPriority"
+      ] as SorterKey[], undefined, 2)
+    },
+    "assembly_shuntingMode": {
+      section: "Assembly",
+      label: "Shunting Mode",
+      type: "select",
+      options: ["In Same Direction", "Nearest"],
+      default: "In Direction"
+    },
+    "debug_logging": {
+      section: ["Debugging", "These options will require refreshing the page."],
+      label: "Enable Logging",
+      type: "checkbox",
+      default: false
+    },
+    "debug_timeTrial": {
+      label: "Enable Performance Comparison",
+      type: "checkbox",
+      default: false
+    }
+  }
+});
 
 /** Configuration options affecting activation. */
 const activation = {
@@ -13,7 +111,9 @@ const activation = {
    * and can even use the cached results from previous runs when
    * possible.
    */
-  vanillaIntegration: true,
+  get vanillaIntegration() {
+    return GM_config.get("activation_vanillaIntegration").valueOf() as boolean;
+  },
   /**
    * Vanilla NovelAI removes comments before keyword searching is
    * performed.  If lorebook keywords could match text in comments,
@@ -29,8 +129,10 @@ const activation = {
    * match in the partially assembled context; if it was in a removed
    * comment, that will be impossible.
    */
-  searchComments: true
-} as const;
+  get searchComments() {
+    return GM_config.get("activation_searchComments").valueOf() as boolean;
+  }
+};
 
 /** Configuration options affecting the story entry. */
 const story = {
@@ -49,13 +151,15 @@ const story = {
    * 
    * This is probably somewhat of a heisenbug waiting to happen.
    */
-  standardizeHandling: true
-} as const;
+  get standardizeHandling() {
+    return GM_config.get("story_standardizeHandling").valueOf() as boolean;
+  }
+};
 
 /** Configuration options affecting lorebook features. */
 const lorebook = {
   /** Nothing here at the moment. */
-} as const;
+};
 
 /** Configuration options relating to the selection phase, in general. */
 const selection = {
@@ -99,18 +203,11 @@ const selection = {
    * special and will be ignored if used here.  These are the fail-safe
    * sorters and help to make this user-script behave as NovelAI does.
    */
-  insertionOrdering: [
-    "budgetPriority",
-    "selectionIndex",
-    "contextGroup",
-    "reservation",
-    "activationEphemeral",
-    "activationForced",
-    "activationStory",
-    "storyKeyOrder",
-    "cascadeFinalDegree",
-    "cascadeInitDegree"
-  ] as SorterKey[]
+  get insertionOrdering() {
+    // TODO: Validate this.
+    const cfg = GM_config.get("selection_insertionOrdering").valueOf();
+    return JSON.parse(cfg as any) as SorterKey[];
+  }
 } as const;
 
 /** Configuration options relating to sub-context assembly. */
@@ -149,8 +246,10 @@ const subContext = {
    *   sub-contexts in isolation can be done concurrently, which results
    *   in better background worker utilization.
    */
-  groupedInsertion: true
-} as const;
+  get groupedInsertion() {
+    return GM_config.get("subContext_groupedInsertion").valueOf() as boolean;
+  }
+};
 
 /**
  * These options enable different entry selection strategies that affect
@@ -188,13 +287,17 @@ const weightedRandom = {
   /**
    * Enables the weighted-random selection strategy.
    */
-  enabled: true,
+  get enabled() {
+    return GM_config.get("weightedRandom_enabled").valueOf() as boolean;
+  },
   /**
    * When `true`, randomness will be seeded from the current story text
    * which should, assuming no other changes that would affect the weights,
    * cause the same context to generate on retries.
    */
-  seedWithStory: true,
+  get seedWithStory() {
+    return GM_config.get("weightedRandom_seedWithStory").valueOf() as boolean;
+  },
   /**
    * The weighting function to use in scoring each entry.
    * 
@@ -226,10 +329,11 @@ const weightedRandom = {
    * 
    * Can't wait to design a UI around this configuration value.
    */
-  weighting: [
-    ["storyCount", "searchRange"],
-    ["cascadeCount", "cascadeRatio"]
-  ] as WeightingConfig,
+  get weighting() {
+    // TODO: Validate this.
+    const cfg = GM_config.get("weightedRandom_weighting").valueOf();
+    return JSON.parse(cfg as any) as WeightingConfig;
+  },
   /**
    * Defines the the criteria for ordering and grouping entries into
    * selection groups.  All entries that are found to be equal to one
@@ -240,10 +344,12 @@ const weightedRandom = {
    * This uses the same sorters as {@link selection.insertionOrdering}
    * and the allowed sorters are found {@link SorterKey here}.
    */
-  selectionOrdering: [
-    "budgetPriority"
-  ] as SorterKey[]
-} as const;
+  get selectionOrdering() {
+    // TODO: Validate this.
+    const cfg = GM_config.get("weightedRandom_selectionOrdering").valueOf();
+    return JSON.parse(cfg as any) as SorterKey[];
+  }
+};
 
 /** Configuration options relating to context assembly. */
 const assembly = {
@@ -259,7 +365,12 @@ const assembly = {
    *   it will be placed before it.
    * - `"nearest"` - Always shunts the entry to the nearest end.
    */
-  shuntingMode: "inDirection" as ShuntingMode
+  get shuntingMode(): ShuntingMode {
+    switch (GM_config.get("assembly_shuntingMode").valueOf()) {
+      case "In Same Direction": return "inDirection";
+      default: return "nearest";
+    }
+  }
 };
 
 /** Configuration options relating to context post-processing. */
@@ -289,8 +400,20 @@ const postProcess = {
 } as const;
 
 const config = {
-  /** Enables debug logging for the user-script. */
-  debugLogging: true,
+  open() {
+    (GM_config as GM_configStruct).open();
+  },
+  /**
+   * Enables debug logging for the user-script.
+   * 
+   * Setter is for unit testing.
+   */
+  get debugLogging() {
+    return GM_config.get("debug_logging").valueOf() as boolean;
+  },
+  set debugLogging(value: boolean) {
+    GM_config.set("debug_logging", value);
+  },
   /**
    * When `true`, both the new and vanilla context builder will run,
    * measuring the performance of both for comparison.  This will
@@ -300,7 +423,9 @@ const config = {
    * When `false`, the vanilla context builder will only be invoked if
    * the new one fails.
    */
-  debugTimeTrial: true,
+  get debugTimeTrial() {
+    return GM_config.get("debug_timeTrial").valueOf() as boolean;
+  },
   /**
    * Whether we're in a test environment.
    * 
