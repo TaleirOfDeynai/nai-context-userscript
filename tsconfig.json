@@ -17,7 +17,7 @@
     "paths": {
       "@utils/*": ["./utils/*"],
       "@nai/*": ["./naiModules/*"],
-      "@config": ["./config"],
+      "@config": ["./config/index"],
       "@spec/*": ["../spec-resources/*"],
       "@src/*": ["./*"]
     },
