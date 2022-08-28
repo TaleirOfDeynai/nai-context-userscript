@@ -176,7 +176,7 @@ const theModule = usModule((require, exports) => {
       const result
         = forStory ? await _forStory(trimmer, contextConfig, contextParams)
         : _forLore(trimmer, contextParams);
-      const keepAffix = !forStory ? true : usConfig.story.standardizeHandling;
+      const keepAffix = !forStory ? true : usConfig.sourcing.standardizeHandling;
       return keepAffix ? result : await result.asOnlyContent();
     }
   });

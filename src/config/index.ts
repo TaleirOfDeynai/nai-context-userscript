@@ -10,8 +10,8 @@ GM_config.init({
   id: "nai-context-userscript",
   title: "NovelAI Custom Context",
   fields: Object.assign({}, 
-    fields.section("Story", [
-      fields.checkBox("story_standardizeHandling", {
+    fields.section("Sourcing", [
+      fields.checkBox("sourcing_standardizeHandling", {
         label: "Standardize Prefix/Suffix Handling"
       })
     ]),
@@ -122,8 +122,8 @@ const activation = {
   }
 };
 
-/** Configuration options affecting the story entry. */
-const story = {
+/** Configuration options affecting entry sourcing. */
+const sourcing = {
   /**
    * Vanilla NovelAI includes the prefix and suffix of entries
    * for keyword searches during cascade activation, but during
@@ -140,13 +140,54 @@ const story = {
    * This is probably somewhat of a heisenbug waiting to happen.
    */
   get standardizeHandling() {
-    return GM_config.get("story_standardizeHandling").valueOf() as boolean;
+    return GM_config.get("sourcing_standardizeHandling").valueOf() as boolean;
   }
 };
 
 /** Configuration options affecting lorebook features. */
 const lorebook = {
   /** Nothing here at the moment. */
+};
+
+/** Configuration options relating to sub-context assembly. */
+const subContext = {
+  /**
+   * Vanilla NovelAI pre-processes sub-contexts prior to final assembly,
+   * which involves separating all the lorebook entries of a category
+   * from the root context and assembling them into a new mega-entry,
+   * which is then inserted into the root context.
+   * 
+   * If this is set to `true`, a different strategy will be used where
+   * all entries of a category will not be separated from other entries
+   * and will be inserted into the root context according to their
+   * insertion order (AKA `budgetPriority`), but they will be anchored
+   * to a group positioned according to the sub-context's settings.
+   * 
+   * This can allow for more flexibility in budgeting the context;
+   * entries of the sub-context will only be inserted if entries that
+   * do not belong to the sub-context have left room for it at insertion
+   * time.
+   * 
+   * Additionally, this makes entries work more consistently; insertion
+   * priority works the same for all entries and only how the entry is
+   * positioned changes.  You don't need to consider which "insertion
+   * priority" is important when comparing two entries.
+   * 
+   * This has performance implications that will vary depending on how
+   * the lorebook is designed.
+   * - This option can be faster if you have a lot of sub-contexts
+   *   and the majority of their pre-assembled text would end up trimmed
+   *   out when inserted into the root context.  That is, time is not
+   *   wasted trimming down text of the sub-context which would
+   *   ultimately be discarded anyways.
+   * - This option can be slower if the lorebook is budgeted with these
+   *   sub-contexts in mind.  The vanilla behavior of assembling the
+   *   sub-contexts in isolation can be done concurrently, which results
+   *   in better background worker utilization.
+   */
+  get groupedInsertion() {
+    return GM_config.get("subContext_groupedInsertion").valueOf() as boolean;
+  }
 };
 
 /** Configuration options relating to the selection phase, in general. */
@@ -197,47 +238,6 @@ const selection = {
     return JSON.parse(cfg as any) as SorterKey[];
   }
 } as const;
-
-/** Configuration options relating to sub-context assembly. */
-const subContext = {
-  /**
-   * Vanilla NovelAI pre-processes sub-contexts prior to final assembly,
-   * which involves separating all the lorebook entries of a category
-   * from the root context and assembling them into a new mega-entry,
-   * which is then inserted into the root context.
-   * 
-   * If this is set to `true`, a different strategy will be used where
-   * all entries of a category will not be separated from other entries
-   * and will be inserted into the root context according to their
-   * insertion order (AKA `budgetPriority`), but they will be anchored
-   * to a group positioned according to the sub-context's settings.
-   * 
-   * This can allow for more flexibility in budgeting the context;
-   * entries of the sub-context will only be inserted if entries that
-   * do not belong to the sub-context have left room for it at insertion
-   * time.
-   * 
-   * Additionally, this makes entries work more consistently; insertion
-   * priority works the same for all entries and only how the entry is
-   * positioned changes.  You don't need to consider which "insertion
-   * priority" is important when comparing two entries.
-   * 
-   * This has performance implications that will vary depending on how
-   * the lorebook is designed.
-   * - This option can be faster if you have a lot of sub-contexts
-   *   and the majority of their pre-assembled text would end up trimmed
-   *   out when inserted into the root context.  That is, time is not
-   *   wasted trimming down text of the sub-context which would
-   *   ultimately be discarded anyways.
-   * - This option can be slower if the lorebook is budgeted with these
-   *   sub-contexts in mind.  The vanilla behavior of assembling the
-   *   sub-contexts in isolation can be done concurrently, which results
-   *   in better background worker utilization.
-   */
-  get groupedInsertion() {
-    return GM_config.get("subContext_groupedInsertion").valueOf() as boolean;
-  }
-};
 
 /**
  * These options enable different entry selection strategies that affect
@@ -423,16 +423,16 @@ const config = {
    * branches.
    */
   inTestEnv: false,
+  /** Configuration options affecting entry sourcing. */
+  sourcing,
   /** Configuration options affecting activation. */
   activation,
-  /** Configuration options affecting the story entry. */
-  story,
   /** Configuration options affecting lorebook features. */
   lorebook,
-  /** Configuration options relating to selection. */
-  selection,
   /** Configuration options relating to sub-context assembly. */
   subContext,
+  /** Configuration options relating to selection. */
+  selection,
   /** Configuration options relating to weighted-random selection. */
   weightedRandom,
   /** Configuration options relating to context assembly. */
