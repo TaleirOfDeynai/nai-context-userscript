@@ -5,9 +5,9 @@ This user-script injects a new context-builder into NovelAI with new features an
 This repo was forked from the following template: [cvzi's rollup userscript template](https://github.com/cvzi/rollup-userscript-template)
 
 ## Features:
-- [x] [Comments searched by keywords](#Comment-Searching), unlocking new meta-programming possibilities.
-- [x] [Context-groups](#Context-Groups), an alternative to sub-contexts.
-- [ ] Weighted-random entry selection (coming soon).
+- [x] [Comments searched by keywords](#comment-searching), unlocking new meta-programming possibilities.
+- [x] [Context-groups](#context-groups), an alternative to sub-contexts.
+- [x] [Weighted-random entry selection](#weighted-random-selection).
 - [ ] Q-Queries, a more user-friendly alternative to regular expressions (coming soon).
 
 ## End-User Installation
@@ -18,13 +18,7 @@ If the injection fails, you'll have to wait for me to figure out what needs fixi
 
 **Install at your own discretion; disable or uninstall it if causes issues.**
 
-Grab the latest release; it comes in two variants:
-- One configured to use the familiar sub-contexts.
-- One configured to use the alternative [context-groups](#Context-Groups).
-
-*If you want a fully vanilla-compatible experience, go with the sub-context variant.  This context-group thing should still work with all current lorebooks, but it will have an effect on entry prioritization that may be counter to your intentions.  It is meant to help allow weighted-random selection to pick the most relevant entries but that is not yet implemented, so use it only if you'd like to experiment with it.*
-
-Use a Greasemonkey compatible user-script extension like [Tampermonkey](https://www.tampermonkey.net/) to install it.
+Grab the latest version from the [releases page](https://github.com/TaleirOfDeynai/nai-context-userscript/releases) and use a Greasemonkey compatible user-script extension like [Tampermonkey](https://www.tampermonkey.net/) to install it.
 
 Note that the user-script is currently targeting modern browsers with pretty up-to-date JavaScript feature sets.  It should work with recent versions of the major browsers, but I'm not certain about other browsers, especially mobile ones.
 
@@ -37,6 +31,38 @@ There are a number of browsers with extension support on Android.  I personally 
 ### iOS Options
 
 I was surprised to learn that Apple actually allows a few extensions for the Safari browser these days.  I haven't tried it myself, but you can apparently find a Safari extension called [Userscripts](https://apps.apple.com/us/app/userscripts/id1463298887) on the App Store.
+
+## Configuration Options
+
+The [configuration menu](#how-do-I-access-the-configuration-menu) allows you to configure the user-script, enabling or disabling features and making it work how you might need it to work.
+
+Here are the current options and a short explanation of their function:
+
+- **Sourcing**
+  - **Standardize Prefix/Suffix Handling** (on by default) - When searching for key matches, vanilla NovelAI adds the prefix and suffix to lorebook entries but not to the story entry.  Enabling this option will make sure the prefix and suffix are also added to the story so all entries behave the same way.
+- **Activation**
+  - **Integrate with Vanilla Searches** (on by default) - In case NovelAI attempts to use the keys of an entry outside of the main context-builder, enabling this will try to catch that and make sure this user-script's search system is used instead.  This makes sure the same caching system and searching behavior is used.
+  - **Search Comments** (on by default) - Enables or disables the [comment searching](#comment-searching) feature, which allows your keys to find matches in comments.
+- **Sub-Context**
+  - **Use Context-Groups** (on by default) - Enables or disables the [Context-Groups](#context-groups) feature, which changes how sub-contexts work pretty drastically.
+- **Selection**
+  - **Weighted-Random Selection**
+    - **Enable** (on by default) - Enables or disables the [weighted-random selection](#weighted-random-selection) feature.
+    - **Use Story-Seeded Randomness** (on by default) - When enabled, generates the context the same way on retries, as long as nothing else changed that might affect the randomness (like insertion positions of entries in your lorebook).  Disable it if you want the context to reshuffle when you retry; you never know when you might've just gotten a bad roll!
+- **Assembly**
+  - **Shunting Mode** - When an entry can't be inserted into another entry for whatever reason, it needs to be kicked out of it.  This allows you to tweak how that happens.
+    - `"In Same Direction"` - The default.  Shunts in the direction indicated by the inserted entry's "insertion position" configuration; that is `-1` or less places it before the entry and `0` or more places it after the entry.
+    - `"Nearest"` - Shunts to the nearest boundary of the insertion target.  So, if it was trying to insert near the start of the entry, it will be placed before it.  Otherwise, it places it after it.
+- **Debugging**
+  - **Enable Logging** (off by default) - Enables debug logging.
+    - Spams the browser's console with information on the entire context building process.
+    - Enables performance telemetry of the context builder's pipeline.  Chrome can give you a breakdown in one of its "Performance" recordings.
+    - This will have a negative impact on performance, *especially* if you have the console open.  Updating that in realtime is expensive.
+  - **Enable Performance Comparison** (off by default) - Runs both the context builders of the user-script and vanilla NovelAI.
+    - Reports the resulting contexts of each to the browser's console.
+    - Tracks performance telemetry of each function individually.
+    - Since this builds two contexts each time, it does slow things down a lot.
+    - Best not to use it with debug logging enabled if you want to get decently comparable timings.
 
 ## FAQ
 
@@ -55,13 +81,20 @@ In particular:
 - The "token" trimming level currently just separates by words in a Eurocentric way.  That trim-level won't work all that well with Japanese (sorry Genji!) or other languages that lack space-separation between words.
 - Entries can never be inserted into the prefix or suffix of other entries; the entry will be shunted to before/after the prefix/suffix instead.
 - In the case of multiple entries with the same insertion priority, it can use extra information gathered from cascade activations to break those ties a little more intelligently.  It will try to place cascade activations after the entry that triggered them.
-  - But again, **only where the insertion priority is equal to other entries**.
+  - But again, **only where the insertion priority is equal to other entries**...
+  - Except when using [weighted-random selection](#weighted-random-selection).
 
-#### How do I configure this thing?
+#### How do I access the configuration menu?
 
-There is currently no way to configure it in NovelAI.  The configuration is static and set in stone when the script is built (TypeScript does some code removal based off it, so even modifying the values in the release code may not get it to do what you want).
+The user-script uses Greasemonkey's `GM.registerMenuCommand` permission to register a command that will open the configuration menu.
 
-I still need to do research into how to do good end-user configuration.  The best user-experience would be some kind of UI injection into NovelAI, but that isn't an ideal developer-experience, since that's yet another thing I would have to maintain versus their private APIs as NovelAI does future releases.
+How the user-script extension presents this menu command is up to the individual extension, but on Tampermonkey, you can access it from its icon on your browser's toolbar while NovelAI is loaded.
+
+![Finding the Configuration in Tampermonkey](/assets/configuration.png)
+
+Refer to your user-script extension's documentation to figure out how to find the configuration menu command or if it is even capable of presenting one.
+
+You can learn what each option in the menu does [over here](#configuration-options).
 
 #### What happens if it breaks?
 
@@ -77,9 +110,21 @@ NovelAI is using Webpack and although they did add some configuration to reduce 
 
 And the NovelAI devs are also completely free to change their entire private API if they want, breaking this entirely.  I'll try to keep up as long as I have interest and the ability, but until they get their official scripting API going, there is just this annoying maintenance overhead we're all going to have to cope with.
 
+#### Can I see how my entries are scoring with the weighted-random selection?
+
+You can enable debug logging in the [configuration options](#configuration-options) and open your browser's dev console, usually with the F12 key.  You should see a "Console" tab somewhere; this is where the debug information will be logged.
+
+Go to your story in NovelAI, open the "Advanced" tab in the right sidebar, and hit the "Current Context" button.  This will trigger the context builder and spew information onto the console.
+
+Look for log entries prefixed with `[Weighted Selection: <Root>]` or similar (it may say something besides `<Root>` if you're using sub-contexts).  Entries that qualify for random selection will be presented with their score at the time they were selected:
+
+`[Weighted Selection: <Root>] Selected "Taleir - Description" with score 30.94.`
+
 ## Comment Searching
 
 By default, NovelAI removes comments before the keywords are applied to activate your entries.  This user-script provides an option to allow comments to remain during the keyword search and remove them prior to insertion.
+
+This is enabled by default.  Open the [configuration menu](#how-do-I-access-the-configuration-menu) and use the Activation → Search Comments option to enable or disable the feature.
 
 If you enable key-relative insertion and the match is removed because it was inside a comment, it will become relative to the nearest text that still exists instead.  This is unlike matches that are removed due to trimming.
 
@@ -130,6 +175,8 @@ Again, due to a lack of any sort of means to apply logic or constraints to keywo
 
 Context-groups are an alternative to sub-contexts.  It's meant to support the (not yet available) weighted-random selection feature by allowing lorebook entries to compete based on their apparent relevancy instead of just "insertion order" alone.
 
+This is enabled by default.  Open the [configuration menu](#how-do-I-access-the-configuration-menu) and use the Sub-Context → Use Context-Groups option to enable or disable the feature.
+
 ### What and why?
 
 Vanilla sub-contexts take entries belonging to a category away from the main context and use them to construct its own context in isolation, using all the same steps and insertion rules as the main context.  The resulting text is used to create a virtual lorebook entry and that is handed back to the main context to use instead.
@@ -162,6 +209,119 @@ However, the "reserved tokens" property of the sub-context is not listed.  This 
 If the sub-context is configured to be inserted after entries belonging to its category, when you go through the assembly history in the context viewer, you may find that an entry is inserted but no change was made to the context.  It was inserted into the group, but the group has not yet been inserted.  Once the group is inserted, all entries that were already budgeted will appear with it.
 
 Unfortunately, there was no way to give more feedback in the context viewer; NovelAI fails an assertion if the text the viewer receives differs from the context's output.
+
+## Weighted-Random Selection
+
+This feature makes it such that if there are multiple keyword-activated entries with the same insertion priority, it will use an algorithm to score those entries and order the group for insertion randomly based on that score.
+
+This is enabled by default.  Open the [configuration menu](#how-do-I-access-the-configuration-menu) and use the Selection → Weighted-Random Selection → Enable option to enable or disable the feature.
+
+In order to qualify for random selection, an entry:
+
+- Must not be always-on.
+- Must not be ephemerally activated.
+- Must have activated by keyword, matching either the story or another entry via cascade.
+
+Always-on and ephemeral entries will always be prioritized first, then the randomly selected entries will have their opportunities to be inserted.
+
+### Selection vs Insertion
+
+NovelAI has only one kind of ordering: insertion.
+
+This user-script has two: selection and insertion.
+
+The selection order should actually be about token budgeting; which entries are the best use of the limited tokens we have.  The insertion order should only be about when to insert entries, so they can be strategically located to optimize attention and coherency for the AI's benefit.
+
+Even still, this user-script **does not do this**.  It still has to work with NovelAI, after all.
+
+In order to have better compatibility with vanilla lorebooks and stories, this user-script still does its budgeting during insertion, but we can still select in whatever order we want when insertion order is ambiguous.
+
+And in this case only, we'll order them randomly, but biased according to a relevancy score.
+
+### How to Use
+
+The best way to use this is to imagine your lorebook has only a few priority layers.
+
+For instance:
+
+- Insertion priority `500` is for topical introductions.
+  - This will make sure that if something is mentioned, there is a high chance that it will be at least described for the AI.
+  - Try to limit how many entries you have here and/or use very specific keywords.  If too many activate, your entire context will just be topic introductions with no deeper elaboration.
+  - Keep these fairly short-and-sweet, so there's still room for more elaborative entries.  You never know when an exposition dump is going to happen.
+- Insertion priority `400` is for entries elaborating on one or more topics.
+  - This is where most of your entries should end up.
+  - You can go nuts with the number of entries; just make sure the ones you intend for random selection have keys.
+- Insertion priority `-100` is for high-visibility entries that you want right in the story text.
+  - This is for stuff like, `[ In this scene, a betrayal occurs! ]`; the sort of stuff you *really* want the AI to act on.
+  - Use token reservations to ensure they get inserted over the higher-priority entries.
+
+Minimize the use of always-on entries as much as possible, as those will always have priority; each always-on entry will reduce the budget available for randomly selected entries.
+
+This suggested approach should get you good variety without having to think too hard about it.  By all means, experiment and figure out what gives your lorebook the best results.
+
+In order to control how these entries are inserted relative to each other, you should use category sub-contexts, but there are options there to consider.
+
+#### With Context-Groups
+
+The [context-groups feature](#Context-Groups) makes it so that all entries are **scored and selected together** but **inserted into isolated groups which have their own position**.
+
+You should take this approach when:
+
+- You have many, many topics in your lorebook.
+- You want finer control over where topics end up in relation to other topics.
+  - IE: you might want to ensure that the Triforce is introduced before Link and then describe the Triforce of Courage only after that, because it relates Link and the Triforce together.
+- You don't care much about controlling what is omitted.
+  - Sub-contexts cannot reserve tokens in this mode, so the only way you can try to force coverage is by giving individual entries belonging to that category token reservations instead.
+  - You can still control the maximum amount of tokens dedicated to a topic through the sub-context's "token budget" configuration, though.
+
+Unfortunately you have limited control over how things are ordered within a single group.  This is just a limitation arising from what vanilla configuration is available.
+
+#### With Vanilla Sub-Contexts
+
+With vanilla sub-contexts, the randomized selection will happen **only between the category's own entries**.  As long as at least one entry for the category has activated, a sub-context will be generated which can then be budgeted and positioned as you wish.
+
+You should take this approach when:
+
+- You have only a few major topics, but they have a lot of entries/minor details within them.
+- You want to try and force some minimum coverage on a topic.
+  - You will need to configure the sub-context's token budget and reservations to balance the budget.
+- You want to have better control over presentation order within each sub-context.
+
+The drawback of this mode is you can accidentally trim out much of the variability if your first priority layer is the only thing that consistently survives the trim, ending up with a pretty static context again.  Those first entries are the ones that pretty much always get inserted, effectively rendering the weighted-random selection pointless.
+
+### Tips & Tricks
+
+- In my own testing, using context-groups has been generally better compared to standard sub-contexts with this selection method.  The AI gets a healthier and broader sampling of information.
+- Use cascade activation sparingly and intelligently; it can be a real score booster and make a minor entry into a dominant one.  Use it when you have an entry with keywords that you doubt will get brought up casually in the story and needs the boost from related lorebook entries.
+- Each priority layer above another makes it exponentially less likely to have budget left over for it (without needing to resort to token reservations).
+  - IE: all of layer `500` is selected before a single entry of layer `400`, so if layer `500` has enough entries to saturate the budget, it will drown out the entries of layer `400`.
+- If you have entries that are trying to match a commonly used character's name in addition to other unique keywords, and you want dislike how often that entry appears, you can try replacing the character's name with a [topical cascade](#idea-topical-cascade) keyword to reduce how many points that name can accrue.
+  - Matching every mention of the name in the story would add one point per match.
+  - With a topical cascade, it would only match the topic of the comment once for 0.9 points or less.
+  - This will decrease the points from the character's name significantly and increase the relative power of those unique keywords.
+
+### How Entries are Scored
+
+The weighting functions and how they're applied ~~are configurable~~ will be configurable when I get around to actually writing a UI for it in the configuration menu.
+
+These are the current weighting functions and their intent:
+
+- `storyCount` - Adds to the score based on the number of total keyword matches in the story.
+  - Literally 1 point for every match.
+- `searchRange` - A penalty multiplier based on whether the match nearest to the end of the story is outside the entry's defined search-range.
+  - This allows out-of-range entries to still have a chance at selection, but will become much less likely the farther outside that range it is, reaching the maximum penalty at twice the range.
+- `cascadeCount` - Adds to the score based on the matches found during cascade activation.
+  - The score given for each keyword is reduced based on how deep into the cascade the matched entry was at the time.
+  - That is, you can have an entry (third-degree) that matched an entry (second-degree) that matched an entry (first-degree) that matched the story; a match in a third-degree entry is worth less than a match in a second-degree entry and so-on.
+- `cascadeRatio` - A penalty multiplier based on the ratio of cascade-only entries versus story-activated entries.
+  - This only applies when there is a simple majority of cascade-only entries.
+  - The idea is to penalize the cascade-only entries to add a bias toward those few entries that actually matched the story.
+  - This penalty is pretty unlikely to ever be used; I thought I might have a story or two where it would be relevant, but it turns out I did not, because cascading entries can still match the story, making it hard to have cascade-only activations to begin with.
+  - I left it in as a just-in-case kinda thing.  Especially in combination with [transient entries](#Idea-Transient-Entries), it might become relevant.
+
+By default, these are applied like so:
+
+`(storyCount * searchRange) + (cascadeCount * cascadeRatio)`
 
 ## Developer Installation
 
