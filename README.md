@@ -169,11 +169,13 @@ These start at steps 0, 1, and 2, respectively, then repeat every 3 steps, get i
 
 Similar to the topical cascade trick, just create a keyword for your entries that matches one of `## CYCLE_1`, `## CYCLE_2`, or `## CYCLE_3`.  After that, the entry will only trigger on that cycle, assuming there are no other keywords.
 
+The ephemeral entry will be used in the cascade keyword search but, because it only contains a comment, it will never actually insert anything because removing the comment turns it into an empty entry.  It just vanishes!
+
 Again, due to a lack of any sort of means to apply logic or constraints to keywords, you can only do so much with this trick.  The lack of control over activation is pretty limiting.
 
 ## Context-Groups
 
-Context-groups are an alternative to sub-contexts.  It's meant to support the (not yet available) weighted-random selection feature by allowing lorebook entries to compete based on their apparent relevancy instead of just "insertion order" alone.
+Context-groups are an alternative to sub-contexts.  It's meant to support the weighted-random selection feature by allowing lorebook entries to compete based on their apparent relevancy instead of just "insertion order" alone.
 
 This is enabled by default.  Open the [configuration menu](#how-do-I-access-the-configuration-menu) and use the Sub-Context → Use Context-Groups option to enable or disable the feature.
 
