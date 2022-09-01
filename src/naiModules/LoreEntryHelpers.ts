@@ -39,7 +39,7 @@ export interface ILoreEntryHelpers {
 }
 
 class LoreEntryHelpers extends ModuleDef<ILoreEntryHelpers> {
-  moduleId = 33718;
+  moduleId = 4027;
   expectedExports = 5;
   mapping = {
     "nn": ["tryParseRegex", "function"],

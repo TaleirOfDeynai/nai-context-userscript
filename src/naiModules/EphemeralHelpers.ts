@@ -23,7 +23,7 @@ export interface IEphemeralHelpers {
 }
 
 class EphemeralHelpers extends ModuleDef<IEphemeralHelpers> {
-  moduleId = 67325;
+  moduleId = 74002;
   expectedExports = 4;
   mapping = {
     "In": ["checkActivation", "function"]
