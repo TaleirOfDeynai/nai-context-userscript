@@ -82,9 +82,7 @@ const collapseSections = (fields: PartialField): PartialField => {
     .value(IterOps.fromPairs) as PartialField;
 };
 
-const makeField = <T extends string>(id: T, field: Field): PartialField => {
-  // @ts-ignore - Yes it is, you type-unsafe piece of garbage.
-  // DURRR!  I'MMA TYPE SYSTEM!  HUUURRRR!
+const makeField = (id: string, field: Field): PartialField => {
   return { [id]: field };
 };
 
@@ -153,8 +151,8 @@ export function subSection(
 /**
  * Creates a standardized checkbox.
  */
-export const checkBox = <TKey extends string>(
-  id: TKey,
+export const checkBox = (
+  id: string,
   field: TypelessField
 ): PartialField => makeField(id, {
   labelPos: "right",
@@ -168,8 +166,8 @@ interface SelectField<TOpts extends readonly string[]> extends TypelessField {
   default?: ElementOf<TOpts>;
 }
 
-export const select = <TKey extends string, TOpts extends string[]>(
-  id: TKey,
+export const select = <TOpts extends string[]>(
+  id: string,
   field: SelectField<TOpts>
 ): PartialField => {
   assert("Must have at least 1 option.", field.options.length > 0);
@@ -181,13 +179,23 @@ export const select = <TKey extends string, TOpts extends string[]>(
   });
 };
 
+export const integer = (
+  id: string,
+  field: TypelessField
+): PartialField => makeField(id, {
+  labelPos: "left",
+  type: "int",
+  default: 0,
+  ...field
+});
+
 /**
  * Creates a standardized hidden field.
  * 
  * The `label` is automatically removed.
  */
-export const hidden = <TKey extends string>(
-  id: TKey,
+export const hidden = (
+  id: string,
   field: TypelessField
 ): PartialField => {
   delete field.label;

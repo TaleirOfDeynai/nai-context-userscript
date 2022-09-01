@@ -74,6 +74,12 @@ GM_config.init({
         label: "Shunting Mode",
         options: ["In Same Direction", "Nearest"],
         default: "In Same Direction"
+      }),
+      fields.integer("assembly_satisfactionThreshold", {
+        label: "Early Satisfaction Threshold",
+        min: 0,
+        max: 100,
+        default: 10
       })
     ]),
     fields.section(["Debugging", "These options will require refreshing the page."], [
@@ -358,6 +364,20 @@ const assembly = {
       case "In Same Direction": return "inDirection";
       default: return "nearest";
     }
+  },
+  /**
+   * The assembler will consider the context's budget satisfied when the
+   * number of tokens remaining in the budget is less than or equal to
+   * this value.  This should result in faster response times, since it
+   * won't waste time trying to squeeze in just one more entry out of the
+   * dozens it may have left.
+   * 
+   * This is a bit of an assumption, but I think any unused tokens will
+   * probably be made available to the AI to expand its maximum response
+   * length, so they kinda don't go to waste sorta?
+   */
+  get satisfactionThreshold() {
+    return GM_config.get("assembly_satisfactionThreshold").valueOf() as number;
   }
 };
 

@@ -118,6 +118,10 @@ export default usModule((require, exports) => {
   
   const isRejected = (report: Assembler.Report): report is Assembler.Rejected =>
     report.result.type === "rejected";
+  
+  /** Checks to see if the budget is considered satisfied. */
+  const isSatisfied = (availableTokens: number) =>
+    availableTokens <= usConfig.assembly.satisfactionThreshold;
 
   class ContextAssembler {
     constructor(
@@ -346,8 +350,8 @@ export default usModule((require, exports) => {
 
     async #doInsertEntry(source: BudgetedSource) {
       const currentTokens = this.#availableTokens;
-      // If we actually hit 0 tokens remaining, we're just straight done.
-      if (!currentTokens) return this.#doReport(source, NO_SPACE, currentTokens);
+      if (isSatisfied(currentTokens))
+        return this.#doReport(source, NO_SPACE, currentTokens);
 
       this.#updateReservations(source);
       const budget = this.#determineBudget(source);
@@ -357,8 +361,8 @@ export default usModule((require, exports) => {
 
     async #doInsertCategoryEntry(source: BudgetedSource & CategorizedSource) {
       const currentTokens = this.#availableTokens;
-      // If we actually hit 0 tokens remaining, we're just straight done.
-      if (!currentTokens) return this.#doReport(source, NO_SPACE, currentTokens);
+      if (isSatisfied(currentTokens))
+        return this.#doReport(source, NO_SPACE, currentTokens);
 
       // We insert into the category-group instead, but we still need to do
       // accounting of reservations and the overall budget.
