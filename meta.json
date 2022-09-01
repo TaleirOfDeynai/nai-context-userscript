@@ -1,5 +1,7 @@
 {
   "namespace": "github.com/TaleirOfDeynai",
+  "updateURL": "https://github.com/TaleirOfDeynai/nai-context-userscript/releases/latest/download/nai-context-userscript.meta.js",
+  "downloadURL": "https://github.com/TaleirOfDeynai/nai-context-userscript/releases/latest/download/nai-context-userscript.user.js",
   "include": [
     "https://novelai.net",
     "https://novelai.net/*"

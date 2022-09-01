@@ -52,6 +52,8 @@ const untypedMeta = {
   homepage: pkg.homepage,
   author: pkg.author,
   license: pkg.license,
+  updateURL: null,
+  downloadURL: null,
 }
 const devMetablock = metablock({
   file: './meta.json',
