@@ -1,6 +1,7 @@
 import { assert } from "./assert";
 
 export { noop } from "./rx";
+export { default as memoize } from "lodash/memoize";
 
 export type PredicateFn<T> = (value: T) => boolean;
 
