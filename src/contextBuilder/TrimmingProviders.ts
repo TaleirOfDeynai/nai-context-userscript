@@ -24,6 +24,7 @@ import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
 import { assertExists } from "@utils/assert";
+import { flow } from "@utils/functions";
 import { protoExtend } from "@utils/object";
 import * as IterOps from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
@@ -105,8 +106,8 @@ const BUFFER_SIZE = Object.freeze([10, 5, 5] as const);
  * those odd special cases.
  */
 export default usModule((require, exports) => {
-  const tokenizerService = $TokenizerService(require);
-  const splitterService = $TextSplitterService(require);
+  const tokenizer = $TokenizerService(require);
+  const ss = $TextSplitterService(require);
 
   // Generally, we just work off the assembly's content.
   const basicPreProcess = (assembly: Assembly.IFragment) => assembly.content;
@@ -120,17 +121,17 @@ export default usModule((require, exports) => {
   const basic: CommonProviders = Object.freeze({
     trimBottom: Object.freeze({
       preProcess: basicPreProcess,
-      newline: splitterService.byLine,
-      sentence: splitterService.bySentence,
-      token: splitterService.byWord,
+      newline: ss.byLine,
+      sentence: ss.bySentence,
+      token: ss.byWord,
       reversed: false,
       noSequencing: false
     }),
     trimTop: Object.freeze({
-      preProcess: basicPreProcess,
-      newline: splitterService.byLineFromEnd,
-      sentence: (text) => IterOps.iterReverse(splitterService.bySentence(text)),
-      token: (text) => IterOps.iterReverse(splitterService.byWord(text)),
+      preProcess: flow(basicPreProcess, IterOps.iterReverse),
+      newline: ss.byLineFromEnd,
+      sentence: flow(ss.bySentence, IterOps.iterReverse),
+      token: flow(ss.byWord, IterOps.iterReverse),
       reversed: true,
       noSequencing: false
     }),
@@ -277,12 +278,12 @@ export default usModule((require, exports) => {
     const encode: TextSequencer["encode"] = dew(() => {
       if (reversed) return (codec, toEncode, options) => {
         options = { bufferSize, ...options };
-        return tokenizerService.prependEncoder(codec, toEncode, options);
+        return tokenizer.prependEncoder(codec, toEncode, options);
       };
 
       return (codec, toEncode, options) => {
         options = { bufferSize, ...options };
-        return tokenizerService.appendEncoder(codec, toEncode, options);
+        return tokenizer.appendEncoder(codec, toEncode, options);
       };
     });
 
