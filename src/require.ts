@@ -14,7 +14,7 @@ export type MappingStruct<TSrc extends Webpack.ExportsObject> = {
 };
 
 type MappedKey<TKey, TMap extends MappingStruct<Webpack.ExportsObject>>
-  = TKey extends keyof TMap ? NonNullable<TMap[TKey]>[0] : TKey;
+  = TKey extends keyof TMap ? Exclude<TMap[TKey], null | undefined>[0] : TKey;
 
 export type MappedOf<TDef extends ModuleDef<Webpack.ExportsObject>> = {
   readonly [K in keyof TDef["TModule"] as MappedKey<K, TDef["mapping"]>]: TDef["TModule"][K];
