@@ -130,6 +130,12 @@ declare global {
 export { default as castArray } from "lodash/castArray";
 
 /**
+ * Converts the given iterable into an array, if needed.
+ */
+export const toArray = <T>(iterable: Iterable<T>): T[] =>
+  isArray(iterable) ? iterable : [...iterable];
+
+/**
  * Converts the given iterable into a readonly array, if needed.
  */
 export const toImmutable = <T>(iterable: Iterable<T>): readonly T[] => {
@@ -158,6 +164,16 @@ export const isEmpty = (iterable: Iterable<unknown>): boolean => {
   if (isString(iterable)) return !iterable.length;
   if (hasSize(iterable)) return !iterable.size;
   return !iterable[Symbol.iterator]().next().done;
+};
+
+/** Creates an iterable that yields `value` `count` times. */
+export function* times<T>(value: T, count: number) {
+  for (let i = 0; i < count; i++) yield value;
+};
+
+/** Creates an iterable that yields the result of `value` `count` times. */
+export function* timesBy<T>(value: () => T, count: number) {
+  for (let i = 0; i < count; i++) yield value();
 };
 
 /**
@@ -217,7 +233,7 @@ export function* toPairs(obj: any): Iterable<KVP<string | number | symbol, any>>
  * 
  * Will yield nothing if the iterable has less than 2 elements.
  */
-export function scan<T, C extends number>(iter: Iterable<T>): Iterable<[T, T]>;
+export function scan<T>(iter: Iterable<T>): Iterable<[T, T]>;
 /**
  * Creates an iterable that yields each element with all the elements
  * after it in an array with a length of `count`.
@@ -686,8 +702,10 @@ export const bufferEagerly = function*<T extends Iterable<any>>(
   let buffer: ElementOf<T>[] = [];
   for (const item of iter) {
     if (predicateFn(item)) {
-      if (buffer.length) yield buffer;
-      buffer = [];
+      if (buffer.length) {
+        yield buffer;
+        buffer = [];
+      }
     }
     buffer.push(item);
   }
