@@ -156,12 +156,13 @@ describe("createTrimmer", () => {
 
   it("should accept a specified provider as an option (by reference)", () => {
     const assembly = mockNewAssembly(mockStory);
+    const customProvider = providers.removeComments(providers.basic.trimBottom);
     const trimmer = trimming.createTrimmer(assembly, mockParams, {
-      provider: providers.removeComments.trimBottom
+      provider: customProvider
     });
 
     expect(trimmer).toEqual(expect.objectContaining({
-      provider: providers.removeComments.trimBottom
+      provider: customProvider
     }));
   });
 });
