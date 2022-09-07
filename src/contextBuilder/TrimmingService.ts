@@ -7,6 +7,7 @@
 
 import { usModule } from "@utils/usModule";
 import { assert } from "@utils/assert";
+import { memoize } from "@utils/functions";
 import * as IterOps from "@utils/iterables";
 import { flatten, buffer } from "@utils/iterables";
 import { toReplay, lastValueOrUndef } from "@utils/asyncIterables";
@@ -237,7 +238,7 @@ export default usModule((require, exports) => {
     const sequencers = providers.getSequencersFrom(provider, config.maximumTrimType);
 
     const nextSplit = (
-      content: Iterable<TextFragment>,
+      getContent: () => Iterable<TextFragment>,
       sequencers: TextSequencer[],
       preserveMode: TrimOptions["preserveMode"],
       seedResult?: EncodeResult
@@ -247,7 +248,7 @@ export default usModule((require, exports) => {
       const [sequencer, ...restSequencers] = sequencers;
 
       return async function*(): AsyncIterable<TrimResult> {
-        const [fragments, nextMode] = sequenceFrags(content, sequencer, preserveMode);
+        const [fragments, nextMode] = sequenceFrags(getContent(), sequencer, preserveMode);
 
         const encoding = sequencer.encode(tokenCodec, fragments, {
           prefix: assembly.prefix.content,
@@ -258,7 +259,7 @@ export default usModule((require, exports) => {
         let lastResult = seedResult;
         for await (const curResult of encoding) {
           const innerSplit = nextSplit(
-            sequencer.prepareInnerChunk(curResult, lastResult),
+            memoize(() => sequencer.prepareInnerChunk(curResult, lastResult)),
             restSequencers,
             nextMode,
             lastResult
@@ -283,7 +284,7 @@ export default usModule((require, exports) => {
     }
 
     const outerSplit = nextSplit(
-      provider.preProcess(assembly),
+      () => provider.preProcess(assembly),
       sequencers,
       fixPreserveMode(provider, config.preserveMode)
     );

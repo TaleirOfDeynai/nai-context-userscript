@@ -24,12 +24,11 @@ import { dew } from "@utils/dew";
 import { usModule } from "@utils/usModule";
 import { isString } from "@utils/is";
 import { assertExists } from "@utils/assert";
-import { protoExtend } from "@utils/object";
+import { flow } from "@utils/functions";
 import * as IterOps from "@utils/iterables";
 import $TextSplitterService from "./TextSplitterService";
 import $TokenizerService from "./TokenizerService";
 
-import type { UndefOr } from "@utils/utility-types";
 import type { ContextConfig } from "@nai/Lorebook";
 import type { TextFragment, TextOrFragment } from "./TextSplitterService";
 import type { StreamEncodeFn, EncodeResult } from "./TokenizerService";
@@ -38,15 +37,7 @@ import type { Assembly } from "./assemblies";
 export type TrimType = ContextConfig["maximumTrimType"];
 export type TrimDirection = ContextConfig["trimDirection"];
 export type SplitterFn = (text: TextFragment) => Iterable<TextFragment>;
-
-// TODO: Replace the `removeComments` sequencer with a function
-// that augments another provider with comment removal abilities.
-// This way, we can do composition, which is more powerful.
-
-// TODO: While you're doing that, replace that nightmarish comment
-// removal method.  What were you thinking?  I have an idea for
-// a simpler method, but it'll add a touch more overhead to the
-// parsing; probably not enough to be a concern, though.
+export type ProviderAugmentFn = (provider: TrimProvider) => TrimProvider;
 
 /**
  * Managing fragments is a little tricky, so this interface provides
@@ -105,8 +96,8 @@ const BUFFER_SIZE = Object.freeze([10, 5, 5] as const);
  * those odd special cases.
  */
 export default usModule((require, exports) => {
-  const tokenizerService = $TokenizerService(require);
-  const splitterService = $TextSplitterService(require);
+  const tokenizer = $TokenizerService(require);
+  const ss = $TextSplitterService(require);
 
   // Generally, we just work off the assembly's content.
   const basicPreProcess = (assembly: Assembly.IFragment) => assembly.content;
@@ -114,23 +105,21 @@ export default usModule((require, exports) => {
   // For `doNotTrim`, we do not trim...  So, yield an empty iterable.
   const noop = (): Iterable<TextFragment> => [];
 
-  const isNewline = (f: TextFragment) => f.content === "\n";
-
   /** Providers for basic trimming. */
   const basic: CommonProviders = Object.freeze({
     trimBottom: Object.freeze({
       preProcess: basicPreProcess,
-      newline: splitterService.byLine,
-      sentence: splitterService.bySentence,
-      token: splitterService.byWord,
+      newline: ss.byLine,
+      sentence: ss.bySentence,
+      token: ss.byWord,
       reversed: false,
       noSequencing: false
     }),
     trimTop: Object.freeze({
-      preProcess: basicPreProcess,
-      newline: splitterService.byLineFromEnd,
-      sentence: (text) => IterOps.iterReverse(splitterService.bySentence(text)),
-      token: (text) => IterOps.iterReverse(splitterService.byWord(text)),
+      preProcess: flow(basicPreProcess, IterOps.iterReverse),
+      newline: ss.byLineFromEnd,
+      sentence: flow(ss.bySentence, IterOps.iterReverse),
+      token: flow(ss.byWord, IterOps.iterReverse),
       reversed: true,
       noSequencing: false
     }),
@@ -144,110 +133,77 @@ export default usModule((require, exports) => {
     })
   });
 
-  const reCommentFrag = /^##.*$/;
+  /** Adds comment removal to the given {@link TrimProvider}. */
+  const removeComments: ProviderAugmentFn = dew(() => {
+    const reCommentFrag = /^##/m;
+    const hasComment = (frag: TextFragment) => reCommentFrag.test(frag.content);
+    const isNewline = (frag: TextFragment) => frag.content === "\n";
+    const ofInterest = (frag: TextFragment) => isNewline(frag) || hasComment(frag);
+    const batchFn = (cur: TextFragment, prev: TextFragment) => ofInterest(cur) === ofInterest(prev);
 
-  /** Providers that remove fragments that are comment lines. */
-  const removeComments: CommonProviders = Object.freeze({
-    trimBottom: protoExtend(basic.trimBottom, {
-      newline: (text: TextFragment) => {
-        // The goal is to remove comments while keeping the start and end
-        // of the string similarly structured.  There's essentially three
-        // cases we're looking out for:
-        // - The string starts with a comment (with newline).
-        //   - Just remove the comment and following newline.
-        // - The string has comments in lines in the middle.
-        //   - Just remove the comment and following newline.
-        // - The string ends with a comment (no new line after).
-        //   - We want the last non-comment line to also not end with
-        //     a newline.
-        let dropLastNewLine = false;
-        return IterOps.chain(basic.trimBottom.newline(text))
-          // Chunk it up into the fragments for each line, arranged like:
-          // `[StartFrag, ...RestFrags, CurLineEnd?]`
-          .thru((frags) => IterOps.buffer(frags, isNewline, true))
-          // This removes any chunks with a comment in the `StartFrag` position.
-          .thru(function*(lineChunks) {
-            for (const frags of lineChunks) {
-              const theStart = IterOps.first(frags) as TextFragment;
-              if (reCommentFrag.test(theStart.content)) {
-                // Removing this line by not yielding it.
-                // Check to see if the comment ended with a newline.
-                // If it did not, and this was the last chunk, then
-                // `dropLastNewLine` will instruct the next step to
-                // remove the previous newline.
-                const theEnd = IterOps.last(frags) as TextFragment;
-                dropLastNewLine = !isNewline(theEnd);
-              }
-              else {
-                yield* frags;
-                dropLastNewLine = false;
-              }
-            }
-          })
-          // This removes the last newline character if needed.
-          .thru(function*(frags) {
-            // We actually need to run through the iterable, since we
-            // are being naughty and have shared mutable state in the
-            // form of the `dropLastNewLine` variable.
-            let lastFrag: UndefOr<TextFragment> = undefined;
-            for (const frag of frags) {
-              if (lastFrag) yield lastFrag;
-              lastFrag = frag;
-            }
-            // Now the variable should be set correctly.
-            if (!lastFrag) return;
-            if (isNewline(lastFrag) && dropLastNewLine) return;
-            yield lastFrag;
+    /**
+     * Find every pair of consecutive `\n` and yield only the first of that pair.
+     * This function will also remove all comments, leaving only `\n` behind.
+     */
+    const collapseNewlines = (frags: Iterable<TextFragment>) => IterOps.chain(frags)
+      // @ts-ignore - A bug with namespace imports and instantiation expressions.
+      .thru(IterOps.scan<TextFragment>)
+      .collect(([l, r]) => isNewline(l) && isNewline(r) ? l : undefined)
+      .value();
+
+    /** Augment the provider through the `newline` method. */
+    const thruNewline = (provider: TrimProvider): TrimProvider => {
+      const newline = (frag: TextFragment) => {
+        const frags = provider.newline(frag);
+        // Fast-path: no comment, no need.
+        if (!hasComment(frag)) return frags;
+
+        return IterOps.chain(frags)
+          .thru((iter) => IterOps.batch(iter, batchFn))
+          .flatMap((group) => {
+            // If this is just a group of `\n`, no comments need removal.
+            if (!group.some(hasComment)) return group;
+
+            return IterOps.chain(group)
+              .thru((frags) => IterOps.concat(
+                // Initial newlines before the first comment.
+                IterOps.takeUntil(frags, hasComment),
+                // Starting from the first comment to the last comment, we want
+                // to remove one newline in each sequence of newlines between
+                // every pair of comments and remove the comments.
+                IterOps.chain(frags)
+                  .pipe(IterOps.journey, hasComment)
+                  .thru(collapseNewlines)
+                  .value(),
+                // Trailing newlines after the last comment.
+                IterOps.takeRightUntil(frags, hasComment)
+              ))
+              // Now we remove one newline in this final sequence of newlines.
+              // There must be at least two newlines remaining for any newline
+              // to be output.
+              .pipe(IterOps.skipRight, 1)
+              .value();
           })
           .value();
+      };
+
+      return { ...provider, newline };
+    };
+
+    // Cache a copy of trimBottom's comment remover for un-sequenced providers.
+    const nlRemove = thruNewline(basic.trimBottom).newline;
+
+    /** Augment the provider through the `preProcess` method. */
+    const thruPreProcess = (provider: TrimProvider) => ({
+      ...provider,
+      preProcess: (assembly: Assembly.IFragment) => {
+        const frags = IterOps.toArray(provider.preProcess(assembly));
+        if (!frags.some(hasComment)) return frags;
+        return ss.defragment(IterOps.flatMap(frags, nlRemove));
       }
-    }),
-    trimTop: protoExtend(basic.trimTop, {
-      newline: (text: TextFragment) => {
-        // Basically the same as above, only the last fragment in a chunk
-        // will be the newline.
-        let dropLastNewLine = false;
-        return IterOps.chain(basic.trimTop.newline(text))
-          // Chunk it up into the fragments for each line, arranged like:
-          // `[...RestFrags, StartFrag, PrevLineEnd?]`
-          .thru((frags) => IterOps.buffer(frags, isNewline, true))
-          // This removes any chunks with a comment in the `StartFrag` position.
-          .thru(function*(lineChunks) {
-            for (const frags of lineChunks) {
-              const [theStart, theNewLine] = dew(() => {
-                let theLast = frags.at(-1) as TextFragment;
-                if (!isNewline(theLast)) return [theLast, undefined];
-                return [frags.at(-2), theLast];
-              });
-              if (theStart && reCommentFrag.test(theStart.content)) {
-                dropLastNewLine = !theNewLine;
-              }
-              else {
-                yield* frags;
-                dropLastNewLine = false;
-              }
-            }
-          })
-          // This removes the last newline character if needed.
-          .thru(function*(frags) {
-            let lastFrag: UndefOr<TextFragment> = undefined;
-            for (const frag of frags) {
-              if (lastFrag) yield lastFrag;
-              lastFrag = frag;
-            }
-            if (!lastFrag) return;
-            if (isNewline(lastFrag) && dropLastNewLine) return;
-            yield lastFrag;
-          })
-          .value();
-      }
-    }),
-    doNotTrim: protoExtend(basic.doNotTrim, {
-      preProcess: (assembly) => IterOps.flatMap(
-        basic.doNotTrim.preProcess(assembly),
-        removeComments.trimBottom.newline
-      )
-    })
+    });
+
+    return (provider) => (provider.noSequencing ? thruPreProcess : thruNewline)(provider);
   });
 
   /** Ensures `srcProvider` is a {@link TrimProvider}. */
@@ -277,12 +233,12 @@ export default usModule((require, exports) => {
     const encode: TextSequencer["encode"] = dew(() => {
       if (reversed) return (codec, toEncode, options) => {
         options = { bufferSize, ...options };
-        return tokenizerService.prependEncoder(codec, toEncode, options);
+        return tokenizer.prependEncoder(codec, toEncode, options);
       };
 
       return (codec, toEncode, options) => {
         options = { bufferSize, ...options };
-        return tokenizerService.appendEncoder(codec, toEncode, options);
+        return tokenizer.appendEncoder(codec, toEncode, options);
       };
     });
 

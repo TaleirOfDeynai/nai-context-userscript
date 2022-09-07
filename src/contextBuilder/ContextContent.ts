@@ -25,10 +25,6 @@ import type { ContextParams } from "./ParamsService";
 import type { Cursor } from "./cursors";
 import type { Assembly } from "./assemblies";
 
-// TODO: It is probably best not to assume that the comment
-// removal provider's `preProcess` method will always return
-// the same instance, even if it adds overhead.
-
 // TODO: The `story.standardizeHandling` config currently
 // standardizes on the behavior of the lorebook entries,
 // changing how the story works.  I feel like this should
@@ -103,9 +99,9 @@ const theModule = usModule((require, exports) => {
     forSearch: boolean,
     trimDirection: ContextConfig["trimDirection"]
   ) => {
-    if (forSearch && usConfig.activation.searchComments)
-      return providers.basic[trimDirection];
-    return providers.removeComments[trimDirection];
+    const provider = providers.basic[trimDirection];
+    if (forSearch && usConfig.activation.searchComments) return provider;
+    return providers.removeComments(provider);
   };
 
   /**

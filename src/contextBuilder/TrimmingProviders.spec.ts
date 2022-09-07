@@ -6,6 +6,7 @@ import { withComments } from "@spec/mock-story";
 import _zip from "lodash/zip";
 import { dew } from "@utils/dew";
 import { chain, interweave, flatMap, iterReverse, skipRight } from "@utils/iterables";
+import $TextSplitterService from "./TextSplitterService";
 import $TrimmingProviders from "./TrimmingProviders";
 
 import type { TextFragment } from "./TextSplitterService";
@@ -72,6 +73,16 @@ describe("comment removal", () => {
         expected: `\n${expected}`
       },
       {
+        should: "preserve two empty lines at start",
+        input: [
+          "",
+          "",
+          "## This is a comment after an initial empty line.",
+          ...baseLines
+        ],
+        expected: `\n\n${expected}`
+      },
+      {
         should: "remove one comment from the middle",
         input: [
           baseLines[0],
@@ -89,6 +100,29 @@ describe("comment removal", () => {
           baseLines[1],
         ],
         expected
+      },
+      {
+        should: "preserve one newline between two middle comments",
+        input: [
+          baseLines[0],
+          "## This is a comment in the middle.",
+          "",
+          "## This is another comment in the middle.",
+          baseLines[1],
+        ],
+        expected: `${baseLines[0]}\n\n${baseLines[1]}`
+      },
+      {
+        should: "preserve two newline between two middle comments",
+        input: [
+          baseLines[0],
+          "## This is a comment in the middle.",
+          "",
+          "",
+          "## This is another comment in the middle.",
+          baseLines[1],
+        ],
+        expected: `${baseLines[0]}\n\n\n${baseLines[1]}`
       },
       {
         should: "remove one comment from the end",
@@ -115,6 +149,16 @@ describe("comment removal", () => {
           ""
         ],
         expected: `${expected}\n`
+      },
+      {
+        should: "preserve two empty lines at end",
+        input: [
+          ...baseLines,
+          "## This is a comment before a final empty line.",
+          "",
+          ""
+        ],
+        expected: `${expected}\n\n`
       }
     ];
 
@@ -145,7 +189,7 @@ describe("comment removal", () => {
   const basicTests = (
     preProcess: TrimProvider["preProcess"],
     providerFn: SplitterFn,
-    reversed: boolean
+    { reversed = false } = {}
   ) => {
     for (const theCase of simpleTests.cases) {
       it(`should ${theCase.should}`, () => {
@@ -159,8 +203,11 @@ describe("comment removal", () => {
   const fragmentTest = (
     preProcess: TrimProvider["preProcess"],
     providerFn: SplitterFn,
-    reversed: boolean
+    { reversed = false, noSequencing = false } = {}
   ) => {
+    // I shouldn't use this, but I'm gonna be lazy.
+    const { defragment } = $TextSplitterService(fakeRequire);
+
     it("should preserve fragment offsets", () => {
       const assembly = mockAssembly([withComments]);
       const input = preProcess(assembly);
@@ -187,6 +234,8 @@ describe("comment removal", () => {
         .thru((iter) => reversed ? iterReverse(iter) : iter)
         // The last fragment is a `"\n"` that should not exist in the result.
         .pipe(skipRight, 1)
+        // Defragment if it doesn't sequence.
+        .thru((iter) => noSequencing ? defragment(iter) : iter)
         .toArray();
 
       expect(result).toEqual(checkFrags);
@@ -194,35 +243,25 @@ describe("comment removal", () => {
   };
 
   describe("`trimBottom` provider", () => {
-    const provider = providers.removeComments.trimBottom;
-    const { preProcess, newline, reversed } = provider;
+    const provider = providers.removeComments(providers.basic.trimBottom);
+    const { preProcess, newline } = provider;
 
-    it("should pre-process by extracting the assembly's content", () => {
-      const assembly = mockAssembly(simpleTests.baseLines);
-      expect(preProcess(assembly)).toBe(assembly.content);
-    });
-
-    basicTests(preProcess, newline, reversed);
-    fragmentTest(preProcess, newline, reversed);
+    basicTests(preProcess, newline, provider);
+    fragmentTest(preProcess, newline, provider);
   });
 
   describe("`trimTop` provider", () => {
-    const provider = providers.removeComments.trimTop;
-    const { preProcess, newline, reversed } = provider;
+    const provider = providers.removeComments(providers.basic.trimTop);
+    const { preProcess, newline } = provider;
 
-    it("should pre-process by extracting the assembly's content", () => {
-      const assembly = mockAssembly(simpleTests.baseLines);
-      expect(preProcess(assembly)).toBe(assembly.content);
-    });
-
-    basicTests(preProcess, newline, reversed);
-    fragmentTest(preProcess, newline, reversed);
+    basicTests(preProcess, newline, provider);
+    fragmentTest(preProcess, newline, provider);
   });
 
   describe("`doNotTrim` provider", () => {
     // This one functions a little differently, as it changes how
     // `preProcess` works, but it ultimately defers to `trimBottom`.
-    const provider = providers.removeComments.doNotTrim;
+    const provider = providers.removeComments(providers.basic.doNotTrim);
     const { preProcess, newline, reversed } = provider;
 
     for (const theCase of simpleTests.cases) {
@@ -234,7 +273,7 @@ describe("comment removal", () => {
     }
 
     // Using a faux `SplitterFn` here so we only test `preProcess`.
-    fragmentTest(preProcess, (frag) => [frag], reversed);
+    fragmentTest(preProcess, (frag) => [frag], provider);
 
     it("should have a noop `newline` method", () => {
       const fragments = mockAssembly(simpleTests.baseLines).content;
