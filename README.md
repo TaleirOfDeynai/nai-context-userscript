@@ -32,6 +32,13 @@ There are a number of browsers with extension support on Android.  I personally 
 
 I was surprised to learn that Apple actually allows a few extensions for the Safari browser these days.  I haven't tried it myself, but you can apparently find a Safari extension called [Userscripts](https://apps.apple.com/us/app/userscripts/id1463298887) on the App Store.
 
+## Is it broken?
+
+If the script has broken and I have not yet addressed it, please do one of the following:
+
+- Open an issue here.
+- Ping me in NovelAI's Discord; the `#community-research` channel is probably most appropriate.  I'm on there as "Taleir".
+
 ## The Wiki
 
 Various topics on what this user-script does and how to work with it were moved to the wiki to shorten this readme.  Below are a few quick links to some important pages you may need to reference.
