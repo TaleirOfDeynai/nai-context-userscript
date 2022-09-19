@@ -50,7 +50,7 @@
         "@rollup/plugin-replace": "^4.0.0",
         "@rollup/plugin-typescript": "^8.5.0",
         "@types/lodash": "4.*",
-        "@types/react": "^18.0.14",
+        "@types/react": "^18.0.20",
         "colorette": "^2.0.19",
         "brogue": "0.7.1",
         "fast-levenshtein": "^3.0.0",
