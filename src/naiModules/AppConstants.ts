@@ -1,15 +1,15 @@
 import { ModuleDef } from "../require";
 
 export interface IAppConstants {
-  "uV": number;
+  "Lb": number;
   "T8": number;
 }
 
 class AppConstants extends ModuleDef<IAppConstants> {
-  moduleId = 37310;
-  expectedExports = 50;
+  moduleId = 61893;
+  expectedExports = 54;
   mapping = {
-    "uV": ["contextSize", "number"],
+    "Lb": ["contextSize", "number"],
     "T8": ["T8", "number"]
   } as const;
 }

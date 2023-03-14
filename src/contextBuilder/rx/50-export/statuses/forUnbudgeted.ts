@@ -1,7 +1,7 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import NaiContextBuilder from "@nai/ContextBuilder";
+import $NaiInternals from "../../../NaiInternals";
 import $Common from "../../_common";
 import $Shared from "./_shared";
 
@@ -9,7 +9,7 @@ import type { ContextStatus } from "@nai/ContextBuilder";
 import type { Assembler } from "../../40-assembly";
 
 export default usModule((require, exports) => {
-  const CB = require(NaiContextBuilder);
+  const { ContextStatus } = $NaiInternals(require);
   const { selection } = $Common(require);
   const { checkThis, getSubContextPart } = $Shared(require);
 
@@ -22,7 +22,7 @@ export default usModule((require, exports) => {
         const stats = await selection.getBudgetStats(source);
 
         return Object.assign(
-          new CB.ContextStatus(source.entry.field),
+          new ContextStatus(source.entry.field),
           checkThis({
             identifier: source.identifier,
             unqiueId: source.uniqueId,

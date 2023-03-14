@@ -36,19 +36,42 @@ export interface ReportReasons {
 }
 
 export interface StructuredOutput {
-  identifier: Virtual.ContextStatus["unqiueId"];
-  type: Virtual.ContextStatus["type"];
+  identifier: ContextStatus["unqiueId"];
+  type: ContextStatus["type"];
   text: string;
 }
 
 export interface ResolvedBiasGroup {
   groups: Lorebook.PhraseBiasConfig[];
-  identifier: Virtual.ContextStatus<any>["identifier"];
+  identifier: ContextStatus<any>["identifier"];
 }
 
 export interface ResolvedPreamble {
   str: string;
   tokens: number[];
+}
+
+export interface ContextStatus<T extends IContextField = IContextField> {
+  included: boolean;
+  identifier: string;
+  /** Misspelled in NAI source. */
+  unqiueId: string;
+  state: AnyValueOf<TrimStates>;
+  /** Expected to be one of the {@link ReportReasons}. */
+  reason: string;
+  triggeringKey: string;
+  keyIndex: number;
+  includedText: string;
+  calculatedTokens: number;
+  actualReservedTokens: number;
+  keyRelative: boolean;
+  trimMethod: AnyValueOf<TrimMethods>;
+  type: string;
+  contextField: T;
+  settings: T;
+
+  /** Assigned by external mutation as an own-property. */
+  subContext?: ContextRecorder;
 }
 
 export namespace Virtual {
@@ -79,30 +102,30 @@ export namespace Virtual {
     entryText: string
   ): string[];
 
-  export declare class ContextStatus<T extends IContextField = IContextField> {
-    constructor(entry: T);
+  // export declare class ContextStatus<T extends IContextField = IContextField> {
+  //   constructor(entry: T);
 
-    included: boolean;
-    identifier: string;
-    /** Misspelled in NAI source. */
-    unqiueId: string;
-    state: AnyValueOf<TrimStates>;
-    /** Expected to be one of the {@link ReportReasons}. */
-    reason: string;
-    triggeringKey: string;
-    keyIndex: number;
-    includedText: string;
-    calculatedTokens: number;
-    actualReservedTokens: number;
-    keyRelative: boolean;
-    trimMethod: AnyValueOf<TrimMethods>;
-    type: string;
-    contextField: T;
-    settings: T;
+  //   included: boolean;
+  //   identifier: string;
+  //   /** Misspelled in NAI source. */
+  //   unqiueId: string;
+  //   state: AnyValueOf<TrimStates>;
+  //   /** Expected to be one of the {@link ReportReasons}. */
+  //   reason: string;
+  //   triggeringKey: string;
+  //   keyIndex: number;
+  //   includedText: string;
+  //   calculatedTokens: number;
+  //   actualReservedTokens: number;
+  //   keyRelative: boolean;
+  //   trimMethod: AnyValueOf<TrimMethods>;
+  //   type: string;
+  //   contextField: T;
+  //   settings: T;
   
-    /** Assigned by external mutation as an own-property. */
-    subContext?: ContextRecorder;
-  }
+  //   /** Assigned by external mutation as an own-property. */
+  //   subContext?: ContextRecorder;
+  // }
 
   export declare class StageReport {
     constructor(
@@ -151,14 +174,14 @@ export namespace Virtual {
   }
 }
 
-export type ContextStatus = Virtual.ContextStatus;
+// export type ContextStatus = Virtual.ContextStatus;
 export type StageReport = Virtual.StageReport;
 export type ContextRecorder = Virtual.ContextRecorder;
 
 export interface IContextBuilder {
   "AB": ReportReasons;
   "Ie": typeof Virtual.ContextRecorder;
-  "NV": typeof Virtual.ContextStatus;
+  // "NV": typeof Virtual.ContextStatus;
   "eA": typeof Virtual.checkLorebook;
   "jR": typeof Virtual.splitBySentence;
   "rJ": typeof Virtual.buildContext;
@@ -166,12 +189,12 @@ export interface IContextBuilder {
 }
 
 class ContextBuilder extends ModuleDef<IContextBuilder> {
-  moduleId = 48204;
-  expectedExports = 7;
+  moduleId = 32486;
+  expectedExports = 6;
   mapping = {
     "AB": ["REASONS", "object"],
     "Ie": ["ContextRecorder", "function"],
-    "NV": ["ContextStatus", "function"],
+    // "NV": ["ContextStatus", "function"],
     "eA": ["checkLorebook", "function"],
     "jR": ["splitBySentence", "function"],
     "rJ": ["buildContext", "function"],

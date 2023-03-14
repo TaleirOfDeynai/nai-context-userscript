@@ -4,6 +4,7 @@ import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import { first } from "@utils/iterables";
 import NaiContextBuilder from "@nai/ContextBuilder";
+import $NaiInternals from "../../../NaiInternals";
 import $QueryOps from "../../../assemblies/queryOps";
 import $ContextGroup from "../../../assemblies/ContextGroup";
 import $Common from "../../_common";
@@ -16,7 +17,8 @@ import type { AssemblyResultMap } from "../../../SearchService";
 import type { Assembler } from "../../40-assembly";
 
 export default usModule((require, exports) => {
-  const { ContextStatus, REASONS } = require(NaiContextBuilder);
+  const { REASONS } = require(NaiContextBuilder);
+  const { ContextStatus } = $NaiInternals(require);
   const queryOps = $QueryOps(require);
   const { isContextGroup } = $ContextGroup(require);
   const { selection } = $Common(require);

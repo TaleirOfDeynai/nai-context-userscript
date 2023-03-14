@@ -1,14 +1,14 @@
 import * as rx from "@utils/rx";
 import * as rxop from "@utils/rxop";
 import { usModule } from "@utils/usModule";
-import NaiContextBuilder from "@nai/ContextBuilder";
+import $NaiInternals from "../../../NaiInternals";
 import $Shared from "./_shared";
 
 import type { ContextStatus } from "@nai/ContextBuilder";
 import type { BudgetedSource } from "../../30-selection";
 
 export default usModule((require, exports) => {
-  const CB = require(NaiContextBuilder);
+  const { ContextStatus } = $NaiInternals(require);
   const { checkThis, getSubContextPart } = $Shared(require);
 
   /**
@@ -19,7 +19,7 @@ export default usModule((require, exports) => {
   function forUnselected(sources: rx.Observable<BudgetedSource>) {
     return sources.pipe(
       rxop.map((source): ContextStatus => Object.assign(
-        new CB.ContextStatus(source.entry.field),
+        new ContextStatus(source.entry.field),
         checkThis({
           identifier: source.identifier,
           unqiueId: source.uniqueId,

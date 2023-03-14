@@ -13,7 +13,7 @@ export interface IUuid {
 }
 
 class UUID extends ModuleDef<IUuid> {
-  moduleId = 5185;
+  moduleId = 99168;
   expectedExports = 1;
   mapping = {
     "Z": ["v4", "function"]
