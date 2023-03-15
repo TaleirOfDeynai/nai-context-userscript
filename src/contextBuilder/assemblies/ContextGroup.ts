@@ -173,9 +173,7 @@ const theModule = usModule((require, exports) => {
     get content(): readonly TextFragment[] {
       const fragment = this.trimmedFrag;
       if (!fragment.content) return Object.freeze([]);
-
-      let offset = this.#prefix.text.length + fragment.offset;
-      return Object.freeze([ss.createFragment(fragment.content, offset)]);
+      return Object.freeze([fragment]);
     }
 
     get suffix(): TextFragment {
@@ -393,7 +391,7 @@ const theModule = usModule((require, exports) => {
       // We have a problem here; we need the tokens to decode into the
       // same text as will be in `this.text`, but these tokens may not
       // reflect that. The whitespace that is removed in `trimmedFrag`
-      // is still present in the tokens.  Sadly, we must do work some
+      // is still present in the tokens.  Sadly, we must work some
       // foul magic to get this internally consistent.
 
       // First, mend the tokens as they were given.

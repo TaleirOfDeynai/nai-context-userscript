@@ -3,7 +3,7 @@ import { ModuleDef } from "../require";
 export type TokenizerTypes = Virtual.TokenizerTypes;
 
 export namespace Virtual {
-  export declare enum TokenizerTypes { GPT2, PileNAI, Genji }
+  export declare enum TokenizerTypes { GPT2, PileNAI, Genji, Pile, NAIInline, CLIP }
   export declare function getTokenizerType(key: string): TokenizerTypes;
 }
 

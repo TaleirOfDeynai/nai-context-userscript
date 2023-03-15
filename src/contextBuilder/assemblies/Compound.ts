@@ -482,7 +482,11 @@ const theModule = usModule((require, exports) => {
 
     /** Handle the mending of the tokens. */
     protected async mendTokens(tokensToMend: Tokens[]): Promise<Tokens> {
-      return await this.codec.mendTokens(tokensToMend);
+      switch (tokensToMend.length) {
+        case 0: return [];
+        case 1: return tokensToMend[0];
+        default: return await this.codec.mendTokens(tokensToMend);
+      }
     }
 
     /** Updates the internal state for a successful insertion. */
@@ -647,8 +651,12 @@ const theModule = usModule((require, exports) => {
     ): Promise<Insertion.InitResult> {
       assert("Expected to be empty.", this.#assemblies.length === 0);
 
+      // Run the tokens through the mender, in case we're in a context-group
+      // with a prefix and/or suffix.
+      const tokens = await this.mendTokens([inserted.tokens]);
+
       const tokensUsed = await this.updateState(
-        [inserted], inserted.tokens, source, inserted
+        [inserted], tokens, source, inserted
       );
 
       return {
