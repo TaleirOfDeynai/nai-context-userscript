@@ -9,6 +9,7 @@
  * parameter, replacing only those relevant to that sub-context.
  */
 
+import usConfig from "@config";
 import { usModule } from "@utils/usModule";
 import { dew } from "@utils/dew";
 import TokenizerHelpers from "@nai/TokenizerHelpers";
@@ -67,7 +68,7 @@ export default usModule((require, exports) => {
     const tokenizerType = tokenizerHelpers.getTokenizerType(storyContent.settings.model)
     const tokenCodec = tokenizer.codecFor(tokenizerType, givenCodec);
     const storyLength = givenStoryLength ?? 0;
-    const orderByKeyLocations = storyContent.lorebook?.settings?.orderByKeyLocations === true;
+    const orderByKeyLocations = storyContent.lorebook?.settings?.orderByKeyLocations ?? usConfig.selection.orderByKeyLocations;
 
     const contextSize = await dew(async () => {
       let contextSize = givenTokenLimit;

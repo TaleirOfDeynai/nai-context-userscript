@@ -13,6 +13,8 @@ import activationForced from "./activationForced";
 import activationStory from "./activationStory";
 import activationNonStory from "./activationNonStory";
 import $StoryKeyOrder from "./storyKeyOrder";
+import $CategoryName from "./categoryName";
+import entryName from "./entryName";
 import cascadeInitDegree from "./cascadeInitDegree";
 import cascadeFinalDegree from "./cascadeFinalDegree";
 import naturalByType from "./naturalByType";
@@ -38,6 +40,8 @@ const theModule = usModule((require, exports) => {
     activationStory,
     activationNonStory,
     ...$StoryKeyOrder(require),
+    ...$CategoryName(require),
+    entryName,
     cascadeInitDegree,
     cascadeFinalDegree,
     naturalByType,

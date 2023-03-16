@@ -34,7 +34,7 @@ export default usModule((require, exports) => {
         const categoryMap = new Map(
           storyContent.lorebook.categories
             .filter(categories.isBiasedCategory)
-            .map((cat) => [cat.name, cat] as const)
+            .map((cat) => [cat.id ?? cat.name, cat] as const)
         );
 
         return rx.merge(

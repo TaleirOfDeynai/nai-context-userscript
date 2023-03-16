@@ -29,6 +29,10 @@ GM_config.init({
       })
     ]),
     fields.section("Selection", [
+      fields.checkBox("selection_orderByKeyLocations", {
+        label: "Order by Key Locations",
+        default: false
+      }),
       // TODO: Make a UI for this.
       fields.hidden("selection_insertionOrdering", {
         label: "Insertion Ordering",
@@ -36,11 +40,13 @@ GM_config.init({
           "budgetPriority",
           "selectionIndex",
           "contextGroup",
-          "reservation",
+          // "reservation",
           "activationEphemeral",
           "activationForced",
-          "activationStory",
+          // "activationStory",
           "storyKeyOrder",
+          // "categoryName",
+          // "entryName",
           "cascadeFinalDegree",
           "cascadeInitDegree"
         ] as SorterKey[], undefined, 2)
@@ -198,6 +204,14 @@ const subContext = {
 
 /** Configuration options relating to the selection phase, in general. */
 const selection = {
+  /**
+   * An override to enable the `orderByKeyLocations` capability.  If this
+   * is set, lorebooks that do not have this option defined will use this
+   * setting.
+   */
+  get orderByKeyLocations() {
+    return GM_config.get("selection_orderByKeyLocations").valueOf() as boolean;
+  },
   /**
    * Defines how to sort entries into formal insertion order.
    * 
